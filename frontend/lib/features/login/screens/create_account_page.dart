@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../core/constants/app_colors.dart';
+import '../../../core/constants/app_colors.dart';
 import 'get_started_page.dart';
-import 'widgets/kubo_hero_image.dart';
+import '../widgets/kubo_hero_image.dart';
 
 class CreateAccountPage extends StatelessWidget {
   const CreateAccountPage({super.key});
@@ -21,11 +21,8 @@ class CreateAccountPage extends StatelessWidget {
                 constraints: BoxConstraints(minHeight: constraints.maxHeight),
                 child: Column(
                   children: [
-                    // 1. Full-width hero image (no outer padding)
                     const KuboHeroImage(),
                     const SizedBox(height: 12),
-
-                    // 2. Inner padding for all text and action elements
                     Padding(
                       padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                       child: Column(
@@ -35,7 +32,7 @@ class CreateAccountPage extends StatelessWidget {
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: AppColors.green,
-                              fontSize: 30,
+                              fontSize: 36,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.8,
                             ),

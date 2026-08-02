@@ -23,13 +23,17 @@ void main() {
   testWidgets('navigates to create account and back', (WidgetTester tester) async {
     await tester.pumpWidget(const KuboApp());
 
-    await tester.tap(find.text('Create account'));
+    final createAccountButton = find.widgetWithText(TextButton, 'Create account');
+    await tester.ensureVisible(createAccountButton);
+    await tester.tap(createAccountButton);
     await tester.pumpAndSettle();
 
-    expect(find.text('First time here?'), findsOneWidget);
+    expect(find.textContaining('First time here?'), findsOneWidget);
     expect(find.text('Back to login'), findsOneWidget);
 
-    await tester.tap(find.text('Back to login'));
+    final backToLoginButton = find.text('Back to login');
+    await tester.ensureVisible(backToLoginButton);
+    await tester.tap(backToLoginButton);
     await tester.pumpAndSettle();
 
     expect(find.text('Continue with Google'), findsOneWidget);

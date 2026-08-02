@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../core/constants/app_colors.dart';
+import '../../../core/constants/app_colors.dart';
 import 'auth_method_page.dart';
 import 'create_account_page.dart';
-import 'widgets/kubo_hero_image.dart';
+import '../widgets/kubo_hero_image.dart';
 
 class LoginPage extends StatelessWidget {
   const LoginPage({super.key});
@@ -22,11 +22,8 @@ class LoginPage extends StatelessWidget {
                 constraints: BoxConstraints(minHeight: constraints.maxHeight),
                 child: Column(
                   children: [
-                    // 1. Full-width hero image 
                     const KuboHeroImage(),
                     const SizedBox(height: 12),
-
-                    // 2. Wrap all remaining content in Padding
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24.0),
                       child: Column(
@@ -36,7 +33,7 @@ class LoginPage extends StatelessWidget {
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: AppColors.green,
-                              fontSize: 30,
+                              fontSize: 36,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.8,
                             ),

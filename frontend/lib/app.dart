@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'core/constants/app_colors.dart';
-import 'features/login/create_account_page.dart';
-import 'features/login/get_started_page.dart';
-import 'features/login/login_page.dart';
+import 'features/login/screens/create_account_page.dart';
+import 'features/login/screens/get_started_page.dart';
+import 'features/login/screens/login_page.dart';
 
 class KuboApp extends StatelessWidget {
   const KuboApp({super.key});

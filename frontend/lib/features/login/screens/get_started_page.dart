@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:philippines_rpcmb/philippines_rpcmb.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../explore/screens/explore_page.dart';
 import '../providers/get_started_form_controller.dart';
 import '../widgets/choice_pill_group.dart';
 import '../widgets/login_field_section.dart';
@@ -213,7 +214,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
                         LoginFieldSection(
                           label: 'Region',
                           child: DropdownButtonFormField<Region>(
-                            value: _controller.selectedRegion,
+                            initialValue: _controller.selectedRegion,
                             items: _controller.regions
                                 .map(
                                   (region) => DropdownMenuItem<Region>(
@@ -233,7 +234,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
                         LoginFieldSection(
                           label: 'City',
                           child: DropdownButtonFormField<Municipality>(
-                            value: _controller.selectedCity,
+                            initialValue: _controller.selectedCity,
                             items: _controller.availableCities
                                 .map(
                                   (city) => DropdownMenuItem<Municipality>(
@@ -267,9 +268,13 @@ class _GetStartedPageState extends State<GetStartedPage> {
                               ),
                             ),
                             onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Create account pressed'),
+                              Navigator.of(context).pushReplacement(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => ExplorePage(
+                                    initialLocationLabel: _controller.selectedCity?.name ??
+                                        _controller.selectedRegion?.regionName ??
+                                        'Caybiga',
+                                  ),
                                 ),
                               );
                             },

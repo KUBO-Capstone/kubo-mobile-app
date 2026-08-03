@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../explore/screens/explore_page.dart';
 
 class AuthMethodPage extends StatelessWidget {
   const AuthMethodPage({super.key, required this.methodName});
@@ -45,8 +46,10 @@ class AuthMethodPage extends StatelessWidget {
                   ),
                 ),
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('$methodName sign-in pressed')),
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ExplorePage(initialLocationLabel: 'Caybiga'),
+                    ),
                   );
                 },
                 child: const Text(

@@ -1,0 +1,164 @@
+import 'package:flutter/material.dart';
+
+import '../../../core/constants/app_assets.dart';
+import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/app_svg_icon.dart';
+import '../widgets/explore_section_page.dart';
+
+class ExploreBottomNav extends StatelessWidget {
+  const ExploreBottomNav({
+    super.key,
+    required this.currentIndex,
+    required this.onIndexSelected,
+  });
+
+  final int currentIndex;
+  final ValueChanged<int> onIndexSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 80,
+      decoration: const BoxDecoration(
+        color: AppColors.white,
+        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _NavItem(
+            label: 'Home',
+            assetPath: AppIcons.home,
+            isActive: currentIndex == 0,
+            onTap: () => onIndexSelected(0),
+          ),
+          _NavItem(
+            label: 'Search',
+            assetPath: AppIcons.search,
+            isActive: currentIndex == 1,
+            onTap: () => _openSection(
+              context,
+              'Search',
+              'Search tools and filters will be added here next.',
+            ),
+          ),
+          _CenterAction(
+            onTap: () => _openSection(
+              context,
+              'Create Listing',
+              'The listing creation flow will live here.',
+            ),
+          ),
+          _NavItem(
+            label: 'Market',
+            assetPath: AppIcons.chartLine,
+            isActive: currentIndex == 3,
+            onTap: () => _openSection(
+              context,
+              'Insights',
+              'Performance and activity insights will appear here.',
+            ),
+          ),
+          _NavItem(
+            label: 'Profile',
+            assetPath: AppIcons.user,
+            isActive: currentIndex == 4,
+            onTap: () => _openSection(
+              context,
+              'Profile',
+              'Profile settings and account details will appear here.',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openSection(BuildContext context, String title, String message) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ExploreSectionPage(title: title, message: message),
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  const _NavItem({
+    required this.label,
+    required this.assetPath,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  final String label;
+  final String assetPath;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isActive ? AppColors.green : AppColors.gray;
+
+    return Expanded(
+      child: InkResponse(
+        onTap: onTap,
+        radius: 28,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppSvgIcon(assetPath: assetPath, size: 22, color: color),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: isActive ? AppColors.green : Colors.transparent,
+                shape: BoxShape.circle,
+              ), 
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CenterAction extends StatelessWidget {
+  const _CenterAction({
+    required this.onTap
+  });
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: InkResponse(
+          onTap: onTap,
+          radius: 30,
+          child: AppSvgIcon(
+            assetPath: AppIcons.squarePlus,
+            size: 28,
+            color: AppColors.green,
+          ),
+        ),
+      ),
+    );
+  }
+}

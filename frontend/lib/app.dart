@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'core/constants/app_colors.dart';
+import 'features/explore/screens/explore_page.dart';
 import 'features/login/screens/create_account_page.dart';
 import 'features/login/screens/get_started_page.dart';
 import 'features/login/screens/login_page.dart';
@@ -16,7 +17,6 @@ class KuboApp extends StatelessWidget {
       primary: AppColors.green,
       secondary: AppColors.black,
       surface: AppColors.white,
-      background: AppColors.white,
     );
 
     return MaterialApp(
@@ -53,6 +53,7 @@ class KuboApp extends StatelessWidget {
         LoginPage.routeName: (_) => const LoginPage(),
         CreateAccountPage.routeName: (_) => const CreateAccountPage(),
         GetStartedPage.routeName: (_) => const GetStartedPage(),
+        ExplorePage.routeName: (_) => const ExplorePage(),
       },
       initialRoute: LoginPage.routeName,
     );

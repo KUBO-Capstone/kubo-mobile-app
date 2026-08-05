@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 
+/// Generic placeholder page used by explore shortcuts such as search or profile.
 class ExploreSectionPage extends StatelessWidget {
   const ExploreSectionPage({super.key, required this.title, required this.message});
 
@@ -9,6 +10,7 @@ class ExploreSectionPage extends StatelessWidget {
   final String message;
 
   @override
+  // Builds a simple page that shows the chosen placeholder title and message.
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(

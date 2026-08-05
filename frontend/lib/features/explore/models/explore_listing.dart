@@ -1,3 +1,4 @@
+/// Immutable data model that describes one explore listing card.
 class ExploreListing {
   const ExploreListing({
     required this.id,

@@ -5,12 +5,14 @@ import 'auth_method_page.dart';
 import 'create_account_page.dart';
 import '../widgets/kubo_hero_image.dart';
 
+/// Landing page that introduces Kubo and offers sign-in and sign-up entry points.
 class LoginPage extends StatelessWidget {
   const LoginPage({super.key});
 
   static const routeName = '/';
 
   @override
+  // Builds the login landing layout with branding, explanation text, and auth options.
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
@@ -101,6 +103,7 @@ class LoginPage extends StatelessWidget {
     );
   }
 
+  // Opens the placeholder auth-method screen for the selected provider.
   void _openAuthMethod(BuildContext context, String methodName) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -110,8 +113,10 @@ class LoginPage extends StatelessWidget {
   }
 }
 
+/// Internal enum that identifies which provider icon should be rendered.
 enum _AuthIcon { google, facebook, email }
 
+/// Full-width outlined button used for each third-party or email login action.
 class _AuthOptionButton extends StatelessWidget {
   const _AuthOptionButton({
     required this.label,
@@ -124,6 +129,7 @@ class _AuthOptionButton extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
+  // Renders the branded auth button with an icon and centered label.
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
@@ -157,12 +163,14 @@ class _AuthOptionButton extends StatelessWidget {
   }
 }
 
+/// Icon widget that swaps its visual based on the chosen auth provider.
 class _AuthButtonIcon extends StatelessWidget {
   const _AuthButtonIcon({required this.icon});
 
   final _AuthIcon icon;
 
   @override
+  // Returns the provider-specific icon or glyph for the auth button.
   Widget build(BuildContext context) {
     switch (icon) {
       case _AuthIcon.google:

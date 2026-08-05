@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+// Centralized brand colors used across the Flutter frontend.
 abstract final class AppColors {
   static const green = Color(0xFF007537);
   static const black = Color(0xFF221F1F);

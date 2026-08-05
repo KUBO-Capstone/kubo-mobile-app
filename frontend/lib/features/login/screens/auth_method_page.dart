@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../explore/screens/explore_page.dart';
 
+/// Placeholder page that represents a third-party or email auth flow.
 class AuthMethodPage extends StatelessWidget {
   const AuthMethodPage({super.key, required this.methodName});
 
   final String methodName;
 
   @override
+  // Builds a simple confirmation page before continuing into the explore area.
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(

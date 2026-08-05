@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 
+/// Reusable wrapper that gives each onboarding field a label, optional help text, and spacing.
 class LoginFieldSection extends StatelessWidget {
   const LoginFieldSection({
     super.key,
@@ -17,6 +18,7 @@ class LoginFieldSection extends StatelessWidget {
   final String? footerText;
 
   @override
+  // Lays out the label, optional guidance text, and the form control itself.
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

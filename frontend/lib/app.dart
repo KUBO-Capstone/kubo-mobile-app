@@ -6,11 +6,14 @@ import 'features/login/screens/create_account_page.dart';
 import 'features/login/screens/get_started_page.dart';
 import 'features/login/screens/login_page.dart';
 
+/// Root application widget that defines the theme and named routes for Kubo.
 class KuboApp extends StatelessWidget {
   const KuboApp({super.key});
 
   @override
+  // Builds the MaterialApp shell that wires the whole navigation flow together.
   Widget build(BuildContext context) {
+    // Derive a shared color scheme from the brand green so every screen stays consistent.
     final colorScheme = ColorScheme.fromSeed(
       seedColor: AppColors.green,
       brightness: Brightness.light,

@@ -7,20 +7,24 @@ import '../providers/get_started_form_controller.dart';
 import '../widgets/choice_pill_group.dart';
 import '../widgets/login_field_section.dart';
 
+/// Profile setup form that collects the user's basic onboarding details.
 class GetStartedPage extends StatefulWidget {
   const GetStartedPage({super.key});
 
   static const routeName = '/get-started';
 
   @override
+  // Creates the state object that owns the form controller and text controller.
   State<GetStartedPage> createState() => _GetStartedPageState();
 }
 
+/// State holder for the multi-field onboarding form.
 class _GetStartedPageState extends State<GetStartedPage> {
   late final GetStartedFormController _controller;
   late final TextEditingController _usernameController;
 
   @override
+  // Initializes controllers for the form fields and reactive state updates.
   void initState() {
     super.initState();
     _controller = GetStartedFormController();
@@ -28,12 +32,14 @@ class _GetStartedPageState extends State<GetStartedPage> {
   }
 
   @override
+  // Releases both controllers when the page is removed from the tree.
   void dispose() {
     _usernameController.dispose();
     _controller.dispose();
     super.dispose();
   }
 
+  // Shows the date picker and stores the birthday once the user confirms a date.
   Future<void> _pickBirthday() async {
     final today = DateTime.now();
     final initialDate = _controller.selectedBirthday ?? DateTime(today.year - 18, today.month, today.day);
@@ -66,6 +72,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
     _controller.setBirthday(selectedDate);
   }
 
+  // Formats the selected birthday for display inside the input decorator.
   String _birthdayText(BuildContext context) {
     final birthday = _controller.selectedBirthday;
     if (birthday == null) {
@@ -75,6 +82,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
     return MaterialLocalizations.of(context).formatMediumDate(birthday);
   }
 
+  // Builds the filled input decoration used by dropdowns and the birthday field.
   InputDecoration _filledDecoration({required String hintText}) {
     return InputDecoration(
       hintText: hintText,
@@ -97,6 +105,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
     );
   }
 
+  // Builds the underline style used by the username field.
   InputDecoration _underlineDecoration({required String hintText}) {
     return const InputDecoration().copyWith(
       hintText: hintText,
@@ -115,6 +124,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
   }
 
   @override
+  // Builds the full onboarding form and connects each input to the controller.
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,

@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/app_svg_icon.dart';
 import '../widgets/explore_section_page.dart';
 
+/// Bottom navigation strip that routes users to the main app sections.
 class ExploreBottomNav extends StatelessWidget {
   const ExploreBottomNav({
     super.key,
@@ -16,6 +17,7 @@ class ExploreBottomNav extends StatelessWidget {
   final ValueChanged<int> onIndexSelected;
 
   @override
+  // Builds the bottom nav row and the central create-listing action.
   Widget build(BuildContext context) {
     return Container(
       height: 80,
@@ -77,6 +79,7 @@ class ExploreBottomNav extends StatelessWidget {
     );
   }
 
+  // Opens one of the placeholder destination pages from the bottom nav.
   void _openSection(BuildContext context, String title, String message) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -86,6 +89,7 @@ class ExploreBottomNav extends StatelessWidget {
   }
 }
 
+/// Individual bottom-nav item that highlights the active section.
 class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.label,
@@ -100,6 +104,7 @@ class _NavItem extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  // Renders the icon, label, and active-dot indicator for one nav item.
   Widget build(BuildContext context) {
     final color = isActive ? AppColors.green : AppColors.gray;
 
@@ -137,14 +142,14 @@ class _NavItem extends StatelessWidget {
   }
 }
 
+/// Center action button used for the create-listing shortcut.
 class _CenterAction extends StatelessWidget {
-  const _CenterAction({
-    required this.onTap
-  });
+  const _CenterAction({required this.onTap});
 
   final VoidCallback onTap;
 
   @override
+  // Centers the plus icon above the bottom nav bar so it reads as a primary action.
   Widget build(BuildContext context) {
     return Expanded(
       child: Align(

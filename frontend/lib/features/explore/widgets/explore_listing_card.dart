@@ -5,12 +5,14 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/app_svg_icon.dart';
 import '../models/explore_listing.dart';
 
+/// Card widget that presents one explore listing with image, title, and seller details.
 class ExploreListingCard extends StatelessWidget {
   const ExploreListingCard({super.key, required this.listing});
 
   final ExploreListing listing;
 
   @override
+  // Builds the visual card and wires the save action to a snackbar confirmation.
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -80,12 +82,14 @@ class ExploreListingCard extends StatelessWidget {
   }
 }
 
+/// Small icon-only button that saves a listing when tapped.
 class _SaveButton extends StatelessWidget {
   const _SaveButton({required this.onPressed});
 
   final VoidCallback onPressed;
 
   @override
+  // Wraps the heart icon in a tap target so the save action feels like a button.
   Widget build(BuildContext context) {
     return InkResponse(
       onTap: onPressed,

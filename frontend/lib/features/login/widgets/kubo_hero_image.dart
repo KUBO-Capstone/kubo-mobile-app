@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 
+/// Hero image block used on the login and account-creation screens.
 class KuboHeroImage extends StatelessWidget {
   const KuboHeroImage({super.key});
 
   @override
+  // Shows the main illustration and falls back to a friendly placeholder if the asset is missing.
   Widget build(BuildContext context) {
     return AspectRatio(
       aspectRatio: 1.0,

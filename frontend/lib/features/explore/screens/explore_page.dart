@@ -8,8 +8,10 @@ import '../widgets/explore_bottom_nav.dart';
 import '../widgets/explore_listing_card.dart';
 import '../widgets/explore_section_page.dart';
 
+/// Controls which explore presentation the user is currently viewing.
 enum ExploreViewMode { list, map }
 
+/// Main explore screen that shows filters, sample listings, and navigation shortcuts.
 class ExplorePage extends StatefulWidget {
   const ExplorePage({super.key, this.initialLocationLabel = 'Caybiga'});
 
@@ -22,6 +24,7 @@ class ExplorePage extends StatefulWidget {
 }
 
 class _ExplorePageState extends State<ExplorePage> {
+  // Region filters displayed as chips across the top of the listing feed.
   static const List<String> _regionFilters = <String>[
     'All',
     'Region I',
@@ -43,6 +46,7 @@ class _ExplorePageState extends State<ExplorePage> {
     'BARMM',
   ];
 
+  // Demo listings used to populate the grid before real backend data is wired in.
   static final List<ExploreListing> _allListings = List<ExploreListing>.unmodifiable(
     List<ExploreListing>.generate(
       10,
@@ -107,11 +111,13 @@ class _ExplorePageState extends State<ExplorePage> {
   @override
   void initState() {
     super.initState();
+    // Keep the onboarding location label usable even when the caller passes blank text.
     _accountLocationLabel = widget.initialLocationLabel.trim().isEmpty
         ? 'Caybiga'
         : widget.initialLocationLabel;
   }
 
+  // Returns only the listings that match the selected region filter.
   List<ExploreListing> get _visibleListings {
     if (_selectedRegionFilter == 'All') {
       return _allListings;
@@ -122,11 +128,13 @@ class _ExplorePageState extends State<ExplorePage> {
         .toList(growable: false);
   }
 
+  // Chooses the label shown in the location badge at the top of the screen.
   String get _locationLabel {
     return _selectedRegionFilter == 'All' ? _accountLocationLabel : _selectedRegionFilter;
   }
 
   @override
+  // Builds the explore layout with filters, listing content, and the bottom nav.
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -226,6 +234,7 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
+  // Opens one of the placeholder explore sections as a separate page.
   void _openSection(BuildContext context, String title, String message) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -235,6 +244,7 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 }
 
+/// Top row of actions, view toggles, and the current location badge.
 class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.locationLabel,
@@ -255,6 +265,7 @@ class _TopBar extends StatelessWidget {
   final VoidCallback onChatTap;
 
   @override
+  // Lays out the action icons, list/map toggle, and current location label.
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -309,6 +320,7 @@ class _TopBar extends StatelessWidget {
   }
 }
 
+/// Circular toolbar button used for the top bar action icons.
 class _CircleIconButton extends StatelessWidget {
   const _CircleIconButton({required this.assetPath, required this.onTap});
 
@@ -316,6 +328,7 @@ class _CircleIconButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  // Renders an icon button with a white circular background and SVG content.
   Widget build(BuildContext context) {
     return InkResponse(
       onTap: onTap,
@@ -335,6 +348,7 @@ class _CircleIconButton extends StatelessWidget {
   }
 }
 
+/// Text-and-icon toggle that switches the explore content between list and map modes.
 class _ViewToggleButton extends StatelessWidget {
   const _ViewToggleButton({
     required this.assetPath,
@@ -349,6 +363,7 @@ class _ViewToggleButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  // Draws the selected state with brand green and an underline indicator.
   Widget build(BuildContext context) {
     final color = selected ? AppColors.green : AppColors.gray;
 
@@ -385,12 +400,14 @@ class _ViewToggleButton extends StatelessWidget {
   }
 }
 
+/// Responsive grid that shows the currently visible listing cards.
 class _ListingsGrid extends StatelessWidget {
   const _ListingsGrid({required this.listings});
 
   final List<ExploreListing> listings;
 
   @override
+  // Shows a no-results message when filtering leaves the grid empty.
   Widget build(BuildContext context) {
     if (listings.isEmpty) {
       return const Padding(
@@ -421,12 +438,14 @@ class _ListingsGrid extends StatelessWidget {
   }
 }
 
+/// Placeholder content that stands in for the future map experience.
 class _MapPlaceholder extends StatelessWidget {
   const _MapPlaceholder({required this.locationLabel});
 
   final String locationLabel;
 
   @override
+  // Explains that map functionality will be introduced later and echoes the current location.
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,

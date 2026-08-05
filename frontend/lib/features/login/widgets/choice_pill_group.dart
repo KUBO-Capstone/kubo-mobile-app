@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 
+/// Generic option model used by the choice-chip group widget.
 class ChoicePillOption<T> {
   const ChoicePillOption({required this.label, required this.value});
 
@@ -9,6 +10,7 @@ class ChoicePillOption<T> {
   final T value;
 }
 
+/// Wraps a list of options in selectable chips and reports the chosen value.
 class ChoicePillGroup<T> extends StatelessWidget {
   const ChoicePillGroup({
     super.key,
@@ -22,6 +24,7 @@ class ChoicePillGroup<T> extends StatelessWidget {
   final ValueChanged<T?> onChanged;
 
   @override
+  // Builds the responsive chip layout and keeps selection state visual.
   Widget build(BuildContext context) {
     return Wrap(
       spacing: 10,

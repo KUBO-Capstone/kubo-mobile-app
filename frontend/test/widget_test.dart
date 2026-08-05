@@ -10,7 +10,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:frontend/app.dart';
 
+// Verifies that the app boots to the login screen and basic navigation works.
 void main() {
+  // Confirms the initial screen shows the branding and auth entry buttons.
   testWidgets('shows the login page', (WidgetTester tester) async {
     await tester.pumpWidget(const KuboApp());
 
@@ -20,6 +22,7 @@ void main() {
     expect(find.text('Continue with Email'), findsOneWidget);
   });
 
+  // Confirms the create-account flow opens the onboarding page and returns cleanly.
   testWidgets('navigates to create account and back', (WidgetTester tester) async {
     await tester.pumpWidget(const KuboApp());
 

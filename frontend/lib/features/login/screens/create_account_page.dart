@@ -4,12 +4,14 @@ import '../../../core/constants/app_colors.dart';
 import 'get_started_page.dart';
 import '../widgets/kubo_hero_image.dart';
 
+/// Intermediate onboarding page that leads into the detailed profile form.
 class CreateAccountPage extends StatelessWidget {
   const CreateAccountPage({super.key});
 
   static const routeName = '/create-account';
 
   @override
+  // Builds the account-creation landing page and its navigation controls.
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(

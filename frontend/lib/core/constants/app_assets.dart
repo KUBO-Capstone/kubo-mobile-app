@@ -8,6 +8,9 @@ abstract final class AppAssets {
 
 // SVG icon paths referenced by the app's navigation and toolbars.
 abstract final class AppIcons {
+  static const flagReport = 'assets/icons/flag-report.svg';
+  /// Help guide icon used for the help and support section.
+  static const helpGuide = 'assets/icons/help-guide.svg';
   /// Three-line or overflow style icon used for the app drawer trigger.
   static const barsMore = 'assets/icons/bars-more.svg';
   /// Notification bell icon used for alerts and updates actions.

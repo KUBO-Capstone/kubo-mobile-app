@@ -6,6 +6,8 @@ import '../../../core/widgets/app_svg_icon.dart';
 import '../models/explore_listing.dart';
 import '../widgets/explore_listing_card.dart';
 import '../widgets/explore_section_page.dart';
+import '../../login/screens/login_page.dart';
+import '../widgets/drawer_list_tile.dart';
 
 /// Controls which explore presentation the user is currently viewing.
 enum ExploreViewMode { list, map }
@@ -172,7 +174,7 @@ class _ExplorePageState extends State<ExplorePage> {
               splashRadius: 22,
               icon: const AppSvgIcon(
                 assetPath: AppIcons.barsMore,
-                size: 24,
+                size: 22,
                 color: AppColors.black,
               ),
             );
@@ -211,7 +213,7 @@ class _ExplorePageState extends State<ExplorePage> {
           const SizedBox(width: 10),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(64),
+          preferredSize: const Size.fromHeight(50),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
             child: Row(
@@ -366,49 +368,73 @@ class _ExploreDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Drawer(
       child: SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: EdgeInsets.zero,
-          children: const [
-            SizedBox(
-              height: 80,
-                child: DrawerHeader(
-                margin: EdgeInsets.zero,
-                decoration: BoxDecoration(color: AppColors.softBackground),
-                child: Align(
-                  alignment: Alignment.bottomLeft,
-                  child: Text(
-                    'Explore Menu',
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            // Header and List Items
+            children: [
+              SizedBox(
+                height: 50,
+                  child: DrawerHeader(
+                  margin: EdgeInsets.zero,
+                  padding: EdgeInsets.zero,
+                  decoration: BoxDecoration(color: AppColors.softBackground),
+                  child: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: Text(
+                      'Explore Menu',
+                      style: TextStyle(
+                        color: AppColors.black,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),  
+
+              const SizedBox(height: 16), // gap before list items and header (Explore Menu)
+
+              DrawerListTile(title: 'Market', iconPath: AppIcons.chartLine),          
+              DrawerListTile(title: 'Saved', iconPath: AppIcons.heartSaved),
+              DrawerListTile(title: 'Notification', iconPath: AppIcons.bellNotification),
+              DrawerListTile(title: 'Help and Guide', iconPath: AppIcons.helpGuide),
+              DrawerListTile(title: 'Report', iconPath: AppIcons.flagReport),
+              
+              // Push logout button to the bottom of the drawer
+              const Spacer(),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    fixedSize: const Size.fromHeight(50),
+                    backgroundColor: AppColors.green,
+                    foregroundColor: AppColors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const LoginPage(),
+                      ),
+                    );
+                    // add more logout logic like deleting user session or clear user data
+                  },
+                  child: const Text(
+                    'Logout',
                     style: TextStyle(
-                      color: AppColors.black,
-                      fontSize: 20,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
               ),
-            ),            
-            ListTile(
-              leading: Icon(Icons.label_outline),
-              title: Text('Market'),
-            ),
-            ListTile(
-              leading: Icon(Icons.label_outline),
-              title: Text('Saved'),
-            ),
-            ListTile(
-              leading: Icon(Icons.label_outline),
-              title: Text('Notifications'),
-            ),
-            ListTile(
-              leading: Icon(Icons.label_outline),
-              title: Text('Help and Guide'),
-            ),
-            ListTile(
-              leading: Icon(Icons.label_outline),
-              title: Text('Report'),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -7,6 +7,7 @@ import '../../explore/screens/explore_page.dart';
 class AuthMethodPage extends StatelessWidget {
   const AuthMethodPage({super.key, required this.methodName});
 
+  /// Provider name displayed in the app bar and the instructional body text.
   final String methodName;
 
   @override

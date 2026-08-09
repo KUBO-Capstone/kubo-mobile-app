@@ -12,9 +12,16 @@ class LoginFieldSection extends StatelessWidget {
     this.footerText,
   });
 
+  /// Main label shown above the input control.
   final String label;
+
+  /// Form control or custom widget rendered under the section label.
   final Widget child;
+
+  /// Optional helper text used to explain the field before the input.
   final String? helperText;
+
+  /// Optional footer text used for reassurance or field-specific notes.
   final String? footerText;
 
   @override

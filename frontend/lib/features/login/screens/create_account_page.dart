@@ -8,6 +8,7 @@ import '../widgets/kubo_hero_image.dart';
 class CreateAccountPage extends StatelessWidget {
   const CreateAccountPage({super.key});
 
+  /// Route name used when the app pushes the create-account introduction.
   static const routeName = '/create-account';
 
   @override

@@ -14,8 +14,10 @@ enum ExploreViewMode { list, map }
 class ExplorePage extends StatefulWidget {
   const ExplorePage({super.key, this.initialLocationLabel = 'Caybiga'});
 
+  /// Route name used by the app shell when opening the explore/home screen.
   static const routeName = '/explore';
 
+  /// Location label passed in from onboarding so the header can show a real place.
   final String initialLocationLabel;
 
   @override
@@ -100,9 +102,16 @@ class _ExplorePageState extends State<ExplorePage> {
         }),
       );
 
+  /// Fallback or onboarding-provided location shown in the top-right badge.
   late String _accountLocationLabel;
+
+  /// Currently selected region chip used to narrow the listing feed.
   String _selectedRegionFilter = 'All';
+
+  /// Current content presentation mode for the explore body.
   ExploreViewMode _viewMode = ExploreViewMode.list;
+
+  /// Active bottom-navigation index, with Home mapped to the real listings screen.
   final int _currentBottomNavIndex = 0;
 
   @override
@@ -410,6 +419,7 @@ class _ExploreDrawer extends StatelessWidget {
 class _TemplateNavPage extends StatelessWidget {
   const _TemplateNavPage({required this.tabIndex});
 
+  /// Bottom navigation index this placeholder page represents.
   final int tabIndex;
 
   String get _title {

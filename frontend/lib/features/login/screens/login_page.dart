@@ -9,6 +9,7 @@ import '../widgets/kubo_hero_image.dart';
 class LoginPage extends StatelessWidget {
   const LoginPage({super.key});
 
+  /// Root route used by the app shell to open the login landing screen.
   static const routeName = '/';
 
   @override
@@ -124,8 +125,13 @@ class _AuthOptionButton extends StatelessWidget {
     required this.onPressed,
   });
 
+  /// Label shown in the center of the button.
   final String label;
+
+  /// Icon variant that determines which provider glyph is rendered.
   final _AuthIcon icon;
+
+  /// Tap callback that launches the selected auth flow.
   final VoidCallback onPressed;
 
   @override
@@ -167,6 +173,7 @@ class _AuthOptionButton extends StatelessWidget {
 class _AuthButtonIcon extends StatelessWidget {
   const _AuthButtonIcon({required this.icon});
 
+  /// Current provider icon selection used to decide which symbol to draw.
   final _AuthIcon icon;
 
   @override

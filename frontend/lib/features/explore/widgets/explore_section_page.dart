@@ -6,7 +6,10 @@ import '../../../core/constants/app_colors.dart';
 class ExploreSectionPage extends StatelessWidget {
   const ExploreSectionPage({super.key, required this.title, required this.message});
 
+  /// Page title shown in the app bar and the placeholder body text.
   final String title;
+
+  /// Supporting message that explains the future destination or feature.
   final String message;
 
   @override

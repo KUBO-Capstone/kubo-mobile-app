@@ -11,6 +11,7 @@ import '../widgets/login_field_section.dart';
 class GetStartedPage extends StatefulWidget {
   const GetStartedPage({super.key});
 
+  /// Route name used for the onboarding profile-setup screen.
   static const routeName = '/get-started';
 
   @override
@@ -20,7 +21,10 @@ class GetStartedPage extends StatefulWidget {
 
 /// State holder for the multi-field onboarding form.
 class _GetStartedPageState extends State<GetStartedPage> {
+  /// Controller that stores the onboarding selections and derived city list.
   late final GetStartedFormController _controller;
+
+  /// Text controller bound to the username input field.
   late final TextEditingController _usernameController;
 
   @override

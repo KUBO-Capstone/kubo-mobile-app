@@ -9,6 +9,7 @@ import '../models/explore_listing.dart';
 class ExploreListingCard extends StatelessWidget {
   const ExploreListingCard({super.key, required this.listing});
 
+  /// Listing data source used to populate the card layout.
   final ExploreListing listing;
 
   @override
@@ -86,6 +87,7 @@ class ExploreListingCard extends StatelessWidget {
 class _SaveButton extends StatelessWidget {
   const _SaveButton({required this.onPressed});
 
+  /// Callback invoked when the user taps the save/favorite action.
   final VoidCallback onPressed;
 
   @override

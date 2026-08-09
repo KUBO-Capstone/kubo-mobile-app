@@ -10,6 +10,7 @@ import 'features/login/screens/login_page.dart';
 class KuboApp extends StatelessWidget {
   const KuboApp({super.key});
 
+  /// Named route map that keeps the app shell and feature screens wired together.
   @override
   // Builds the MaterialApp shell that wires the whole navigation flow together.
   Widget build(BuildContext context) {

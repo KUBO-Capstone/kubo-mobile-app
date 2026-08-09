@@ -13,7 +13,10 @@ class ExploreBottomNav extends StatelessWidget {
     required this.onIndexSelected,
   });
 
+  /// Index of the currently active tab.
   final int currentIndex;
+
+  /// Callback used when the user changes the selected tab.
   final ValueChanged<int> onIndexSelected;
 
   @override
@@ -98,9 +101,16 @@ class _NavItem extends StatelessWidget {
     required this.onTap,
   });
 
+  /// Text label shown under the icon.
   final String label;
+
+  /// SVG asset used for the nav item icon.
   final String assetPath;
+
+  /// Whether this item should render with the active accent color and dot.
   final bool isActive;
+
+  /// Tap handler used to activate the item.
   final VoidCallback onTap;
 
   @override
@@ -146,6 +156,7 @@ class _NavItem extends StatelessWidget {
 class _CenterAction extends StatelessWidget {
   const _CenterAction({required this.onTap});
 
+  /// Tap handler for the central create-listing action.
   final VoidCallback onTap;
 
   @override

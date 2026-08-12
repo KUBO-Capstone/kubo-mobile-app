@@ -2,28 +2,20 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
-import '../../../core/constants/app_assets.dart';
-
-/// Immutable suggestion data shown in the search grid.
-class SearchSuggestion {
-  const SearchSuggestion({required this.name, required this.imageAssetPath});
-
-  /// Display label shown under the suggestion image.
-  final String name;
-
-  /// Image asset rendered in the suggestion card.
-  final String imageAssetPath;
-}
+import '../../../shared/data/synthetic_records.dart';
 
 /// Holds the transient state for the search page.
 class SearchPageController extends ChangeNotifier {
   SearchPageController()
-    : suggestions = List<SearchSuggestion>.unmodifiable(_buildSuggestions());
+    : suggestions = List<SyntheticSearchSuggestion>.unmodifiable(
+        List<SyntheticSearchSuggestion>.from(syntheticSearchSuggestions)
+          ..shuffle(Random()),
+      );
 
   static const int _recentSearchPreviewLimit = 4;
 
   /// Randomized suggestion list rendered under the search history.
-  final List<SearchSuggestion> suggestions;
+  final List<SyntheticSearchSuggestion> suggestions;
 
   final List<String> _recentSearches = <String>[];
 
@@ -91,45 +83,5 @@ class SearchPageController extends ChangeNotifier {
 
     _showAllRecentSearches = !_showAllRecentSearches;
     notifyListeners();
-  }
-
-  static List<SearchSuggestion> _buildSuggestions() {
-    final suggestions = <SearchSuggestion>[
-      const SearchSuggestion(
-        name: 'Coconut sa Caybiga',
-        imageAssetPath: AppAssets.placeholderImage,
-      ),
-      const SearchSuggestion(
-        name: 'Strawberry in Baguio',
-        imageAssetPath: AppAssets.placeholderImage,
-      ),
-      const SearchSuggestion(
-        name: 'Rice',
-        imageAssetPath: AppAssets.placeholderImage,
-      ),
-      const SearchSuggestion(
-        name: 'Kamote',
-        imageAssetPath: AppAssets.placeholderImage,
-      ),
-      const SearchSuggestion(
-        name: 'Mangoes',
-        imageAssetPath: AppAssets.placeholderImage,
-      ),
-      const SearchSuggestion(
-        name: 'Eggplant',
-        imageAssetPath: AppAssets.placeholderImage,
-      ),
-      const SearchSuggestion(
-        name: 'Banana',
-        imageAssetPath: AppAssets.placeholderImage,
-      ),
-      const SearchSuggestion(
-        name: 'Tomatoes',
-        imageAssetPath: AppAssets.placeholderImage,
-      ),
-    ];
-
-    suggestions.shuffle(Random());
-    return suggestions;
   }
 }

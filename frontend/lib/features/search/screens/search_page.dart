@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/widgets/app_svg_icon.dart';
 import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
 import '../../../shared/widgets/kubo_placeholder_page.dart';
+import '../../../shared/widgets/kubo_search_field.dart';
 import '../../../shared/widgets/kubo_section_header.dart';
 import '../../explore/screens/explore_page.dart';
 import '../../market/screens/market_page.dart';
 import '../../profile/screens/profile_page.dart';
 import '../providers/search_page_controller.dart';
+import 'search_results_page.dart';
 import '../widgets/search_recent_search_tile.dart';
 import '../widgets/search_suggestion_card.dart';
 
@@ -54,9 +54,27 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   void _submitSearch() {
-    _controller.submitSearch(_searchController.text);
-    _searchController.clear();
+    final query = _searchController.text.trim();
+    if (query.isEmpty) {
+      return;
+    }
+
+    _controller.submitSearch(query);
     FocusScope.of(context).unfocus();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SearchResultsPage(
+          query: query,
+          initialLocationLabel: widget.initialLocationLabel,
+        ),
+      ),
+    );
+  }
+
+  void _searchAndOpen(String query) {
+    _searchController.text = query;
+    _searchController.selection = TextSelection.collapsed(offset: query.length);
+    _submitSearch();
   }
 
   void _navigateToTab(int index) {
@@ -118,65 +136,20 @@ class _SearchPageState extends State<SearchPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: AppColors.softBackground,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppColors.border),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          child: Row(
-                            children: [
-                              const AppSvgIcon(
-                                assetPath: AppIcons.search,
-                                size: 20,
-                                color: AppColors.gray,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: TextField(
-                                  controller: _searchController,
-                                  textInputAction: TextInputAction.search,
-                                  onSubmitted: (_) => _submitSearch(),
-                                  decoration: const InputDecoration(
-                                    hintText: 'Search',
-                                    hintStyle: TextStyle(
-                                      color: AppColors.gray,
-                                      fontSize: 14,
-                                    ),
-                                    border: InputBorder.none,
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.zero,
-                                  ),
-                                ),
-                              ),
-                              if (_searchController.text.isNotEmpty)
-                                InkResponse(
-                                  onTap: () {
-                                    _searchController.clear();
-                                  },
-                                  radius: 16,
-                                  child: const Icon(
-                                    Icons.close,
-                                    size: 18,
-                                    color: AppColors.gray,
-                                  ),
-                                ),
-                            ],
-                          ),
+                        KuboSearchField(
+                          controller: _searchController,
+                          onSubmitted: (_) => _submitSearch(),
+                          onClear: () => _searchController.clear(),
                         ),
                         const SizedBox(height: 18),
                         KuboSectionHeader(
                           title: 'Recent searches',
-                          actionLabel:
-                              _controller.shouldShowRecentSearchToggle
-                                  ? _controller.recentSearchToggleLabel
-                                  : null,
-                          onActionPressed:
-                              _controller.shouldShowRecentSearchToggle
-                                  ? _controller.toggleRecentSearchVisibility
-                                  : null,
+                          actionLabel: _controller.shouldShowRecentSearchToggle
+                              ? _controller.recentSearchToggleLabel
+                              : null,
+                          onActionPressed: _controller.shouldShowRecentSearchToggle
+                              ? _controller.toggleRecentSearchVisibility
+                              : null,
                         ),
                         const SizedBox(height: 12),
                         if (!_controller.hasRecentSearches)
@@ -199,6 +172,7 @@ class _SearchPageState extends State<SearchPage> {
                                   padding: const EdgeInsets.only(bottom: 10),
                                   child: SearchRecentSearchTile(
                                     query: query,
+                                    onTap: () => _searchAndOpen(query),
                                     onRemove:
                                         () => _controller.removeRecentSearch(
                                           query,
@@ -211,6 +185,15 @@ class _SearchPageState extends State<SearchPage> {
                         const SizedBox(height: 10),
                         const KuboSectionHeader(title: 'Search suggestions'),
                         const SizedBox(height: 12),
+                        // if (_searchController.text.trim().isNotEmpty)
+                        //   Text(
+                        //     'Results for "${_searchController.text.trim()}"',
+                        //     style: const TextStyle(
+                        //       color: AppColors.black,
+                        //       fontSize: 15,
+                        //       fontWeight: FontWeight.w700,
+                        //     ),
+                        //   ),
                       ],
                     ),
                   ),
@@ -228,6 +211,9 @@ class _SearchPageState extends State<SearchPage> {
                     delegate: SliverChildBuilderDelegate((context, index) {
                       return SearchSuggestionCard(
                         suggestion: _controller.suggestions[index],
+                        onTap: () => _searchAndOpen(
+                          _controller.suggestions[index].name,
+                        ),
                       );
                     }, childCount: _controller.suggestions.length),
                   ),

@@ -3,16 +3,18 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/app_svg_icon.dart';
+import '../../../shared/data/synthetic_records.dart';
 import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
 import '../../../shared/widgets/kubo_icon_action_button.dart';
+import '../../../shared/widgets/kubo_listing_card.dart';
+import '../../../shared/widgets/kubo_location_badge.dart';
 import '../../../shared/widgets/kubo_placeholder_page.dart';
-import '../models/explore_listing.dart';
-import '../widgets/explore_listing_card.dart';
 import '../../login/screens/login_page.dart';
 import '../../market/screens/market_page.dart';
 import '../../profile/screens/profile_page.dart';
 import '../../search/screens/search_page.dart';
 import '../widgets/drawer_list_tile.dart';
+import '../../../shared/widgets/kubo_view_toggle_button.dart';
 
 /// Controls which explore presentation the user is currently viewing.
 enum ExploreViewMode { list, map }
@@ -55,59 +57,8 @@ class _ExplorePageState extends State<ExplorePage> {
   ];
 
   // Demo listings used to populate the grid before real backend data is wired in.
-  static final List<ExploreListing> _allListings =
-      List<ExploreListing>.unmodifiable(
-        List<ExploreListing>.generate(10, (index) {
-          const titles = <String>[
-            'Fresh harvested tomatoes bundle',
-            'Organic eggplant basket',
-            'Sweet mango harvest box',
-            'Leafy greens weekly pack',
-            'Farm eggs tray set',
-            'Red onion kilo pack',
-            'Coconut vinegar set',
-            'Native rice premium sack',
-            'Banana blossoms harvest',
-            'Seasonal vegetable mix',
-          ];
-          const locations = <String>[
-            'Caloocan',
-            'Bulacan',
-            'Pampanga',
-            'Laguna',
-            'Rizal',
-            'Quezon',
-            'Cavite',
-            'Batangas',
-            'Nueva Ecija',
-            'Bataan',
-          ];
-          const regions = <String>[
-            'NCR',
-            'Region III',
-            'Region III',
-            'Region IV-A',
-            'NCR',
-            'Region IV-A',
-            'Region IV-A',
-            'Region IV-A',
-            'Region III',
-            'Region III',
-          ];
-
-          final price = 120 + (index * 35);
-
-          return ExploreListing(
-            id: 'listing-$index',
-            title: titles[index],
-            price: 'PHP ${price.toStringAsFixed(0)}',
-            locationLabel: locations[index],
-            regionLabel: regions[index],
-            sellerLabel: 'Kubo Grower ${index + 1}',
-            imageAssetPath: AppAssets.placeholderImage,
-          );
-        }),
-      );
+  static final List<SyntheticListingRecord> _allListings =
+      List<SyntheticListingRecord>.unmodifiable(syntheticExploreListings);
 
   /// Fallback or onboarding-provided location shown in the top-right badge.
   late String _accountLocationLabel;
@@ -132,7 +83,7 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   // Returns only the listings that match the selected region filter.
-  List<ExploreListing> get _visibleListings {
+  List<SyntheticListingRecord> get _visibleListings {
     if (_selectedRegionFilter == 'All') {
       return _allListings;
     }
@@ -238,39 +189,21 @@ class _ExplorePageState extends State<ExplorePage> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
             child: Row(
               children: [
-                _ViewToggleButton(
+                KuboViewToggleButton(
                   assetPath: AppIcons.listView,
                   label: 'List View',
                   selected: _viewMode == ExploreViewMode.list,
                   onTap: () => setState(() => _viewMode = ExploreViewMode.list),
                 ),
                 const SizedBox(width: 14),
-                _ViewToggleButton(
+                KuboViewToggleButton(
                   assetPath: AppIcons.locationDot,
                   label: 'Map View',
                   selected: _viewMode == ExploreViewMode.map,
                   onTap: () => setState(() => _viewMode = ExploreViewMode.map),
                 ),
                 const Spacer(),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const AppSvgIcon(
-                      assetPath: AppIcons.locationDot,
-                      size: 16,
-                      color: AppColors.green,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      _locationLabel,
-                      style: const TextStyle(
-                        color: AppColors.green,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
+                KuboLocationBadge(label: _locationLabel),
               ],
             ),
           ),
@@ -441,63 +374,11 @@ class _ExploreDrawer extends StatelessWidget {
   }
 }
 
-/// Text-and-icon toggle that switches the explore content between list and map modes.
-class _ViewToggleButton extends StatelessWidget {
-  const _ViewToggleButton({
-    required this.assetPath,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String assetPath;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  // Draws the selected state with brand green and an underline indicator.
-  Widget build(BuildContext context) {
-    final color = selected ? AppColors.green : AppColors.gray;
-
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AppSvgIcon(assetPath: assetPath, size: 15, color: color),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Container(
-            width: 62,
-            height: 2,
-            color: selected ? AppColors.green : Colors.transparent,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Responsive grid that shows the currently visible listing cards.
 class _ListingsGrid extends StatelessWidget {
   const _ListingsGrid({required this.listings});
 
-  final List<ExploreListing> listings;
+  final List<SyntheticListingRecord> listings;
 
   @override
   // Shows a no-results message when filtering leaves the grid empty.
@@ -525,7 +406,7 @@ class _ListingsGrid extends StatelessWidget {
         childAspectRatio: 0.72,
       ),
       itemBuilder: (context, index) {
-        return ExploreListingCard(listing: listings[index]);
+        return KuboListingCard(listing: listings[index]);
       },
     );
   }

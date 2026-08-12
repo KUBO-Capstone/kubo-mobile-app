@@ -5,6 +5,9 @@ import 'features/explore/screens/explore_page.dart';
 import 'features/login/screens/create_account_page.dart';
 import 'features/login/screens/get_started_page.dart';
 import 'features/login/screens/login_page.dart';
+import 'features/market/screens/market_page.dart';
+import 'features/profile/screens/profile_page.dart';
+import 'features/search/screens/search_page.dart';
 
 /// Root application widget that defines the theme and named routes for Kubo.
 class KuboApp extends StatelessWidget {
@@ -58,6 +61,9 @@ class KuboApp extends StatelessWidget {
         CreateAccountPage.routeName: (_) => const CreateAccountPage(),
         GetStartedPage.routeName: (_) => const GetStartedPage(),
         ExplorePage.routeName: (_) => const ExplorePage(),
+        SearchPage.routeName: (_) => const SearchPage(),
+        MarketPage.routeName: (_) => const MarketPage(),
+        ProfilePage.routeName: (_) => const ProfilePage(),
       },
       initialRoute: LoginPage.routeName,
     );

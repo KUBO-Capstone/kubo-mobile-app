@@ -3,10 +3,15 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/app_svg_icon.dart';
+import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
+import '../../../shared/widgets/kubo_icon_action_button.dart';
+import '../../../shared/widgets/kubo_placeholder_page.dart';
 import '../models/explore_listing.dart';
 import '../widgets/explore_listing_card.dart';
-import '../widgets/explore_section_page.dart';
 import '../../login/screens/login_page.dart';
+import '../../market/screens/market_page.dart';
+import '../../profile/screens/profile_page.dart';
+import '../../search/screens/search_page.dart';
 import '../widgets/drawer_list_tile.dart';
 
 /// Controls which explore presentation the user is currently viewing.
@@ -150,10 +155,25 @@ class _ExplorePageState extends State<ExplorePage> {
       return;
     }
 
-    final target = _TemplateNavPage(tabIndex: index);
+    Widget destination;
+    switch (index) {
+      case 1:
+        destination = SearchPage(initialLocationLabel: _accountLocationLabel);
+        break;
+      case 2:
+        destination = const MarketPage();
+        break;
+      case 3:
+        destination = const ProfilePage();
+        break;
+      default:
+        destination = ExplorePage(initialLocationLabel: _accountLocationLabel);
+        break;
+    }
+
     Navigator.of(
       context,
-    ).pushReplacement(MaterialPageRoute<void>(builder: (_) => target));
+    ).pushReplacement(MaterialPageRoute<void>(builder: (_) => destination));
   }
 
   @override
@@ -181,7 +201,7 @@ class _ExplorePageState extends State<ExplorePage> {
           },
         ),
         actions: [
-          _AppBarActionButton(
+          KuboIconActionButton(
             assetPath: AppIcons.bellNotification,
             onTap:
                 () => _openSection(
@@ -191,7 +211,7 @@ class _ExplorePageState extends State<ExplorePage> {
                 ),
           ),
           const SizedBox(width: 8),
-          _AppBarActionButton(
+          KuboIconActionButton(
             assetPath: AppIcons.heartSaved,
             onTap:
                 () => _openSection(
@@ -201,7 +221,7 @@ class _ExplorePageState extends State<ExplorePage> {
                 ),
           ),
           const SizedBox(width: 8),
-          _AppBarActionButton(
+          KuboIconActionButton(
             assetPath: AppIcons.chat,
             onTap:
                 () => _openSection(
@@ -311,9 +331,16 @@ class _ExplorePageState extends State<ExplorePage> {
         ),
       ),
 
-      bottomNavigationBar: _ExploreBottomNavBar(
+      bottomNavigationBar: KuboBottomNavigationBar(
         currentIndex: _currentBottomNavIndex,
-        onTap: _onBottomNavTap,
+        onDestinationSelected: _onBottomNavTap,
+        onCenterActionPressed: () {
+          _openSection(
+            context,
+            'Create Listing',
+            'The listing creation flow will live here.',
+          );
+        },
       ),
     );
   }
@@ -322,39 +349,7 @@ class _ExplorePageState extends State<ExplorePage> {
   void _openSection(BuildContext context, String title, String message) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ExploreSectionPage(title: title, message: message),
-      ),
-    );
-  }
-}
-
-/// Small icon action button used in the app bar trailing actions.
-class _AppBarActionButton extends StatelessWidget {
-  const _AppBarActionButton({required this.assetPath, required this.onTap});
-
-  final String assetPath;
-  final VoidCallback onTap;
-
-  @override
-  // Renders an icon button with a white circular background and SVG content.
-  Widget build(BuildContext context) {
-    return InkResponse(
-      onTap: onTap,
-      radius: 20,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: const BoxDecoration(
-          color: AppColors.white,
-          shape: BoxShape.circle,
-        ),
-        child: Center(
-          child: AppSvgIcon(
-            assetPath: assetPath,
-            size: 20,
-            color: AppColors.black,
-          ),
-        ),
+        builder: (_) => KuboPlaceholderPage(title: title, message: message),
       ),
     );
   }
@@ -375,7 +370,7 @@ class _ExploreDrawer extends StatelessWidget {
             children: [
               SizedBox(
                 height: 50,
-                  child: DrawerHeader(
+                child: DrawerHeader(
                   margin: EdgeInsets.zero,
                   padding: EdgeInsets.zero,
                   decoration: BoxDecoration(color: AppColors.softBackground),
@@ -391,16 +386,24 @@ class _ExploreDrawer extends StatelessWidget {
                     ),
                   ),
                 ),
-              ),  
+              ),
 
-              const SizedBox(height: 16), // gap before list items and header (Explore Menu)
+              const SizedBox(
+                height: 16,
+              ), // gap before list items and header (Explore Menu)
 
-              DrawerListTile(title: 'Market', iconPath: AppIcons.chartLine),          
+              DrawerListTile(title: 'Market', iconPath: AppIcons.chartLine),
               DrawerListTile(title: 'Saved', iconPath: AppIcons.heartSaved),
-              DrawerListTile(title: 'Notification', iconPath: AppIcons.bellNotification),
-              DrawerListTile(title: 'Help and Guide', iconPath: AppIcons.helpGuide),
+              DrawerListTile(
+                title: 'Notification',
+                iconPath: AppIcons.bellNotification,
+              ),
+              DrawerListTile(
+                title: 'Help and Guide',
+                iconPath: AppIcons.helpGuide,
+              ),
               DrawerListTile(title: 'Report', iconPath: AppIcons.flagReport),
-              
+
               // Push logout button to the bottom of the drawer
               const Spacer(),
 
@@ -426,10 +429,7 @@ class _ExploreDrawer extends StatelessWidget {
                   },
                   child: const Text(
                     'Logout',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
@@ -439,191 +439,6 @@ class _ExploreDrawer extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Empty template pages used for bottom tabs while flows are pending.
-class _TemplateNavPage extends StatelessWidget {
-  const _TemplateNavPage({required this.tabIndex});
-
-  /// Bottom navigation index this placeholder page represents.
-  final int tabIndex;
-
-  String get _title {
-    switch (tabIndex) {
-      case 0:
-        return 'Home';
-      case 1:
-        return 'Search';
-      case 2:
-        return 'Add';
-      case 3:
-        return 'Market';
-      case 4:
-        return 'Profile';
-      default:
-        return 'Page';
-    }
-  }
-
-  void _onBottomNavTap(BuildContext context, int index) {
-    if (index == tabIndex) {
-      return;
-    }
-
-    if (index == 0) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(builder: (_) => const ExplorePage()),
-      );
-      return;
-    }
-
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(
-        builder: (_) => _TemplateNavPage(tabIndex: index),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.white,
-      appBar: AppBar(
-        backgroundColor: AppColors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: Builder(
-          builder: (context) {
-            return IconButton(
-              onPressed: () => Scaffold.of(context).openDrawer(),
-              splashRadius: 22,
-              icon: const AppSvgIcon(
-                assetPath: AppIcons.barsMore,
-                size: 24,
-                color: AppColors.black,
-              ),
-            );
-          },
-        ),
-        title: Text(
-          _title,
-          style: const TextStyle(
-            color: AppColors.black,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-      drawer: const _ExploreDrawer(),
-      body: Center(
-        child: Text(
-          '$_title template page',
-          style: const TextStyle(
-            color: AppColors.gray,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-      bottomNavigationBar: _ExploreBottomNavBar(
-        currentIndex: tabIndex,
-        onTap: (index) => _onBottomNavTap(context, index),
-      ),
-    );
-  }
-}
-
-/// Shared bottom nav that uses asset icons and active indicator dots.
-class _ExploreBottomNavBar extends StatelessWidget {
-  const _ExploreBottomNavBar({required this.currentIndex, required this.onTap});
-
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-
-  static const List<_BottomNavItemData> _items = <_BottomNavItemData>[
-    _BottomNavItemData(label: 'Home', assetPath: AppIcons.home),
-    _BottomNavItemData(label: 'Search', assetPath: AppIcons.search),
-    _BottomNavItemData(
-      label: 'Add',
-      assetPath: AppIcons.squarePlus,
-      alwaysGreen: true,
-    ),
-    _BottomNavItemData(label: 'Market', assetPath: AppIcons.chartLine),
-    _BottomNavItemData(label: 'Profile', assetPath: AppIcons.user),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-        decoration: const BoxDecoration(
-          color: AppColors.white,
-          border: Border(top: BorderSide(color: AppColors.border, width: 1)),
-        ),
-        child: Row(
-          children: List<Widget>.generate(_items.length, (index) {
-            final item = _items[index];
-            final isActive = currentIndex == index;
-            final color =
-                item.alwaysGreen || isActive ? AppColors.green : AppColors.gray;
-
-            return Expanded(
-              child: InkWell(
-                onTap: () => onTap(index),
-                borderRadius: BorderRadius.circular(10),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      AppSvgIcon(
-                        assetPath: item.assetPath,
-                        size: 19,
-                        color: color,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item.label,
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color:
-                              isActive ? AppColors.green : Colors.transparent,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }),
-        ),
-      ),
-    );
-  }
-}
-
-class _BottomNavItemData {
-  const _BottomNavItemData({
-    required this.label,
-    required this.assetPath,
-    this.alwaysGreen = false,
-  });
-
-  final String label;
-  final String assetPath;
-  final bool alwaysGreen;
 }
 
 /// Text-and-icon toggle that switches the explore content between list and map modes.

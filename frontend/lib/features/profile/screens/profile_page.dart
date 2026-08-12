@@ -1,15 +1,26 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
+import '../../../shared/widgets/kubo_listing_card.dart';
 import '../../../shared/widgets/kubo_placeholder_page.dart';
 import '../../explore/screens/explore_page.dart';
 import '../../market/screens/market_page.dart';
 import '../../search/screens/search_page.dart';
+import '../providers/profile_page_controller.dart';
+import '../widgets/profile_empty_state.dart';
+import '../widgets/profile_header_card.dart';
+import '../widgets/profile_review_card.dart';
+import '../widgets/profile_section_tab_bar.dart';
 
-/// Profile tab placeholder that will later host account settings and identity.
-class ProfilePage extends StatelessWidget {
-  const ProfilePage({super.key, this.initialLocationLabel = 'Caybiga'});
+/// Profile tab that renders the own-account or visitor profile experience.
+class ProfilePage extends StatefulWidget {
+  const ProfilePage({
+    super.key,
+    this.initialLocationLabel = 'Caybiga',
+    this.isOwnProfile = true,
+  });
 
   /// Route name used by the app shell when opening the profile tab.
   static const routeName = '/profile';
@@ -17,7 +28,29 @@ class ProfilePage extends StatelessWidget {
   /// Current account location carried from onboarding and the home tab.
   final String initialLocationLabel;
 
-  void _navigateToTab(BuildContext context, int index) {
+  /// Whether this page should render as the signed-in user's own account.
+  final bool isOwnProfile;
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  late final ProfilePageController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = ProfilePageController(isOwnProfile: widget.isOwnProfile);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _navigateToTab(int index) {
     if (index == 3) {
       return;
     }
@@ -25,29 +58,81 @@ class ProfilePage extends StatelessWidget {
     Widget destination;
     switch (index) {
       case 0:
-        destination = ExplorePage(initialLocationLabel: initialLocationLabel);
+        destination = ExplorePage(
+          initialLocationLabel: widget.initialLocationLabel,
+        );
+        break;
       case 1:
-        destination = SearchPage(initialLocationLabel: initialLocationLabel);
+        destination = SearchPage(
+          initialLocationLabel: widget.initialLocationLabel,
+        );
+        break;
       case 2:
-        destination = MarketPage(initialLocationLabel: initialLocationLabel);
+        destination = MarketPage(
+          initialLocationLabel: widget.initialLocationLabel,
+        );
+        break;
       default:
-        destination = ProfilePage(initialLocationLabel: initialLocationLabel);
+        destination = ProfilePage(
+          initialLocationLabel: widget.initialLocationLabel,
+          isOwnProfile: widget.isOwnProfile,
+        );
+        break;
     }
 
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute<void>(builder: (_) => destination));
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(builder: (_) => destination),
+    );
   }
 
-  void _openCreateListing(BuildContext context) {
+  void _openCreateListing() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder:
-            (_) => const KuboPlaceholderPage(
-              title: 'Create Listing',
-              message: 'The listing creation flow will live here.',
-            ),
+        builder: (_) => const KuboPlaceholderPage(
+          title: 'Create Listing',
+          message: 'The listing creation flow will live here.',
+        ),
       ),
+    );
+  }
+
+  void _openEditProfile() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const KuboPlaceholderPage(
+          title: 'Edit Profile',
+          message: 'The profile editor will live here.',
+        ),
+      ),
+    );
+  }
+
+  void _openShare() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Share profile action tapped')),
+    );
+  }
+
+  void _openSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const KuboPlaceholderPage(
+          title: 'Settings',
+          message: 'The account settings screen will live here.',
+        ),
+      ),
+    );
+  }
+
+  void _followProfile() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Followed profile')),
+    );
+  }
+
+  void _messageProfile() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Message action tapped')),
     );
   }
 
@@ -55,15 +140,326 @@ class ProfilePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,
-      body: const KuboPlaceholderContent(
-        title: 'Profile',
-        message: 'Profile settings and account details will appear here.',
+      body: SafeArea(
+        bottom: false,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            return CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      SizedBox(
+                        height: 178,
+                        width: double.infinity,
+                        child: Image.asset(
+                          AppAssets.coverLandscape,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 90),
+                        child: ProfileHeaderCard(
+                          profile: _controller.profile,
+                          isOwnProfile: widget.isOwnProfile,
+                          onEditProfile: _openEditProfile,
+                          onShare: _openShare,
+                          onSettings: _openSettings,
+                          onFollow: _followProfile,
+                          onMessage: _messageProfile,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 34)),
+                SliverToBoxAdapter(
+                  child: ProfileSectionTabBar(
+                    selectedSection: _controller.selectedSection,
+                    showSavedTab: widget.isOwnProfile,
+                    onSectionSelected: (section) {
+                      if (!widget.isOwnProfile && section == ProfileSection.saved) {
+                        return;
+                      }
+                      _controller.selectSection(section);
+                    },
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: _buildSectionContent(),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 28)),
+              ],
+            );
+          },
+        ),
       ),
       bottomNavigationBar: KuboBottomNavigationBar(
         currentIndex: 3,
-        onDestinationSelected: (index) => _navigateToTab(context, index),
-        onCenterActionPressed: () => _openCreateListing(context),
+        onDestinationSelected: _navigateToTab,
+        onCenterActionPressed: _openCreateListing,
       ),
+    );
+  }
+
+  Widget _buildSectionContent() {
+    switch (_controller.selectedSection) {
+      case ProfileSection.listings:
+        return _buildListingsSection();
+      case ProfileSection.reviews:
+        return _buildReviewsSection();
+      case ProfileSection.about:
+        return _buildAboutSection();
+      case ProfileSection.saved:
+        return _buildSavedSection();
+    }
+  }
+
+  Widget _buildListingsSection() {
+    final listings = _controller.listings;
+    if (listings.isEmpty) {
+      return ProfileEmptyState(
+        title: 'No listings yet',
+        message: widget.isOwnProfile
+            ? 'Your listings will appear here once you publish them.'
+            : 'This profile has not posted any listings yet.',
+        actionLabel: widget.isOwnProfile ? 'Create listing' : null,
+        onActionPressed: widget.isOwnProfile ? _openCreateListing : null,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: listings.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 18,
+          crossAxisSpacing: 12,
+          childAspectRatio: 0.72,
+        ),
+        itemBuilder: (context, index) {
+          return KuboListingCard(listing: listings[index]);
+        },
+      ),
+    );
+  }
+
+  Widget _buildReviewsSection() {
+    final reviews = _controller.reviews;
+    if (reviews.isEmpty) {
+      return ProfileEmptyState(
+        title: 'No reviews yet',
+        message: widget.isOwnProfile
+            ? 'Reviews from buyers and sellers will appear here once they start coming in.'
+            : 'This profile has no reviews yet.',
+        actionLabel: widget.isOwnProfile ? 'Share profile' : null,
+        onActionPressed: widget.isOwnProfile ? _openShare : null,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+          child: Row(
+            children: [
+              Text(
+                _controller.profile.reviewScore.toStringAsFixed(1),
+                style: const TextStyle(
+                  color: AppColors.black,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 5),
+              const Icon(Icons.star, color: AppColors.green, size: 14),
+              const SizedBox(width: 10),
+              Container(width: 1, height: 20, color: AppColors.border),
+              const SizedBox(width: 10),
+              Text(
+                '${_controller.profile.reviewCount} reviews',
+                style: const TextStyle(
+                  color: AppColors.black,
+                  fontSize: 12,
+                ),
+              ),
+              const Spacer(),
+              _PillButton(
+                label: 'Star ⭐ : All', 
+                fontSize: 12,
+                onTap: () {}
+              ),
+              const SizedBox(width: 8),
+              _PillButton(
+                label: 'Sort by: Newest', 
+                fontSize: 12,
+                onTap: () {}
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...reviews.map((review) => ProfileReviewCard(review: review)),
+      ],
+    );
+  }
+
+  Widget _buildAboutSection() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 22, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'About',
+            style: TextStyle(
+              color: AppColors.black,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _controller.profile.about,
+            style: const TextStyle(
+              color: AppColors.black,
+              fontSize: 15,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Account details',
+            style: TextStyle(
+              color: AppColors.black,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _DetailRow(
+            icon: Icons.calendar_today_outlined,
+            label: 'Date joined',
+            value: _controller.profile.joinedLabel,
+          ),
+          const SizedBox(height: 14),
+          _DetailRow(
+            icon: Icons.location_on_outlined,
+            value: _controller.profile.locationLabel,
+          ),
+          const SizedBox(height: 14),
+          _DetailRow(
+            icon: Icons.person_outline,
+            value: _controller.profile.username,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSavedSection() {
+    final savedListings = _controller.savedListings;
+    if (savedListings.isEmpty) {
+      return ProfileEmptyState(
+        title: 'No saved listings yet',
+        message: 'Saved items will appear here when you favorite a listing.',
+        actionLabel: 'Browse listings',
+        onActionPressed: _navigateHomeToExplore,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: savedListings.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 18,
+          crossAxisSpacing: 12,
+          childAspectRatio: 0.72,
+        ),
+        itemBuilder: (context, index) {
+          return KuboListingCard(listing: savedListings[index]);
+        },
+      ),
+    );
+  }
+
+  void _navigateHomeToExplore() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => ExplorePage(
+          initialLocationLabel: widget.initialLocationLabel,
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.icon, required this.value, this.label});
+
+  final IconData icon;
+  final String value;
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 28, color: AppColors.black),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Text(
+            label == null ? value : '$label | $value',
+            style: const TextStyle(
+              color: AppColors.black,
+              fontSize: 16,
+              height: 1.35,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PillButton extends StatelessWidget {
+  const _PillButton({
+    required this.label, 
+    required this.onTap,
+    required this.fontSize,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.black,
+        side: const BorderSide(color: AppColors.border),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      child: Text(
+        label, 
+        style: TextStyle(fontSize: fontSize)),
     );
   }
 }

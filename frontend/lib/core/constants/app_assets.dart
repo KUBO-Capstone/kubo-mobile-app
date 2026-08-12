@@ -3,6 +3,9 @@ abstract final class AppAssets {
   /// Hero illustration shown on the login and create-account screens.
   static const kuboHero = 'assets/images/kubo_house.jpg';
 
+  /// Wide landscape cover image used on the profile page.
+  static const coverLandscape = 'assets/images/cover_landscape.jpg';
+
   /// Fallback product/listing image used when backend images are unavailable.
   static const placeholderImage = 'assets/images/Placeholder_img.png';
 }

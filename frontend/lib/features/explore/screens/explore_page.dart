@@ -306,7 +306,6 @@ class _ExploreDrawer extends StatelessWidget {
                 child: DrawerHeader(
                   margin: EdgeInsets.zero,
                   padding: EdgeInsets.zero,
-                  decoration: BoxDecoration(color: AppColors.softBackground),
                   child: Align(
                     alignment: Alignment.bottomLeft,
                     child: Text(

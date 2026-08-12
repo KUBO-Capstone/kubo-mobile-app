@@ -158,7 +158,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                         
                       ],
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 20),
                     Padding(
                       padding: const EdgeInsets.only(left: 16),
                       child: Row(
@@ -182,7 +182,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                       ),
                     ),
                     
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                     Padding(
                       padding: const EdgeInsets.only(left: 16),
                       child: Text(

@@ -376,7 +376,7 @@ class _HeaderImageState extends State<_HeaderImage> {
           top: 12,
           left: 12,
           child: CircleAvatar(
-            backgroundColor: Colors.white.withOpacity(0.9),
+            backgroundColor: Colors.white.withValues(alpha:0.9),
             child: IconButton(
               icon: const Icon(Icons.arrow_back, color: AppColors.black),
               onPressed: () => Navigator.of(context).pop(),
@@ -387,7 +387,7 @@ class _HeaderImageState extends State<_HeaderImage> {
           top: 12,
           right: 12,
           child: CircleAvatar(
-            backgroundColor: Colors.white.withOpacity(0.9),
+            backgroundColor: Colors.white.withValues(alpha: 0.9),
             child: IconButton(
               icon: const Icon(Icons.favorite_border, color: AppColors.black),
               onPressed: () {},

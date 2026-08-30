@@ -106,6 +106,10 @@ final List<SyntheticListingRecord> syntheticProfileListings =
         regionLabel: 'NCR',
         sellerLabel: 'Username',
         imageAssetPath: 'assets/images/Placeholder_img.png',
+        description: 'Placeholder description for a profile listing.',
+        date: 'Posted today',
+        numLikes: 12,
+        groups: <String>['vegetables'],
       ),
       const SyntheticListingRecord(
         id: 'profile-listing-1',
@@ -115,6 +119,10 @@ final List<SyntheticListingRecord> syntheticProfileListings =
         regionLabel: 'NCR',
         sellerLabel: 'Username',
         imageAssetPath: 'assets/images/Placeholder_img.png',
+        description: 'Placeholder description for a profile listing.',
+        date: 'Posted 2 days ago',
+        numLikes: 18,
+        groups: <String>['fruits'],
       ),
       const SyntheticListingRecord(
         id: 'profile-listing-2',
@@ -124,6 +132,10 @@ final List<SyntheticListingRecord> syntheticProfileListings =
         regionLabel: 'NCR',
         sellerLabel: 'Username',
         imageAssetPath: 'assets/images/Placeholder_img.png',
+        description: 'Placeholder description for a profile listing.',
+        date: 'Posted 4 days ago',
+        numLikes: 22,
+        groups: <String>['grains'],
       ),
     ];
 
@@ -138,6 +150,10 @@ final List<SyntheticListingRecord> syntheticProfileSavedListings =
         regionLabel: 'NCR',
         sellerLabel: 'Username',
         imageAssetPath: 'assets/images/Placeholder_img.png',
+        description: 'Saved listing placeholder description.',
+        date: 'Saved recently',
+        numLikes: 30,
+        groups: <String>['vegetables'],
       ),
       const SyntheticListingRecord(
         id: 'profile-saved-1',
@@ -147,6 +163,10 @@ final List<SyntheticListingRecord> syntheticProfileSavedListings =
         regionLabel: 'NCR',
         sellerLabel: 'Username',
         imageAssetPath: 'assets/images/Placeholder_img.png',
+        description: 'Saved listing placeholder description.',
+        date: 'Saved 3 days ago',
+        numLikes: 42,
+        groups: <String>['fruits'],
       ),
       const SyntheticListingRecord(
         id: 'profile-saved-2',
@@ -156,6 +176,10 @@ final List<SyntheticListingRecord> syntheticProfileSavedListings =
         regionLabel: 'NCR',
         sellerLabel: 'Username',
         imageAssetPath: 'assets/images/Placeholder_img.png',
+        description: 'Saved listing placeholder description.',
+        date: 'Saved 5 days ago',
+        numLikes: 28,
+        groups: <String>['grains'],
       ),
       const SyntheticListingRecord(
         id: 'profile-saved-3',
@@ -165,6 +189,10 @@ final List<SyntheticListingRecord> syntheticProfileSavedListings =
         regionLabel: 'NCR',
         sellerLabel: 'Username',
         imageAssetPath: 'assets/images/Placeholder_img.png',
+        description: 'Saved listing placeholder description.',
+        date: 'Saved 1 week ago',
+        numLikes: 35,
+        groups: <String>['dairy'],
       ),
     ];
 

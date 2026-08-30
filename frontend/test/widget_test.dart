@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:frontend/app.dart';
+import 'package:frontend/features/listing/screens/listing_page.dart';
+import 'package:frontend/shared/data/synthetic_records.dart';
 
 // Verifies that the app boots to the login screen and basic navigation works.
 void main() {
@@ -40,5 +42,25 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Continue with Google'), findsOneWidget);
+  });
+
+  testWidgets('displays listing details for a selected listing', (WidgetTester tester) async {
+    const listing = SyntheticListingRecord(
+      id: 'listing-0',
+      title: 'Fresh harvested tomatoes bundle',
+      price: 'PHP 120',
+      locationLabel: 'Caloocan',
+      regionLabel: 'NCR',
+      sellerLabel: 'Kubo Grower 1',
+      imageAssetPath: 'assets/images/Placeholder_img.png',
+    );
+
+    await tester.pumpWidget(const MaterialApp(home: ListingPage(listing: listing)));
+
+    expect(find.text('Fresh harvested tomatoes bundle'), findsOneWidget);
+    expect(find.text('PHP 120'), findsOneWidget);
+    expect(find.text('Caloocan'), findsOneWidget);
+    expect(find.text('Kubo Grower 1'), findsOneWidget);
+    expect(find.text('About this listing'), findsOneWidget);
   });
 }

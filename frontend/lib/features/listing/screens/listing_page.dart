@@ -6,6 +6,7 @@ import '../widgets/listing_image_carousel.dart';
 import '../widgets/listing_info_row.dart';
 import '../widgets/listing_tag.dart';
 import '../widgets/seller_card.dart';
+import '../widgets/make_offer_dialog.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/synthetic_records.dart';
 
@@ -173,7 +174,7 @@ class _ListingPageState extends State<ListingPage> {
                       label: 'Make Offer',
                       color: AppColors.green,
                       textColor: AppColors.white,
-                      onPressed: () {},
+                      onPressed: () => showMakeOfferDialog(context, 'display name', listing.price),
                     ),
                   ),
                 ],

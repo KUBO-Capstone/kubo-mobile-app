@@ -11,6 +11,7 @@ import '../../../shared/widgets/kubo_location_badge.dart';
 import '../../../shared/widgets/kubo_placeholder_page.dart';
 import '../../login/screens/login_page.dart';
 import '../../market/screens/market_page.dart';
+import '../../notification/screens/notification_page.dart';
 import '../../profile/screens/profile_page.dart';
 import '../../search/screens/search_page.dart';
 import '../widgets/drawer_list_tile.dart';
@@ -155,11 +156,8 @@ class _ExplorePageState extends State<ExplorePage> {
           KuboIconActionButton(
             assetPath: AppIcons.bellNotification,
             onTap:
-                () => _openSection(
-                  context,
-                  'Notifications',
-                  'Notifications will appear here.',
-                ),
+                () =>
+                    Navigator.of(context).pushNamed(NotificationPage.routeName),
           ),
           const SizedBox(width: 8),
           KuboIconActionButton(
@@ -209,7 +207,7 @@ class _ExplorePageState extends State<ExplorePage> {
           ),
         ),
       ),
-      drawer: const _ExploreDrawer(),
+      drawer: _ExploreDrawer(),
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -329,6 +327,10 @@ class _ExploreDrawer extends StatelessWidget {
               DrawerListTile(
                 title: 'Notification',
                 iconPath: AppIcons.bellNotification,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pushNamed(NotificationPage.routeName);
+                },
               ),
               DrawerListTile(
                 title: 'Help and Guide',

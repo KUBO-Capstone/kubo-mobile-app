@@ -6,6 +6,7 @@ import 'features/login/screens/create_account_page.dart';
 import 'features/login/screens/get_started_page.dart';
 import 'features/login/screens/login_page.dart';
 import 'features/market/screens/market_page.dart';
+import 'features/notification/screens/notification_page.dart';
 import 'features/profile/screens/profile_page.dart';
 import 'features/search/screens/search_page.dart';
 
@@ -63,6 +64,7 @@ class KuboApp extends StatelessWidget {
         ExplorePage.routeName: (_) => const ExplorePage(),
         SearchPage.routeName: (_) => const SearchPage(),
         MarketPage.routeName: (_) => const MarketPage(),
+        NotificationPage.routeName: (_) => const NotificationPage(),
         ProfilePage.routeName: (_) => const ProfilePage(),
       },
       initialRoute: LoginPage.routeName,

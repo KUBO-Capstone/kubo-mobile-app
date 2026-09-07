@@ -6,12 +6,14 @@ class DrawerListTile extends StatelessWidget {
   final String title;
   final String iconPath;
   final int? tabIndex;
+  final VoidCallback? onTap;
 
   const DrawerListTile({
     super.key,
     required this.title,
     required this.iconPath,
     this.tabIndex,
+    this.onTap,
   });
 
   @override
@@ -20,9 +22,7 @@ class DrawerListTile extends StatelessWidget {
       contentPadding: EdgeInsets.only(left: 8),
       leading: AppSvgIcon(assetPath: iconPath, size: 20, color: Colors.black),
       title: Text(title),
-      onTap: () { 
-        // route to corresponding page
-      },
+      onTap: onTap,
     );
   }
-} 
+}

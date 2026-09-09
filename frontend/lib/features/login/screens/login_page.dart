@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import 'auth_method_page.dart';
 import 'create_account_page.dart';
+import 'email_login_page.dart';
 import '../widgets/kubo_hero_image.dart';
 
 /// Landing page that introduces Kubo and offers sign-in and sign-up entry points.
@@ -70,7 +71,11 @@ class LoginPage extends StatelessWidget {
                           _AuthOptionButton(
                             label: 'Continue with Email',
                             icon: _AuthIcon.email,
-                            onPressed: () => _openAuthMethod(context, 'Email'),
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(builder: (_) => const EmailLoginPage()),
+                              );
+                            },
                           ),
                           const SizedBox(height: 14),
                           TextButton(

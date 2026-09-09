@@ -4,6 +4,7 @@ import 'package:philippines_rpcmb/philippines_rpcmb.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../explore/screens/explore_page.dart';
 import '../providers/get_started_form_controller.dart';
+import '../services/auth_service.dart';
 import '../widgets/choice_pill_group.dart';
 import '../widgets/login_field_section.dart';
 
@@ -26,6 +27,12 @@ class _GetStartedPageState extends State<GetStartedPage> {
 
   /// Text controller bound to the username input field.
   late final TextEditingController _usernameController;
+  late final TextEditingController _lastNameController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _passwordController;
+  late final TextEditingController _contactNumberController;
+  final _authService = AuthService();
+  bool _isSubmitting = false;
 
   @override
   // Initializes controllers for the form fields and reactive state updates.
@@ -33,12 +40,21 @@ class _GetStartedPageState extends State<GetStartedPage> {
     super.initState();
     _controller = GetStartedFormController();
     _usernameController = TextEditingController();
+    _lastNameController = TextEditingController();
+    _emailController = TextEditingController();
+    _passwordController = TextEditingController();
+    _contactNumberController = TextEditingController();
   }
 
   @override
   // Releases both controllers when the page is removed from the tree.
   void dispose() {
     _usernameController.dispose();
+    _lastNameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _contactNumberController.dispose();
+    _authService.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -127,6 +143,48 @@ class _GetStartedPageState extends State<GetStartedPage> {
     );
   }
 
+  Future<void> _createAccount() async {
+    final firstName = _usernameController.text.trim();
+    final lastName = _lastNameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final contactNumber = _contactNumberController.text.trim();
+
+    if (firstName.isEmpty || lastName.isEmpty || email.isEmpty || password.isEmpty || contactNumber.isEmpty) {
+      _showMessage('Please complete all account fields');
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    try {
+      await _authService.register(
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        password: password,
+        contactNumber: contactNumber,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => ExplorePage(
+            initialLocationLabel: _controller.selectedCity?.name ??
+                _controller.selectedRegion?.regionName ??
+                'Caybiga',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) _showMessage(error.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   // Builds the full onboarding form and connects each input to the controller.
   Widget build(BuildContext context) {
@@ -166,13 +224,48 @@ class _GetStartedPageState extends State<GetStartedPage> {
                         ),
                         const SizedBox(height: 20),
                         LoginFieldSection(
-                          label: 'Username',
+                          label: 'First name',
                           child: TextFormField(
                             controller: _usernameController,
                             onChanged: _controller.setUsername,
                             decoration: _underlineDecoration(
-                              hintText: 'Write your username here',
+                              hintText: 'Write your first name here',
                             ),
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        LoginFieldSection(
+                          label: 'Last name',
+                          child: TextFormField(
+                            controller: _lastNameController,
+                            decoration: _underlineDecoration(hintText: 'Write your last name here'),
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        LoginFieldSection(
+                          label: 'Email',
+                          child: TextFormField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: _underlineDecoration(hintText: 'you@example.com'),
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        LoginFieldSection(
+                          label: 'Password',
+                          child: TextFormField(
+                            controller: _passwordController,
+                            obscureText: true,
+                            decoration: _underlineDecoration(hintText: 'Choose a password'),
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        LoginFieldSection(
+                          label: 'Contact number',
+                          child: TextFormField(
+                            controller: _contactNumberController,
+                            keyboardType: TextInputType.phone,
+                            decoration: _underlineDecoration(hintText: '09XXXXXXXXX'),
                           ),
                         ),
                         const SizedBox(height: 22),
@@ -281,17 +374,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            onPressed: () {
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => ExplorePage(
-                                    initialLocationLabel: _controller.selectedCity?.name ??
-                                        _controller.selectedRegion?.regionName ??
-                                        'Caybiga',
-                                  ),
-                                ),
-                              );
-                            },
+                            onPressed: _isSubmitting ? null : _createAccount,
                             child: const Text(
                               'Create account',
                               style: TextStyle(

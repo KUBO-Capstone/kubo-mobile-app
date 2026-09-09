@@ -22,7 +22,12 @@ export const UserModel = {
         const query = 'SELECT * FROM users WHERE user_id = ?';
         const stmt = db.prepare(query);
         return stmt.get(id) as User | undefined;
-    }, 
+    },
+
+    findByEmail: (email: string): User | undefined => {
+        const query = 'SELECT * FROM users WHERE email = ?';
+        return db.prepare(query).get(email) as User | undefined;
+    },
 
     // to insert a new user
     create(user: Omit<User, "user_id" | "created_at" | "is_verified">): User {

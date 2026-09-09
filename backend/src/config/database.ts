@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 
-const dbPath = path.resolve(__dirname, '../../database/db.sqlite');
+const dbPath = path.resolve(__dirname, '../database/db.sqlite');
 export const db = new Database(dbPath, { verbose: console.log });
 
 // enable foreign key constraints (off by default)
@@ -18,9 +18,11 @@ export function initDb(): void {
             password TEXT NOT NULL,
             contact_number VARCHAR(15) NOT NULL,
             is_verified BOOLEAN DEFAULT FALSE,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
     `);
     console.log('Database tables created')
 }
+
+initDb();
 

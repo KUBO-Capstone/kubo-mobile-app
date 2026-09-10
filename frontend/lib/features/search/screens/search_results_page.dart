@@ -3,15 +3,16 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/synthetic_records.dart';
+import '../../../shared/data/listing_service.dart';
 import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
 import '../../../shared/widgets/kubo_listing_card.dart';
 import '../../../shared/widgets/kubo_location_badge.dart';
-import '../../../shared/widgets/kubo_placeholder_page.dart';
 import '../../../shared/widgets/kubo_search_field.dart';
 import '../../../shared/widgets/kubo_view_toggle_button.dart';
 import '../../explore/screens/explore_page.dart';
 import '../../market/screens/market_page.dart';
 import '../../profile/screens/profile_page.dart';
+import '../../listing/screens/create_listing_page.dart';
 
 /// Search results page with list/map toggles and synthetic listing results.
 class SearchResultsPage extends StatefulWidget {
@@ -36,34 +37,34 @@ class SearchResultsPage extends StatefulWidget {
 
 class _SearchResultsPageState extends State<SearchResultsPage> {
   late final TextEditingController _searchController;
+  late final ListingService _listingService;
+  List<SyntheticListingRecord> _listings = const <SyntheticListingRecord>[];
   bool _isListView = true;
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController(text: widget.query);
+    _listingService = ListingService();
+    _loadListings();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _listingService.dispose();
     super.dispose();
   }
 
-  List<SyntheticListingRecord> get _visibleListings {
-    final query = _searchController.text.trim().toLowerCase();
-    if (query.isEmpty) {
-      return syntheticSearchResultListings;
-    }
+  List<SyntheticListingRecord> get _visibleListings => _listings;
 
-    return syntheticSearchResultListings
-        .where(
-          (listing) =>
-              listing.title.toLowerCase().contains(query) ||
-              listing.locationLabel.toLowerCase().contains(query) ||
-              listing.sellerLabel.toLowerCase().contains(query),
-        )
-        .toList(growable: false);
+  Future<void> _loadListings() async {
+    try {
+      final listings = await _listingService.fetchListings(query: widget.query);
+      if (mounted) setState(() => _listings = listings);
+    } catch (error) {
+      if (mounted) setState(() {});
+    }
   }
 
   String get _locationLabel {
@@ -114,11 +115,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   void _openCreateListing() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder:
-            (_) => const KuboPlaceholderPage(
-              title: 'Create Listing',
-              message: 'The listing creation flow will live here.',
-            ),
+        builder: (_) => const CreateListingPage(),
       ),
     );
   }

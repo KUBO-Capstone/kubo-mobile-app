@@ -31,7 +31,9 @@ class KuboListingCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             child: AspectRatio(
               aspectRatio: 1,
-              child: Image.asset(listing.imageAssetPath, fit: BoxFit.cover),
+              child: listing.imageAssetPath.startsWith('http')
+                  ? Image.network(listing.imageAssetPath, fit: BoxFit.cover)
+                  : Image.asset(listing.imageAssetPath, fit: BoxFit.cover),
             ),
           ),
           const SizedBox(height: 8),

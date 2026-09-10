@@ -72,6 +72,25 @@ class SyntheticListingRecord {
     this.groups = const <String>[],
   });
 
+  factory SyntheticListingRecord.fromJson(Map<String, dynamic> json) {
+    final images = (json['images'] as List<dynamic>? ?? const <dynamic>[])
+        .whereType<String>()
+        .toList(growable: false);
+    final createdAt = DateTime.tryParse(json['created_at']?.toString() ?? '');
+    return SyntheticListingRecord(
+      id: '${json['product_id']}',
+      title: json['crop_name']?.toString() ?? 'Untitled produce',
+      price: 'PHP ${json['base_price']}',
+      locationLabel: json['location_label']?.toString() ?? 'Philippines',
+      regionLabel: json['region_label']?.toString() ?? 'NCR',
+      sellerLabel: json['seller_name']?.toString() ?? 'Kubo grower',
+      imageAssetPath: images.isEmpty ? 'assets/images/Placeholder_img.png' : images.first,
+      description: json['description']?.toString() ?? 'Fresh local produce from a Kubo grower.',
+      date: createdAt == null ? 'Recently posted' : 'Posted ${createdAt.month}/${createdAt.day}/${createdAt.year}',
+      groups: <String>[json['category']?.toString() ?? 'produce'],
+    );
+  }
+
   /// Stable identifier for the record.
   final String id;
 

@@ -46,5 +46,20 @@ export const UserModel = {
         const stmt = db.prepare(query);
         const result = stmt.run(id);
         return result.changes > 0;
+    }, 
+    
+    // set a preferred address
+    setPreferredAddress: (userId: string | number, addressData: any) => {
+        const insertQuery = db.prepare(`
+            INSERT INTO addresses (region, province, city_municipality, barangay, zip_code, street_details, landmark, latitude, longitude)
+            VALUES (@region, @province, @city_municipality, @barangay, @zip_code, @street_details, @landmark, @latitude, @longitude)
+        `);
+        const info = insertQuery.run(addressData);
+        
+        const updateUserQuery = db.prepare(`UPDATE users SET preferred_address_id = ? WHERE user_id = ?`);
+        updateUserQuery.run(info.lastInsertRowid, userId);
+        
+        return info.lastInsertRowid;
     }
 }
+

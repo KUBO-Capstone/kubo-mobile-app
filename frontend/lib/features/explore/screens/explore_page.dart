@@ -4,6 +4,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/app_svg_icon.dart';
 import '../../../shared/data/synthetic_records.dart';
+import '../../../shared/data/listing_service.dart';
 import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
 import '../../../shared/widgets/kubo_icon_action_button.dart';
 import '../../../shared/widgets/kubo_listing_card.dart';
@@ -11,6 +12,7 @@ import '../../../shared/widgets/kubo_location_badge.dart';
 import '../../../shared/widgets/kubo_placeholder_page.dart';
 import '../../login/screens/login_page.dart';
 import '../../market/screens/market_page.dart';
+import '../../listing/screens/create_listing_page.dart';
 import '../../notification/screens/notification_page.dart';
 import '../../profile/screens/profile_page.dart';
 import '../../search/screens/search_page.dart';
@@ -57,9 +59,8 @@ class _ExplorePageState extends State<ExplorePage> {
     'BARMM',
   ];
 
-  // Demo listings used to populate the grid before real backend data is wired in.
-  static final List<SyntheticListingRecord> _allListings =
-      List<SyntheticListingRecord>.unmodifiable(syntheticExploreListings);
+  final ListingService _listingService = ListingService();
+  List<SyntheticListingRecord> _allListings = const <SyntheticListingRecord>[];
 
   /// Fallback or onboarding-provided location shown in the top-right badge.
   late String _accountLocationLabel;
@@ -81,6 +82,22 @@ class _ExplorePageState extends State<ExplorePage> {
         widget.initialLocationLabel.trim().isEmpty
             ? 'Caybiga'
             : widget.initialLocationLabel;
+    _loadListings();
+  }
+
+  @override
+  void dispose() {
+    _listingService.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadListings() async {
+    try {
+      final listings = await _listingService.fetchListings();
+      if (mounted) setState(() => _allListings = listings);
+    } catch (error) {
+      if (mounted) setState(() {});
+    }
   }
 
   // Returns only the listings that match the selected region filter.
@@ -266,11 +283,7 @@ class _ExplorePageState extends State<ExplorePage> {
         currentIndex: _currentBottomNavIndex,
         onDestinationSelected: _onBottomNavTap,
         onCenterActionPressed: () {
-          _openSection(
-            context,
-            'Create Listing',
-            'The listing creation flow will live here.',
-          );
+          Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CreateListingPage()));
         },
       ),
     );
@@ -426,11 +439,11 @@ class _MapPlaceholder extends StatelessWidget {
       width: double.infinity,
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.softBackground,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border),
-      ),
+      // decoration: BoxDecoration(
+      //   color: AppColors.softBackground,
+      //   borderRadius: BorderRadius.circular(18),
+      //   border: Border.all(color: AppColors.border),
+      // ),
       child: Column(
         children: [
           const SizedBox(height: 12),
@@ -446,7 +459,7 @@ class _MapPlaceholder extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Map instructions will be added later. Current location: $locationLabel',
+            'Map will be added later. Current location: $locationLabel',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: AppColors.gray,

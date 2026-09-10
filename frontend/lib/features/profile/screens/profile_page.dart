@@ -8,6 +8,7 @@ import '../../../shared/widgets/kubo_placeholder_page.dart';
 import '../../explore/screens/explore_page.dart';
 import '../../market/screens/market_page.dart';
 import '../../search/screens/search_page.dart';
+import '../../listing/screens/create_listing_page.dart';
 import '../providers/profile_page_controller.dart';
 import '../widgets/profile_empty_state.dart';
 import '../widgets/profile_header_card.dart';
@@ -42,6 +43,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     _controller = ProfilePageController(isOwnProfile: widget.isOwnProfile);
+    _controller.loadListings();
   }
 
   @override
@@ -88,10 +90,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void _openCreateListing() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => const KuboPlaceholderPage(
-          title: 'Create Listing',
-          message: 'The listing creation flow will live here.',
-        ),
+        builder: (_) => const CreateListingPage(),
       ),
     );
   }
@@ -227,7 +226,7 @@ class _ProfilePageState extends State<ProfilePage> {
       return ProfileEmptyState(
         title: 'No listings yet',
         message: widget.isOwnProfile
-            ? 'Your listings will appear here once you publish them.'
+            ? 'Your listings will appear here once you add them.'
             : 'This profile has not posted any listings yet.',
         actionLabel: widget.isOwnProfile ? 'Create listing' : null,
         onActionPressed: widget.isOwnProfile ? _openCreateListing : null,

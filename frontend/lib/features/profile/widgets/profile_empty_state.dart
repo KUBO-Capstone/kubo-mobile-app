@@ -30,11 +30,11 @@ class ProfileEmptyState extends StatelessWidget {
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.softBackground,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.border),
-      ),
+      // decoration: BoxDecoration(
+      //   color: AppColors.softBackground,
+      //   borderRadius: BorderRadius.circular(18),
+      //   border: Border.all(color: AppColors.border),
+      // ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

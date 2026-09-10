@@ -25,7 +25,9 @@ class AuthService {
 
   final http.Client _client;
 
-  Future<void> register({
+  static Map<String, dynamic>? currentUser;
+
+  Future<Map<String, dynamic>> register({
     required String firstName,
     required String lastName,
     required String email,
@@ -41,6 +43,10 @@ class AuthService {
     });
 
     _checkResponse(response);
+    final user = (jsonDecode(response.body) as Map<String, dynamic>)['data']
+      as Map<String, dynamic>;
+    currentUser = user;
+    return user;
   }
 
   Future<Map<String, dynamic>> login({
@@ -53,7 +59,9 @@ class AuthService {
     });
 
     _checkResponse(response);
-    return jsonDecode(response.body)['data'] as Map<String, dynamic>;
+    final user = jsonDecode(response.body)['data'] as Map<String, dynamic>;
+    currentUser = user;
+    return user;
   }
 
   void _checkResponse(http.Response response) {

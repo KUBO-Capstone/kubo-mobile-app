@@ -1,0 +1,95 @@
+import { db } from "#config/database";
+
+export interface ProductInput {
+    seller_id: number;
+    crop_name: string;
+    category: string;
+    base_price: number;
+    available_quantity: number;
+    unit_of_measure: string;
+}
+
+export interface ProductListing {
+    product_id: number;
+    seller_id: number;
+    crop_name: string;
+    category: string;
+    base_price: number;
+    available_quantity: number;
+    unit_of_measure: string;
+    status: string;
+    created_at: string;
+    seller_name: string;
+    location_label: string;
+    region_label: string;
+    description: string;
+    images: string[];
+}
+
+const listingQuery = `
+    SELECT p.*, u.first_name || ' ' || u.last_name AS seller_name,
+           COALESCE(a.city_municipality, 'Philippines') AS location_label,
+           COALESCE(a.region, 'NCR') AS region_label,
+           GROUP_CONCAT(pi.image_url, '||') AS image_urls
+    FROM products p
+    JOIN users u ON u.user_id = p.seller_id
+    LEFT JOIN addresses a ON a.address_id = u.preferred_address_id
+    LEFT JOIN product_images pi ON pi.product_id = p.product_id
+`;
+
+function mapListing(row: Record<string, unknown>): ProductListing {
+    return {
+        product_id: Number(row.product_id),
+        seller_id: Number(row.seller_id),
+        crop_name: String(row.crop_name),
+        category: String(row.category),
+        base_price: Number(row.base_price),
+        available_quantity: Number(row.available_quantity),
+        unit_of_measure: String(row.unit_of_measure),
+        status: String(row.status),
+        created_at: String(row.created_at),
+        seller_name: String(row.seller_name),
+        location_label: String(row.location_label),
+        region_label: String(row.region_label),
+        description: String(row.description ?? 'Fresh local produce from a Kubo grower.'),
+        images: row.image_urls ? String(row.image_urls).split('||') : [],
+    };
+}
+
+export const ProductModel = {
+    findAll(query = '', sellerId?: number): ProductListing[] {
+        const normalizedQuery = query.trim().toLowerCase();
+        const conditions = [`p.status = 'available'`];
+        if (normalizedQuery) {
+            conditions.push(`(LOWER(p.crop_name) LIKE @query OR LOWER(u.first_name || ' ' || u.last_name) LIKE @query OR LOWER(a.city_municipality) LIKE @query)`);
+        }
+        if (sellerId !== undefined) {
+            conditions.push(`p.seller_id = @sellerId`);
+        }
+        const where = `WHERE ${conditions.join(' AND ')}`;
+        const rows = db.prepare(`${listingQuery} ${where} GROUP BY p.product_id ORDER BY p.created_at DESC`).all({
+            query: `%${normalizedQuery}%`,
+            sellerId,
+        }) as Record<string, unknown>[];
+        return rows.map(mapListing);
+    },
+
+    findById(productId: number): ProductListing | undefined {
+        const rows = db.prepare(`${listingQuery} WHERE p.product_id = ? GROUP BY p.product_id`).all(productId) as Record<string, unknown>[];
+        return rows[0] ? mapListing(rows[0]) : undefined;
+    },
+
+    create(input: ProductInput, images: string[]): ProductListing {
+        const transaction = db.transaction(() => {
+            const product = db.prepare(`
+                INSERT INTO products (seller_id, crop_name, category, base_price, available_quantity, unit_of_measure)
+                VALUES (@seller_id, @crop_name, @category, @base_price, @available_quantity, @unit_of_measure)
+            `).run(input);
+            const productId = Number(product.lastInsertRowid);
+            const imageStatement = db.prepare(`INSERT INTO product_images (product_id, image_url, display_order) VALUES (?, ?, ?)`);
+            images.forEach((url, index) => imageStatement.run(productId, url, index));
+            return productId;
+        });
+        return ProductModel.findById(transaction()) as ProductListing;
+    },
+};

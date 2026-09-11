@@ -4,6 +4,11 @@ import 'package:flutter/material.dart';
 abstract final class AppColors {
   /// Primary green used for calls to action, selected states, and brand emphasis.
   static const green = Color(0xFF007537);
+
+  /// Lighter, warmer green that stays in the brand family while reading clearly
+  /// against the primary green. Used to separate bagsakan centers from produce
+  /// pins on the explore map.
+  static const greenLight = Color(0xFF5FA83C);
   /// Main text and icon color for high-contrast foreground content.
   static const black = Color(0xFF221F1F);
   /// Secondary text color for helper copy, metadata, and inactive elements.

@@ -82,7 +82,8 @@ class _ExplorePageState extends State<ExplorePage> {
   /// secondary mode behind the warehouse toggle.
   MapPinMode _pinMode = MapPinMode.products;
 
-  /// Collapses the map to a strip so the cards below get the screen.
+  /// Collapses the map to a strip so the cards below get the screen. Driven
+  /// only by the map's corner control; scrolling leaves the map alone.
   bool _mapMinimized = false;
 
   /// Point the radius filter is measured from, set via the location sheet.
@@ -124,6 +125,11 @@ class _ExplorePageState extends State<ExplorePage> {
     _listingService.dispose();
     _bagsakanService.dispose();
     super.dispose();
+  }
+
+  // Collapses or restores the map from the control in its corner.
+  void _toggleMapMinimized() {
+    setState(() => _mapMinimized = !_mapMinimized);
   }
 
   Future<void> _loadCenters() async {
@@ -242,7 +248,7 @@ class _ExplorePageState extends State<ExplorePage> {
           (_) => LocationFilterSheet(
             initialRadiusKm: _radiusKm,
             recentLocations: _recentLocations,
-            currentLabel: _focusLocation?.label,
+            initialLocation: _focusLocation,
           ),
     );
 
@@ -484,8 +490,7 @@ class _ExplorePageState extends State<ExplorePage> {
                   loadError: _loadError,
                   onPinModeChanged:
                       (mode) => setState(() => _pinMode = mode),
-                  onToggleMinimized:
-                      () => setState(() => _mapMinimized = !_mapMinimized),
+                  onToggleMinimized: _toggleMapMinimized,
                 ),
                 const SizedBox(height: 16),
                 // The cards under the map mirror the pins, so switching modes
@@ -965,6 +970,17 @@ class _ListingsMapState extends State<_ListingsMap> {
     if (widget.loadError != null && widget.pinMode == MapPinMode.products) {
       return widget.loadError!;
     }
+    // With a radius active the distance is almost always the reason nothing
+    // matched, so name it instead of blaming the region.
+    if (widget.focusLocation != null) {
+      final what =
+          widget.pinMode == MapPinMode.products
+              ? 'produce'
+              : 'bagsakan centers';
+      return 'No $what within ${widget.radiusKm.toStringAsFixed(0)} km of '
+          '${widget.focusLocation!.label}. Try a wider radius.';
+    }
+
     return widget.pinMode == MapPinMode.products
         ? 'No mapped listings$_regionSuffix yet. Sellers need a saved farm '
             'address before they appear on the map.'
@@ -978,6 +994,10 @@ class _ListingsMapState extends State<_ListingsMap> {
     final isProducts = widget.pinMode == MapPinMode.products;
     final hasPins = isProducts ? farmPins.isNotEmpty : centers.isNotEmpty;
 
+    // Keep the map up whenever a radius is active even with nothing matching:
+    // seeing the empty circle is what explains why the results are empty.
+    final showMap = hasPins || widget.focusLocation != null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -989,14 +1009,19 @@ class _ListingsMapState extends State<_ListingsMap> {
               children: [
                 Positioned.fill(
                   child:
-                      hasPins
+                      showMap
                           ? FlutterMap(
                             mapController: _mapController,
                             options: MapOptions(
                               initialCenter:
-                                  _points.isEmpty
-                                      ? const LatLng(12.8797, 121.7740)
-                                      : _points.first,
+                                  _points.isNotEmpty
+                                      ? _points.first
+                                      : widget.focusLocation != null
+                                      ? LatLng(
+                                        widget.focusLocation!.latitude,
+                                        widget.focusLocation!.longitude,
+                                      )
+                                      : const LatLng(12.8797, 121.7740),
                               initialZoom: 11,
                               // Frame every pin at once, widening to the radius
                               // circle when a distance filter is active.
@@ -1047,9 +1072,7 @@ class _ListingsMapState extends State<_ListingsMap> {
                                         child: GestureDetector(
                                           onTap:
                                               () => _showFarmListings(context, pin),
-                                          child: _FarmMarker(
-                                            count: pin.listings.length,
-                                          ),
+                                          child: const _FarmMarker(),
                                         ),
                                       )
                                   else
@@ -1096,6 +1119,35 @@ class _ListingsMapState extends State<_ListingsMap> {
                             ),
                           ),
                 ),
+
+                // With the map still showing an empty circle, say why it is
+                // empty rather than leaving the user to guess.
+                if (showMap && !hasPins)
+                  Positioned(
+                    left: 12,
+                    right: 62,
+                    top: 12,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        child: Text(
+                          _emptyMessage,
+                          style: const TextStyle(
+                            color: AppColors.gray,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
 
                 // Pin-mode toggle: produce listings or bagsakan drop-off points.
                 Positioned(
@@ -1208,12 +1260,13 @@ class _MapModeButton extends StatelessWidget {
   }
 }
 
-/// Green map pin showing how many listings sit at one farm address.
-class _FarmMarker extends StatelessWidget {
-  const _FarmMarker({required this.count});
+/// Shared map pin shape so produce and bagsakan markers differ only by icon
+/// and colour, matching the toggle icons in the map's corner.
+class _MapPin extends StatelessWidget {
+  const _MapPin({required this.icon, required this.color});
 
-  /// Number of listings grouped under this pin.
-  final int count;
+  final IconData icon;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -1224,52 +1277,41 @@ class _FarmMarker extends StatelessWidget {
           width: 28,
           height: 28,
           decoration: BoxDecoration(
-            color: AppColors.green,
+            color: color,
             shape: BoxShape.circle,
             border: Border.all(color: AppColors.white, width: 2),
           ),
           alignment: Alignment.center,
-          child: Text(
-            '$count',
-            style: const TextStyle(
-              color: AppColors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          child: Icon(icon, size: 15, color: AppColors.white),
         ),
-        const Icon(Icons.arrow_drop_down, color: AppColors.green, size: 18),
+        Icon(Icons.arrow_drop_down, color: color, size: 18),
       ],
     );
   }
 }
 
-/// Map pin marking a bagsakan drop-off center.
+/// Brand-green pin marking a farm that has produce listed.
+class _FarmMarker extends StatelessWidget {
+  const _FarmMarker();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _MapPin(
+      icon: Icons.inventory_2_outlined,
+      color: AppColors.green,
+    );
+  }
+}
+
+/// Lighter-green pin marking a bagsakan drop-off center.
 class _CenterMarker extends StatelessWidget {
   const _CenterMarker();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: AppColors.black,
-            shape: BoxShape.circle,
-            border: Border.all(color: AppColors.white, width: 2),
-          ),
-          alignment: Alignment.center,
-          child: const Icon(
-            Icons.warehouse_outlined,
-            size: 15,
-            color: AppColors.white,
-          ),
-        ),
-        const Icon(Icons.arrow_drop_down, color: AppColors.black, size: 18),
-      ],
+    return const _MapPin(
+      icon: Icons.warehouse_outlined,
+      color: AppColors.greenLight,
     );
   }
 }

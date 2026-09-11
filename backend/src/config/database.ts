@@ -8,7 +8,7 @@ export const db = new Database(dbPath, { verbose: console.log });
 db.pragma('foreign_keys = ON');
 
 export function initDb(): void {
-    
+
     db.exec(`
 
         CREATE TABLE IF NOT EXISTS addresses (
@@ -24,18 +24,31 @@ export function initDb(): void {
             longitude REAL
         );
 
-         CREATE TABLE IF NOT EXISTS users (
+        CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            first_name VARCHAR(50) NOT NULL, 
-            last_name VARCHAR(50) NOT NULL, 
+            first_name VARCHAR(50) NOT NULL,
+            last_name VARCHAR(50) NOT NULL,
             email VARCHAR(100) UNIQUE NOT NULL,
-            password TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
             contact_number VARCHAR(15) NOT NULL,
+            role VARCHAR(20) NOT NULL DEFAULT 'consumer' CHECK (role IN ('farmer', 'consumer', 'admin')),
             preferred_address_id INTEGER,
             is_verified BOOLEAN DEFAULT FALSE,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
             FOREIGN KEY (preferred_address_id) REFERENCES addresses(address_id) ON DELETE SET NULL
+        );
+
+        -- Farm location and vetting state for users whose role is 'farmer'.
+        -- Distinct from users.preferred_address_id, which is the consumer-side
+        -- pickup area and must not be used as a farm location.
+        CREATE TABLE IF NOT EXISTS farmer_profiles (
+            farmer_id INTEGER PRIMARY KEY,
+            address_id INTEGER NOT NULL UNIQUE,
+            verification_status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (verification_status IN ('pending', 'verified', 'rejected')),
+
+            FOREIGN KEY (farmer_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY (address_id) REFERENCES addresses(address_id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS bagsakan_centers (
@@ -47,12 +60,12 @@ export function initDb(): void {
         );
 
         CREATE TABLE IF NOT EXISTS orders (
-            order_id INTEGER PRIMARY KEY AUTOINCREMENT, 
+            order_id INTEGER PRIMARY KEY AUTOINCREMENT,
             buyer_id INTEGER NOT NULL,
-            drop_off_center_id INTEGER NOT NULL,
+            drop_off_center_id INTEGER,
             total_amount REAL NOT NULL,
-            order_status VARCHAR(20) DEFAULT 'pending' CHECK (order_status IN ('pending', 'in transit', 'completed', 'cancelled')),
-            delivery_method VARCHAR(20) NOT NULL CHECK (delivery_method IN ('pickup', 'delivery')),
+            order_status VARCHAR(20) DEFAULT 'pending' CHECK (order_status IN ('pending', 'in transit', 'delivered', 'cancelled')),
+            delivery_method VARCHAR(20) NOT NULL CHECK (delivery_method IN ('courier', 'meetup')),
             order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
 
             FOREIGN KEY (buyer_id) REFERENCES users(user_id) ON DELETE CASCADE,
@@ -66,7 +79,7 @@ export function initDb(): void {
             reviewee_id INTEGER NOT NULL,
             rating INTEGER CHECK(rating >= 1 AND rating <= 5),
             comment TEXT,
-            review_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
             FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
             FOREIGN KEY (reviewer_id) REFERENCES users(user_id) ON DELETE CASCADE,
@@ -80,7 +93,7 @@ export function initDb(): void {
             category VARCHAR(20) NOT NULL CHECK (category IN ('vegetable', 'fruit', 'grain', 'legume', 'herb', 'spice')),
             base_price REAL NOT NULL,
             available_quantity REAL NOT NULL,
-            unit_of_measure VARCHAR(20) NOT NULL CHECK (unit_of_measure IN ('kg', 'g', 'lb', 'oz', 'liter', 'ml', 'piece')),
+            unit_measurement VARCHAR(20) NOT NULL CHECK (unit_measurement IN ('kg', 'g', 'lb', 'oz', 'liter', 'ml', 'piece')),
             status VARCHAR(20) DEFAULT 'available' CHECK (status IN ('available', 'out of stock', 'delisted')),
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -114,20 +127,20 @@ export function initDb(): void {
             courier_name VARCHAR(100) NOT NULL,
             tracking_number VARCHAR(100) NOT NULL,
             status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'in transit', 'delivered', 'failed')),
-            last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
             FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS conversations (
             conversation_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user1_id INTEGER NOT NULL,
-            user2_id INTEGER NOT NULL,
-            product_id INTEGER, 
+            buyer_id INTEGER NOT NULL,
+            seller_id INTEGER NOT NULL,
+            product_id INTEGER,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
-            FOREIGN KEY (user1_id) REFERENCES users(user_id) ON DELETE CASCADE,
-            FOREIGN KEY (user2_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY (buyer_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY (seller_id) REFERENCES users(user_id) ON DELETE CASCADE,
             FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE
         );
 
@@ -135,7 +148,7 @@ export function initDb(): void {
             message_id INTEGER PRIMARY KEY AUTOINCREMENT,
             conversation_id INTEGER NOT NULL,
             sender_id INTEGER NOT NULL,
-            message_text TEXT NOT NULL,
+            content TEXT NOT NULL,
             sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
             FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE,
@@ -149,7 +162,8 @@ export function initDb(): void {
             buyer_id INTEGER NOT NULL,
             seller_id INTEGER NOT NULL,
             offered_price REAL NOT NULL,
-            status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'countered', 'accepted', 'rejected')),
+            offered_quantity REAL NOT NULL,
+            status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'countered', 'accepted', 'declined')),
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
             FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE,
@@ -158,9 +172,18 @@ export function initDb(): void {
             FOREIGN KEY (seller_id) REFERENCES users(user_id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS system_logs (
+            log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            action_type VARCHAR(100) NOT NULL,
+            description TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
+        );
+
     `);
     console.log('Database tables created')
 }
 
 initDb();
-

@@ -1,4 +1,9 @@
 import { db } from '#config/database';
+import { hashPassword } from '#utils/password';
+
+// Shared plaintext for every seeded account, hashed once below. These rows only
+// simulate farmers for development; real farmers self-register through the app.
+const SEED_PASSWORD = 'seed-password';
 
 const imageUrls = [
     'https://picsum.photos/id/1018/600/400',
@@ -14,6 +19,8 @@ type SeedUser = {
     city: string;
     province: string;
     region: string;
+    latitude: number;
+    longitude: number;
 };
 
 type SeedProduct = {
@@ -33,6 +40,8 @@ const users: SeedUser[] = [
         city: 'Quezon City',
         province: 'Metro Manila',
         region: 'NCR',
+        latitude: 14.6760,
+        longitude: 121.0437,
     },
     {
         firstName: 'Juan',
@@ -42,6 +51,8 @@ const users: SeedUser[] = [
         city: 'Malolos',
         province: 'Bulacan',
         region: 'Region III',
+        latitude: 14.8433,
+        longitude: 120.8114,
     },
     {
         firstName: 'Ana',
@@ -51,6 +62,8 @@ const users: SeedUser[] = [
         city: 'Cabuyao',
         province: 'Laguna',
         region: 'Region IV-A',
+        latitude: 14.2726,
+        longitude: 121.1256,
     },
 ];
 
@@ -68,21 +81,39 @@ const productsByEmail: Record<string, SeedProduct[]> = {
 
 function getOrCreateAddress(user: SeedUser): number {
     const existing = db.prepare(`SELECT address_id FROM addresses WHERE landmark = ?`).get(`${user.firstName} Kubo farm`) as { address_id: number } | undefined;
-    if (existing) return existing.address_id;
+    if (existing) {
+        // Backfill coordinates on rows seeded before the map view needed them.
+        db.prepare(`UPDATE addresses SET latitude = ?, longitude = ? WHERE address_id = ?`)
+            .run(user.latitude, user.longitude, existing.address_id);
+        return existing.address_id;
+    }
 
     const result = db.prepare(`
-        INSERT INTO addresses (region, province, city_municipality, barangay, zip_code, street_details, landmark)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(user.region, user.province, user.city, 'Central Barangay', '1400', 'Kubo growers lane', `${user.firstName} Kubo farm`);
+        INSERT INTO addresses (region, province, city_municipality, barangay, zip_code, street_details, landmark, latitude, longitude)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(user.region, user.province, user.city, 'Central Barangay', '1400', 'Kubo growers lane', `${user.firstName} Kubo farm`, user.latitude, user.longitude);
     return Number(result.lastInsertRowid);
 }
 
-function getOrCreateUser(user: SeedUser, addressId: number): number {
+function getOrCreateFarmer(user: SeedUser, addressId: number): number {
     db.prepare(`
-        INSERT OR IGNORE INTO users (first_name, last_name, email, password, contact_number, preferred_address_id, is_verified)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(user.firstName, user.lastName, user.email, 'seed-password', user.contactNumber, addressId, 1);
-    return Number((db.prepare(`SELECT user_id FROM users WHERE email = ?`).get(user.email) as { user_id: number }).user_id);
+        INSERT OR IGNORE INTO users (first_name, last_name, email, password_hash, contact_number, role, is_verified)
+        VALUES (?, ?, ?, ?, ?, 'farmer', ?)
+    `).run(user.firstName, user.lastName, user.email, hashPassword(SEED_PASSWORD), user.contactNumber, 1);
+    // INSERT OR IGNORE leaves an existing row untouched, so force the role for
+    // accounts seeded before farmer_profiles existed.
+    db.prepare(`UPDATE users SET role = 'farmer' WHERE email = ?`).run(user.email);
+    const userId = Number((db.prepare(`SELECT user_id FROM users WHERE email = ?`).get(user.email) as { user_id: number }).user_id);
+
+    // The farm location lives on farmer_profiles; users.preferred_address_id is
+    // the consumer-side pickup area and is deliberately left unset here.
+    db.prepare(`
+        INSERT INTO farmer_profiles (farmer_id, address_id, verification_status)
+        VALUES (?, ?, 'verified')
+        ON CONFLICT(farmer_id) DO UPDATE SET address_id = excluded.address_id, verification_status = 'verified'
+    `).run(userId, addressId);
+
+    return userId;
 }
 
 function seedProduct(userId: number, product: SeedProduct): number {
@@ -90,7 +121,7 @@ function seedProduct(userId: number, product: SeedProduct): number {
     if (existing) return existing.product_id;
 
     const result = db.prepare(`
-        INSERT INTO products (seller_id, crop_name, category, base_price, available_quantity, unit_of_measure)
+        INSERT INTO products (seller_id, crop_name, category, base_price, available_quantity, unit_measurement)
         VALUES (?, ?, ?, ?, ?, ?)
     `).run(userId, product.cropName, product.category, product.price, product.quantity, product.unit);
     const productId = Number(result.lastInsertRowid);
@@ -108,9 +139,11 @@ const seed = db.transaction(() => {
         city: 'Caloocan',
         province: 'Metro Manila',
         region: 'NCR',
+        latitude: 14.6507,
+        longitude: 120.9672,
     };
     const primaryAddressId = getOrCreateAddress({ ...primaryUser });
-    const primaryUserId = getOrCreateUser(primaryUser, primaryAddressId);
+    const primaryUserId = getOrCreateFarmer(primaryUser, primaryAddressId);
     const primaryProductId = seedProduct(primaryUserId, {
         cropName: 'Fresh tomatoes bundle',
         category: 'vegetable',
@@ -124,7 +157,7 @@ const seed = db.transaction(() => {
 
     const seededUsers = users.map((user) => {
         const addressId = getOrCreateAddress(user);
-        const userId = getOrCreateUser(user, addressId);
+        const userId = getOrCreateFarmer(user, addressId);
         const products = productsByEmail[user.email] ?? [];
         const productIds = products.map((product) => seedProduct(userId, product));
         return { userId, email: user.email, productIds };

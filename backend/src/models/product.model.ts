@@ -6,7 +6,7 @@ export interface ProductInput {
     category: string;
     base_price: number;
     available_quantity: number;
-    unit_of_measure: string;
+    unit_measurement: string;
 }
 
 export interface ProductListing {
@@ -16,12 +16,14 @@ export interface ProductListing {
     category: string;
     base_price: number;
     available_quantity: number;
-    unit_of_measure: string;
+    unit_measurement: string;
     status: string;
     created_at: string;
     seller_name: string;
     location_label: string;
     region_label: string;
+    latitude: number | null;
+    longitude: number | null;
     description: string;
     images: string[];
 }
@@ -30,10 +32,13 @@ const listingQuery = `
     SELECT p.*, u.first_name || ' ' || u.last_name AS seller_name,
            COALESCE(a.city_municipality, 'Philippines') AS location_label,
            COALESCE(a.region, 'NCR') AS region_label,
+           a.latitude AS latitude,
+           a.longitude AS longitude,
            GROUP_CONCAT(pi.image_url, '||') AS image_urls
     FROM products p
     JOIN users u ON u.user_id = p.seller_id
-    LEFT JOIN addresses a ON a.address_id = u.preferred_address_id
+    LEFT JOIN farmer_profiles fp ON fp.farmer_id = p.seller_id
+    LEFT JOIN addresses a ON a.address_id = fp.address_id
     LEFT JOIN product_images pi ON pi.product_id = p.product_id
 `;
 
@@ -45,12 +50,14 @@ function mapListing(row: Record<string, unknown>): ProductListing {
         category: String(row.category),
         base_price: Number(row.base_price),
         available_quantity: Number(row.available_quantity),
-        unit_of_measure: String(row.unit_of_measure),
+        unit_measurement: String(row.unit_measurement),
         status: String(row.status),
         created_at: String(row.created_at),
         seller_name: String(row.seller_name),
         location_label: String(row.location_label),
         region_label: String(row.region_label),
+        latitude: row.latitude === null || row.latitude === undefined ? null : Number(row.latitude),
+        longitude: row.longitude === null || row.longitude === undefined ? null : Number(row.longitude),
         description: String(row.description ?? 'Fresh local produce from a Kubo grower.'),
         images: row.image_urls ? String(row.image_urls).split('||') : [],
     };
@@ -82,8 +89,8 @@ export const ProductModel = {
     create(input: ProductInput, images: string[]): ProductListing {
         const transaction = db.transaction(() => {
             const product = db.prepare(`
-                INSERT INTO products (seller_id, crop_name, category, base_price, available_quantity, unit_of_measure)
-                VALUES (@seller_id, @crop_name, @category, @base_price, @available_quantity, @unit_of_measure)
+                INSERT INTO products (seller_id, crop_name, category, base_price, available_quantity, unit_measurement)
+                VALUES (@seller_id, @crop_name, @category, @base_price, @available_quantity, @unit_measurement)
             `).run(input);
             const productId = Number(product.lastInsertRowid);
             const imageStatement = db.prepare(`INSERT INTO product_images (product_id, image_url, display_order) VALUES (?, ?, ?)`);

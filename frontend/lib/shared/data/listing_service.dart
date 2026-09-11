@@ -46,7 +46,7 @@ class ListingService {
         'category': category,
         'base_price': price,
         'available_quantity': quantity,
-        'unit_of_measure': unit,
+        'unit_measurement': unit,
         'images': images,
       }),
     ).timeout(const Duration(seconds: 15));

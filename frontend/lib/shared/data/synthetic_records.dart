@@ -70,6 +70,8 @@ class SyntheticListingRecord {
     this.date = 'No date available',
     this.numLikes = 0,
     this.groups = const <String>[],
+    this.latitude,
+    this.longitude,
   });
 
   factory SyntheticListingRecord.fromJson(Map<String, dynamic> json) {
@@ -88,6 +90,8 @@ class SyntheticListingRecord {
       description: json['description']?.toString() ?? 'Fresh local produce from a Kubo grower.',
       date: createdAt == null ? 'Recently posted' : 'Posted ${createdAt.month}/${createdAt.day}/${createdAt.year}',
       groups: <String>[json['category']?.toString() ?? 'produce'],
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
     );
   }
 
@@ -123,6 +127,15 @@ class SyntheticListingRecord {
 
   /// List of product categories such as grains, fruits, or vegetables.
   final List<String> groups;
+
+  /// Seller address latitude, null when the seller has no geocoded address.
+  final double? latitude;
+
+  /// Seller address longitude, null when the seller has no geocoded address.
+  final double? longitude;
+
+  /// Whether this listing can be plotted on the map view.
+  bool get hasCoordinates => latitude != null && longitude != null;
 }
 
 /// Synthetic suggestions shown in the Search page.

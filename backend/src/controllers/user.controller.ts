@@ -5,12 +5,12 @@ export const getUsers = (req: Request, res: Response): void => {
     const users = UserModel.findAll();
     res.json({
         success: true,
-        data: users.map(({ password: _password, ...user }) => user),
+        data: users.map(({ password_hash: _passwordHash, ...user }) => user),
     });
 };
 
 export const createUser = (req: Request, res: Response): void => {
-    const { first_name, last_name, email, password, contact_number } = req.body;
+    const { first_name, last_name, email, password, contact_number, role } = req.body;
 
     if (!first_name || !last_name || !email || !password || !contact_number) {
         res.status(400).json({ success: false, message: "All user fields are required" });
@@ -23,9 +23,42 @@ export const createUser = (req: Request, res: Response): void => {
         return;
     }
 
-    const user = UserModel.create({ first_name, last_name, email: normalizedEmail, password, contact_number });
-    const { password: _password, ...safeUser } = user;
+    const requestedRole = role === 'farmer' || role === 'admin' ? role : 'consumer';
+    const user = UserModel.create({ first_name, last_name, email: normalizedEmail, password, contact_number, role: requestedRole });
+    const { password_hash: _passwordHash, ...safeUser } = user;
     res.status(201).json({ success: true, data: safeUser });
+};
+
+// Builds the addresses row payload shared by the pickup and farm endpoints.
+const readAddressBody = (body: Record<string, any>) => ({
+    region: body.region,
+    province: body.province,
+    city_municipality: body.city_municipality,
+    barangay: body.barangay,
+    zip_code: body.zip_code,
+    street_details: body.street_details || null,
+    landmark: body.landmark || null,
+    latitude: body.latitude ?? null,
+    longitude: body.longitude ?? null,
+});
+
+// Sets the farm location for a farmer, which is what the explore map plots.
+export const addFarmAddress = (req: Request<{ id: string }>, res: Response) => {
+    try {
+        const userId = parseInt(req.params.id, 10);
+        if (isNaN(userId)) {
+            return res.status(400).json({ success: false, message: "Invalid user ID format" });
+        }
+        if (!UserModel.findById(userId)) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        const addressId = UserModel.setFarmAddress(userId, readAddressBody(req.body));
+        res.status(201).json({ success: true, data: { addressId } });
+    } catch (error) {
+        console.error("Error setting farm address:", error);
+        res.status(500).json({ success: false, message: "Failed to set farm address" });
+    }
 };
 
 export const addUserAddress = (req: Request<{ id: string }>, res: Response) => {
@@ -36,19 +69,7 @@ export const addUserAddress = (req: Request<{ id: string }>, res: Response) => {
             return res.status(400).json({ error: "Invalid user ID format" });
         }
 
-        const addressData = {
-            region: req.body.region,
-            province: req.body.province,
-            city_municipality: req.body.city_municipality,
-            barangay: req.body.barangay,
-            zip_code: req.body.zip_code,
-            street_details: req.body.street_details || null,
-            landmark: req.body.landmark || null,
-            latitude: req.body.latitude || null,
-            longitude: req.body.longitude || null
-        };
-
-        const addressId = UserModel.setPreferredAddress(userId, addressData);
+        const addressId = UserModel.setPreferredAddress(userId, readAddressBody(req.body));
         
         res.status(201).json({ 
             message: "Address updated successfully", 

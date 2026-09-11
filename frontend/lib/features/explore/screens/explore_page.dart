@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
@@ -115,14 +117,27 @@ class _ExplorePageState extends State<ExplorePage> {
     }
   }
 
+  // Trims a region label down to the part the filter chips use.
+  //
+  // Seed data stores "Region III" while addresses saved through the app come
+  // from philippines_rpcmb as "Region III - Central Luzon". Without this both
+  // views would silently drop every seller who registered in the app.
+  static String _normalizeRegion(String label) {
+    final separatorIndex = label.indexOf(' - ');
+    final trimmed =
+        separatorIndex == -1 ? label : label.substring(0, separatorIndex);
+    return trimmed.trim().toUpperCase();
+  }
+
   // Returns only the listings that match the selected region filter.
   List<SyntheticListingRecord> get _visibleListings {
     if (_selectedRegionFilter == 'All') {
       return _allListings;
     }
 
+    final selected = _normalizeRegion(_selectedRegionFilter);
     return _allListings
-        .where((listing) => listing.regionLabel == _selectedRegionFilter)
+        .where((listing) => _normalizeRegion(listing.regionLabel) == selected)
         .toList(growable: false);
   }
 
@@ -290,7 +305,11 @@ class _ExplorePageState extends State<ExplorePage> {
                   loadError: _loadError,
                 ),
               ] else ...[
-                _MapPlaceholder(locationLabel: _locationLabel),
+                _ListingsMap(
+                  listings: _visibleListings,
+                  regionLabel: _locationLabel,
+                  loadError: _loadError,
+                ),
               ],
             ],
           ),
@@ -448,50 +467,306 @@ class _ListingsGrid extends StatelessWidget {
   }
 }
 
-/// Placeholder content that stands in for the future map experience.
-class _MapPlaceholder extends StatelessWidget {
-  const _MapPlaceholder({required this.locationLabel});
+/// One map pin representing a single farm address that may host several listings.
+class _FarmPin {
+  _FarmPin({required this.point, required this.listings});
 
-  final String locationLabel;
+  /// Coordinate taken from the seller's address row.
+  final LatLng point;
+
+  /// Every listing sold from this address, within the active region filter.
+  final List<SyntheticListingRecord> listings;
+}
+
+/// Map view that plots the region-filtered listings onto OpenStreetMap tiles.
+class _ListingsMap extends StatefulWidget {
+  const _ListingsMap({
+    required this.listings,
+    required this.regionLabel,
+    this.loadError,
+  });
+
+  /// Listings already narrowed by the shared region filter chips.
+  final List<SyntheticListingRecord> listings;
+
+  /// Label describing the active region, used in the empty state.
+  final String regionLabel;
+
+  /// Set when the listing fetch failed, which is distinct from having no pins.
+  final String? loadError;
 
   @override
-  // Explains that map functionality will be introduced later and echoes the current location.
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.all(24),
-      // decoration: BoxDecoration(
-      //   color: AppColors.softBackground,
-      //   borderRadius: BorderRadius.circular(18),
-      //   border: Border.all(color: AppColors.border),
-      // ),
-      child: Column(
-        children: [
-          const SizedBox(height: 12),
-          const Icon(Icons.map_outlined, size: 72, color: AppColors.green),
-          const SizedBox(height: 18),
-          const Text(
-            'Map View',
-            style: TextStyle(
-              color: AppColors.black,
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Map will be added later. Current location: $locationLabel',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppColors.gray,
-              fontSize: 14,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
+  State<_ListingsMap> createState() => _ListingsMapState();
+}
+
+class _ListingsMapState extends State<_ListingsMap> {
+  /// Drives the camera when the region filter changes the visible pins.
+  final MapController _mapController = MapController();
+
+  List<SyntheticListingRecord> get listings => widget.listings;
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ListingsMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // initialCenter and initialCameraFit only apply to the map's first build, so
+    // a region change has to move the camera explicitly or the new pins land
+    // off-screen. Compare by content: the parent rebuilds a fresh filtered list
+    // every time, and refitting on identity would fight the user's panning.
+    if (_signature(oldWidget.listings) != _signature(widget.listings)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fitPins());
+    }
+  }
+
+  /// Identifies which listings are on screen, ignoring list instance churn.
+  String _signature(List<SyntheticListingRecord> records) =>
+      records.map((record) => record.id).join(',');
+
+  // Frames the current pins, zooming to the single farm when only one remains.
+  void _fitPins() {
+    if (!mounted) {
+      return;
+    }
+    final pins = _pins;
+    if (pins.isEmpty) {
+      return;
+    }
+    if (pins.length == 1) {
+      _mapController.move(pins.first.point, 12);
+      return;
+    }
+    _mapController.fitCamera(
+      CameraFit.coordinates(
+        coordinates: pins.map((pin) => pin.point).toList(growable: false),
+        padding: const EdgeInsets.all(48),
+        maxZoom: 13,
       ),
+    );
+  }
+
+  /// Groups listings by coordinate so one farm address renders one pin.
+  List<_FarmPin> get _pins {
+    final grouped = <String, _FarmPin>{};
+    for (final listing in listings) {
+      if (!listing.hasCoordinates) {
+        continue;
+      }
+      final key = '${listing.latitude},${listing.longitude}';
+      grouped
+          .putIfAbsent(
+            key,
+            () => _FarmPin(
+              point: LatLng(listing.latitude!, listing.longitude!),
+              listings: <SyntheticListingRecord>[],
+            ),
+          )
+          .listings
+          .add(listing);
+    }
+    return grouped.values.toList(growable: false);
+  }
+
+  // Opens a sheet listing every product sold from the tapped farm location.
+  void _showPinListings(BuildContext context, _FarmPin pin) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        final first = pin.listings.first;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  first.locationLabel,
+                  style: const TextStyle(
+                    color: AppColors.black,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${first.sellerLabel} - ${pin.listings.length} listing'
+                  '${pin.listings.length == 1 ? '' : 's'}',
+                  style: const TextStyle(color: AppColors.gray, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: pin.listings.length,
+                    separatorBuilder: (_, __) => const Divider(height: 18),
+                    itemBuilder: (_, index) {
+                      final listing = pin.listings[index];
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              listing.title,
+                              style: const TextStyle(
+                                color: AppColors.black,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            listing.price,
+                            style: const TextStyle(
+                              color: AppColors.green,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  // Renders OSM tiles with one tappable pin per farm address in the active region.
+  Widget build(BuildContext context) {
+    final pins = _pins;
+    final plotted = pins.fold<int>(0, (sum, pin) => sum + pin.listings.length);
+    final missing = listings.length - plotted;
+
+    if (pins.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 36),
+        child: Center(
+          child: Text(
+            widget.loadError ??
+                'No mapped listings in ${widget.regionLabel} yet. Sellers need '
+                    'a saved address before they appear on the map.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.gray, fontSize: 14),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: SizedBox(
+            height: 420,
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: pins.first.point,
+                initialZoom: 11,
+                // Frame every pin at once when the region spans several farms.
+                initialCameraFit:
+                    pins.length > 1
+                        ? CameraFit.coordinates(
+                          coordinates:
+                              pins
+                                  .map((pin) => pin.point)
+                                  .toList(growable: false),
+                          padding: const EdgeInsets.all(48),
+                          maxZoom: 13,
+                        )
+                        : null,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  // Required by the OpenStreetMap tile usage policy.
+                  userAgentPackageName: 'com.example.frontend',
+                ),
+                MarkerLayer(
+                  markers: [
+                    for (final pin in pins)
+                      Marker(
+                        point: pin.point,
+                        width: 44,
+                        height: 46,
+                        alignment: Alignment.topCenter,
+                        child: GestureDetector(
+                          onTap: () => _showPinListings(context, pin),
+                          child: _FarmMarker(count: pin.listings.length),
+                        ),
+                      ),
+                  ],
+                ),
+                const RichAttributionWidget(
+                  attributions: [
+                    TextSourceAttribution('OpenStreetMap contributors'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          missing > 0
+              ? '$plotted of ${listings.length} listings mapped, '
+                  '$missing without a seller address'
+              : '$plotted listing${plotted == 1 ? '' : 's'} across '
+                  '${pins.length} farm${pins.length == 1 ? '' : 's'}',
+          style: const TextStyle(color: AppColors.gray, fontSize: 13),
+        ),
+      ],
+    );
+  }
+}
+
+/// Green map pin showing how many listings sit at one farm address.
+class _FarmMarker extends StatelessWidget {
+  const _FarmMarker({required this.count});
+
+  /// Number of listings grouped under this pin.
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: AppColors.green,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.white, width: 2),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            '$count',
+            style: const TextStyle(
+              color: AppColors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const Icon(Icons.arrow_drop_down, color: AppColors.green, size: 18),
+      ],
     );
   }
 }

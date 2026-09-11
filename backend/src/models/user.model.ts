@@ -1,14 +1,30 @@
 import { db } from "#config/database";
+import { hashPassword } from "#utils/password";
+
+export type UserRole = 'farmer' | 'consumer' | 'admin';
 
 export interface User {
     user_id: number;
     first_name: string;
     last_name: string;
     email: string;
-    password: string;
+    password_hash: string;
     contact_number: string;
+    role: UserRole;
     is_verified: boolean;
     created_at: Date;
+}
+
+export interface AddressInput {
+    region: string;
+    province: string;
+    city_municipality: string;
+    barangay: string;
+    zip_code: string;
+    street_details: string | null;
+    landmark: string | null;
+    latitude: number | null;
+    longitude: number | null;
 }
 
 export const UserModel = {
@@ -29,15 +45,32 @@ export const UserModel = {
         return db.prepare(query).get(email) as User | undefined;
     },
 
-    // to insert a new user
-    create(user: Omit<User, "user_id" | "created_at" | "is_verified">): User {
+    // to insert a new user; the plaintext password is hashed before storage
+    create(
+        user: Omit<User, "user_id" | "created_at" | "is_verified" | "password_hash" | "role"> & {
+            password: string;
+            role?: UserRole;
+        },
+    ): User {
         const { first_name, last_name, email, password, contact_number } = user;
+        const role: UserRole = user.role ?? 'consumer';
+        const password_hash = hashPassword(password);
         const query = db.prepare(`
-            INSERT INTO users (first_name, last_name, email, password, contact_number)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO users (first_name, last_name, email, password_hash, contact_number, role)
+            VALUES (?, ?, ?, ?, ?, ?)
         `)
-        const info = query.run(first_name, last_name, email, password, contact_number);
-        return { user_id: info.lastInsertRowid as number, ...user, created_at: new Date(), is_verified: false };
+        const info = query.run(first_name, last_name, email, password_hash, contact_number, role);
+        return {
+            user_id: info.lastInsertRowid as number,
+            first_name,
+            last_name,
+            email,
+            password_hash,
+            contact_number,
+            role,
+            created_at: new Date(),
+            is_verified: false,
+        };
     },
 
     // to delete a row
@@ -46,20 +79,43 @@ export const UserModel = {
         const stmt = db.prepare(query);
         const result = stmt.run(id);
         return result.changes > 0;
-    }, 
-    
-    // set a preferred address
-    setPreferredAddress: (userId: string | number, addressData: any) => {
+    },
+
+    // Consumer-side pickup area. This is NOT a farm location: a farmer's farm
+    // address lives in farmer_profiles.address_id.
+    setPreferredAddress: (userId: string | number, addressData: AddressInput) => {
         const insertQuery = db.prepare(`
             INSERT INTO addresses (region, province, city_municipality, barangay, zip_code, street_details, landmark, latitude, longitude)
             VALUES (@region, @province, @city_municipality, @barangay, @zip_code, @street_details, @landmark, @latitude, @longitude)
         `);
         const info = insertQuery.run(addressData);
-        
+
         const updateUserQuery = db.prepare(`UPDATE users SET preferred_address_id = ? WHERE user_id = ?`);
         updateUserQuery.run(info.lastInsertRowid, userId);
-        
-        return info.lastInsertRowid;
-    }
-}
 
+        return info.lastInsertRowid;
+    },
+
+    // Creates or moves a farmer's farm location and promotes them to the
+    // farmer role, which is what the explore map plots.
+    setFarmAddress: (userId: number, addressData: AddressInput) => {
+        const upsert = db.transaction(() => {
+            const info = db.prepare(`
+                INSERT INTO addresses (region, province, city_municipality, barangay, zip_code, street_details, landmark, latitude, longitude)
+                VALUES (@region, @province, @city_municipality, @barangay, @zip_code, @street_details, @landmark, @latitude, @longitude)
+            `).run(addressData);
+            const addressId = Number(info.lastInsertRowid);
+
+            db.prepare(`UPDATE users SET role = 'farmer' WHERE user_id = ?`).run(userId);
+
+            const existing = db.prepare(`SELECT farmer_id FROM farmer_profiles WHERE farmer_id = ?`).get(userId);
+            if (existing) {
+                db.prepare(`UPDATE farmer_profiles SET address_id = ? WHERE farmer_id = ?`).run(addressId, userId);
+            } else {
+                db.prepare(`INSERT INTO farmer_profiles (farmer_id, address_id) VALUES (?, ?)`).run(userId, addressId);
+            }
+            return addressId;
+        });
+        return upsert();
+    },
+}

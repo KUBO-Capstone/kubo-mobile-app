@@ -3,25 +3,13 @@ import 'dart:async';
 
 import 'package:http/http.dart' as http;
 
+import '../../../core/constants/api_config.dart';
+
 /// HTTP client for the backend account and login endpoints.
 class AuthService {
   AuthService({http.Client? client}) : _client = client ?? http.Client();
 
-  // Select the active value with:
-  // flutter run --dart-define=API_BASE_URL=http://HOST:3000/api
-  static const _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
-
-  // USB Android with adb reverse and the iOS simulator use the host loopback.
-  static const _defaultBaseUrl = 'http://localhost:3000/api';
-
-  // Android emulator alternative:
-  // static const _defaultBaseUrl = 'http://10.0.2.2:3000/api';
-
-  // Physical Android/iPhone alternative: replace HOST with the computer's LAN IP.
-  // static const _defaultBaseUrl = 'http://192.168.1.7:3000/api';
-
-  String get _baseUrl =>
-      _configuredBaseUrl.isNotEmpty ? _configuredBaseUrl : _defaultBaseUrl;
+  String get _baseUrl => ApiConfig.baseUrl;
 
   final http.Client _client;
 

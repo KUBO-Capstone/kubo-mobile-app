@@ -3,14 +3,13 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../core/constants/api_config.dart';
 import 'synthetic_records.dart';
 
 class ListingService {
   ListingService({http.Client? client}) : _client = client ?? http.Client();
 
-  static const _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
-  static const _defaultBaseUrl = 'http://localhost:3000/api';
-  String get _baseUrl => _configuredBaseUrl.isNotEmpty ? _configuredBaseUrl : _defaultBaseUrl;
+  String get _baseUrl => ApiConfig.baseUrl;
   final http.Client _client;
 
   Future<List<SyntheticListingRecord>> fetchListings({String query = '', int? sellerId}) async {

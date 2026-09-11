@@ -62,6 +62,10 @@ class _ExplorePageState extends State<ExplorePage> {
   final ListingService _listingService = ListingService();
   List<SyntheticListingRecord> _allListings = const <SyntheticListingRecord>[];
 
+  /// Message shown when the listing fetch itself failed, so a network problem
+  /// is not mistaken for an empty region.
+  String? _loadError;
+
   /// Fallback or onboarding-provided location shown in the top-right badge.
   late String _accountLocationLabel;
 
@@ -94,9 +98,20 @@ class _ExplorePageState extends State<ExplorePage> {
   Future<void> _loadListings() async {
     try {
       final listings = await _listingService.fetchListings();
-      if (mounted) setState(() => _allListings = listings);
+      if (mounted) {
+        setState(() {
+          _allListings = listings;
+          _loadError = null;
+        });
+      }
     } catch (error) {
-      if (mounted) setState(() {});
+      debugPrint('Explore listing fetch failed: $error');
+      if (mounted) {
+        setState(() {
+          _allListings = const <SyntheticListingRecord>[];
+          _loadError = 'Could not reach the Kubo server. Pull to retry.';
+        });
+      }
     }
   }
 
@@ -270,7 +285,10 @@ class _ExplorePageState extends State<ExplorePage> {
               ),
               const SizedBox(height: 16),
               if (_viewMode == ExploreViewMode.list) ...[
-                _ListingsGrid(listings: _visibleListings),
+                _ListingsGrid(
+                  listings: _visibleListings,
+                  loadError: _loadError,
+                ),
               ] else ...[
                 _MapPlaceholder(locationLabel: _locationLabel),
               ],
@@ -390,20 +408,24 @@ class _ExploreDrawer extends StatelessWidget {
 
 /// Responsive grid that shows the currently visible listing cards.
 class _ListingsGrid extends StatelessWidget {
-  const _ListingsGrid({required this.listings});
+  const _ListingsGrid({required this.listings, this.loadError});
 
   final List<SyntheticListingRecord> listings;
+
+  /// Set when the fetch failed, which is a different state from no matches.
+  final String? loadError;
 
   @override
   // Shows a no-results message when filtering leaves the grid empty.
   Widget build(BuildContext context) {
     if (listings.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 36),
+      return Padding(
+        padding: const EdgeInsets.only(top: 36),
         child: Center(
           child: Text(
-            'No listings available for this region yet.',
-            style: TextStyle(color: AppColors.gray, fontSize: 14),
+            loadError ?? 'No listings available for this region yet.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.gray, fontSize: 14),
           ),
         ),
       );

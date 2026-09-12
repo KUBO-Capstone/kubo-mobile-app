@@ -71,11 +71,18 @@ class AuthService {
           )
           .timeout(const Duration(seconds: 15));
     } on TimeoutException {
-      throw Exception(
-        'Cannot reach the Kubo server. Check that the backend is running and the phone is on the same network.',
-      );
+      throw Exception(_unreachableMessage);
+    } on http.ClientException {
+      // package:http wraps a refused/reset socket in ClientException; the raw
+      // text is an errno dump, so replace it with something actionable.
+      throw Exception(_unreachableMessage);
     }
   }
+
+  String get _unreachableMessage =>
+      'Cannot reach the Kubo server at $_baseUrl. Check that the backend is '
+      'running (`npm run dev` in backend/) and, on a physical phone, that '
+      'API_BASE_URL points at the LAN IP of this machine.';
 
   void dispose() => _client.close();
 }

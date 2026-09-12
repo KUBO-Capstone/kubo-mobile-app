@@ -5,6 +5,17 @@ import { hashPassword } from '#utils/password';
 // simulate farmers for development; real farmers self-register through the app.
 const SEED_PASSWORD = 'seed-password';
 
+// Buyer-side account for exercising login and, later, the consumer half of the
+// negotiation flow. Seeded so it survives `npm run db:reset`; before this it was
+// created ad hoc by test-query.ts and vanished on every reset.
+const CONSUMER = {
+    firstName: 'Leonard',
+    lastName: 'Perez',
+    email: 'leoper@example.com',
+    password: 'securepassword',
+    contactNumber: '1234567890',
+};
+
 const imageUrls = [
     'https://picsum.photos/id/1018/600/400',
     'https://picsum.photos/id/1015/600/400',
@@ -134,9 +145,11 @@ function getOrCreateFarmer(user: SeedUser, addressId: number): number {
         INSERT OR IGNORE INTO users (first_name, last_name, email, password_hash, contact_number, role, is_verified)
         VALUES (?, ?, ?, ?, ?, 'farmer', ?)
     `).run(user.firstName, user.lastName, user.email, hashPassword(SEED_PASSWORD), user.contactNumber, 1);
-    // INSERT OR IGNORE leaves an existing row untouched, so force the role for
-    // accounts seeded before farmer_profiles existed.
-    db.prepare(`UPDATE users SET role = 'farmer' WHERE email = ?`).run(user.email);
+    // INSERT OR IGNORE leaves an existing row untouched, so force the role and
+    // the hash: rows seeded before farmer_profiles or password hashing existed
+    // would otherwise keep the old role / an unverifiable plaintext hash.
+    db.prepare(`UPDATE users SET role = 'farmer', password_hash = ? WHERE email = ?`)
+        .run(hashPassword(SEED_PASSWORD), user.email);
     const userId = Number((db.prepare(`SELECT user_id FROM users WHERE email = ?`).get(user.email) as { user_id: number }).user_id);
 
     // The farm location lives on farmer_profiles; users.preferred_address_id is
@@ -148,6 +161,17 @@ function getOrCreateFarmer(user: SeedUser, addressId: number): number {
     `).run(userId, addressId);
 
     return userId;
+}
+
+function seedConsumer(): number {
+    db.prepare(`
+        INSERT OR IGNORE INTO users (first_name, last_name, email, password_hash, contact_number, role)
+        VALUES (?, ?, ?, ?, ?, 'consumer')
+    `).run(CONSUMER.firstName, CONSUMER.lastName, CONSUMER.email, hashPassword(CONSUMER.password), CONSUMER.contactNumber);
+    // Same backfill as farmers: keep the hash verifiable on re-run.
+    db.prepare(`UPDATE users SET password_hash = ? WHERE email = ?`)
+        .run(hashPassword(CONSUMER.password), CONSUMER.email);
+    return Number((db.prepare(`SELECT user_id FROM users WHERE email = ?`).get(CONSUMER.email) as { user_id: number }).user_id);
 }
 
 function seedProduct(userId: number, product: SeedProduct): number {
@@ -187,6 +211,7 @@ const seed = db.transaction(() => {
     });
 
     const centerIds = centers.map(seedCenter);
+    const consumerId = seedConsumer();
 
     const seededUsers = users.map((user) => {
         const addressId = getOrCreateAddress(user);
@@ -196,7 +221,7 @@ const seed = db.transaction(() => {
         return { userId, email: user.email, productIds };
     });
 
-    return { primaryUserId, primaryProductId, centerIds, users: seededUsers };
+    return { primaryUserId, primaryProductId, consumerId, centerIds, users: seededUsers };
 });
 
 console.log('Seeded Kubo records:', seed());

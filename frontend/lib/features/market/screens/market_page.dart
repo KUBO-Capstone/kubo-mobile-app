@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
-import '../../../shared/widgets/kubo_placeholder_page.dart';
 import '../../explore/screens/explore_page.dart';
+import '../../listing/screens/create_listing_page.dart';
 import '../../profile/screens/profile_page.dart';
 import '../../search/screens/search_page.dart';
+import '../widgets/offers_view.dart';
 
-/// Market tab placeholder that will later host analytics or marketplace views.
+/// Market tab: the signed-in user's offers, received and sent.
 class MarketPage extends StatelessWidget {
   const MarketPage({super.key, this.initialLocationLabel = 'Caybiga'});
 
@@ -43,10 +44,7 @@ class MarketPage extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder:
-            (_) => const KuboPlaceholderPage(
-              title: 'Create Listing',
-              message: 'The listing creation flow will live here.',
-            ),
+            (_) => const CreateListingPage(),
       ),
     );
   }
@@ -55,10 +53,7 @@ class MarketPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,
-      body: const KuboPlaceholderContent(
-        title: 'Market',
-        message: 'Market insights and activity summaries will appear here.',
-      ),
+      body: const OffersView(),
       bottomNavigationBar: KuboBottomNavigationBar(
         currentIndex: 2,
         onDestinationSelected: (index) => _navigateToTab(context, index),

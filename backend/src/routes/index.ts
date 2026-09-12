@@ -3,6 +3,7 @@ import authRoutes from "./auth.routes";
 import userRoutes from "./user.routes";
 import productRoutes from "./product.routes";
 import bagsakanRoutes from "./bagsakan.routes";
+import negotiationRoutes from "./negotiation.routes";
 
 const router = Router();
 
@@ -10,5 +11,6 @@ router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/products', productRoutes);
 router.use('/bagsakan-centers', bagsakanRoutes);
+router.use('/negotiations', negotiationRoutes);
 
 export default router;

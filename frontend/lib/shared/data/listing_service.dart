@@ -1,9 +1,9 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
 import '../../core/constants/api_config.dart';
+import 'api_request.dart';
 import 'synthetic_records.dart';
 
 class ListingService {
@@ -19,10 +19,8 @@ class ListingService {
     final uri = Uri.parse('$_baseUrl/products').replace(
       queryParameters: queryParameters.isEmpty ? null : queryParameters,
     );
-    final response = await _client.get(uri).timeout(const Duration(seconds: 15));
-    _checkResponse(response);
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    return (body['data'] as List<dynamic>)
+    final response = await sendRequest(() => _client.get(uri));
+    return (readData(response) as List<dynamic>)
         .whereType<Map<String, dynamic>>()
         .map(SyntheticListingRecord.fromJson)
         .toList(growable: false);
@@ -37,29 +35,22 @@ class ListingService {
     required String unit,
     List<String> images = const <String>[],
   }) async {
-    final response = await _client.post(
-      Uri.parse('$_baseUrl/products'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'seller_id': sellerId,
-        'crop_name': cropName,
-        'category': category,
-        'base_price': price,
-        'available_quantity': quantity,
-        'unit_measurement': unit,
-        'images': images,
-      }),
-    ).timeout(const Duration(seconds: 15));
-    _checkResponse(response);
-    return SyntheticListingRecord.fromJson(
-      (jsonDecode(response.body) as Map<String, dynamic>)['data'] as Map<String, dynamic>,
+    final response = await sendRequest(
+      () => _client.post(
+        Uri.parse('$_baseUrl/products'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'seller_id': sellerId,
+          'crop_name': cropName,
+          'category': category,
+          'base_price': price,
+          'available_quantity': quantity,
+          'unit_measurement': unit,
+          'images': images,
+        }),
+      ),
     );
-  }
-
-  void _checkResponse(http.Response response) {
-    if (response.statusCode >= 200 && response.statusCode < 300) return;
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    throw Exception(body['message'] ?? 'Request failed');
+    return SyntheticListingRecord.fromJson(readData(response) as Map<String, dynamic>);
   }
 
   void dispose() => _client.close();

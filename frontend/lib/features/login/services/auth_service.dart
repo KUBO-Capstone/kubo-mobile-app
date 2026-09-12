@@ -1,9 +1,9 @@
 import 'dart:convert';
-import 'dart:async';
 
 import 'package:http/http.dart' as http;
 
 import '../../../core/constants/api_config.dart';
+import '../../../shared/data/api_request.dart';
 
 /// HTTP client for the backend account and login endpoints.
 class AuthService {
@@ -14,6 +14,10 @@ class AuthService {
   final http.Client _client;
 
   static Map<String, dynamic>? currentUser;
+
+  /// Numeric id of the signed-in user, or null when nobody is logged in.
+  static int? get currentUserId =>
+      int.tryParse(currentUser?['user_id']?.toString() ?? '');
 
   Future<Map<String, dynamic>> register({
     required String firstName,
@@ -30,9 +34,7 @@ class AuthService {
       'contact_number': contactNumber,
     });
 
-    _checkResponse(response);
-    final user = (jsonDecode(response.body) as Map<String, dynamic>)['data']
-      as Map<String, dynamic>;
+    final user = readData(response) as Map<String, dynamic>;
     currentUser = user;
     return user;
   }
@@ -46,43 +48,20 @@ class AuthService {
       'password': password,
     });
 
-    _checkResponse(response);
-    final user = jsonDecode(response.body)['data'] as Map<String, dynamic>;
+    final user = readData(response) as Map<String, dynamic>;
     currentUser = user;
     return user;
   }
 
-  void _checkResponse(http.Response response) {
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return;
-    }
-
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    throw Exception(body['message'] ?? 'Request failed');
+  Future<http.Response> _post(String path, Map<String, String> body) {
+    return sendRequest(
+      () => _client.post(
+        Uri.parse('$_baseUrl$path'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      ),
+    );
   }
-
-  Future<http.Response> _post(String path, Map<String, String> body) async {
-    try {
-      return await _client
-          .post(
-            Uri.parse('$_baseUrl$path'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 15));
-    } on TimeoutException {
-      throw Exception(_unreachableMessage);
-    } on http.ClientException {
-      // package:http wraps a refused/reset socket in ClientException; the raw
-      // text is an errno dump, so replace it with something actionable.
-      throw Exception(_unreachableMessage);
-    }
-  }
-
-  String get _unreachableMessage =>
-      'Cannot reach the Kubo server at $_baseUrl. Check that the backend is '
-      'running (`npm run dev` in backend/) and, on a physical phone, that '
-      'API_BASE_URL points at the LAN IP of this machine.';
 
   void dispose() => _client.close();
 }

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
-import '../../../shared/widgets/kubo_placeholder_page.dart';
 import '../../../shared/widgets/kubo_search_field.dart';
 import '../../../shared/widgets/kubo_section_header.dart';
 import '../../explore/screens/explore_page.dart';
+import '../../listing/screens/create_listing_page.dart';
 import '../../market/screens/market_page.dart';
 import '../../profile/screens/profile_page.dart';
 import '../providers/search_page_controller.dart';
@@ -111,10 +111,7 @@ class _SearchPageState extends State<SearchPage> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder:
-            (_) => const KuboPlaceholderPage(
-              title: 'Create Listing',
-              message: 'The listing creation flow will live here.',
-            ),
+            (_) => const CreateListingPage(),
       ),
     );
   }

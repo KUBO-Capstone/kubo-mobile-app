@@ -40,6 +40,16 @@ class _ListingPageState extends State<ListingPage> {
     );
   }
 
+  Future<void> _makeOffer(BuildContext context, SyntheticListingRecord listing) async {
+    final offer = await showMakeOfferDialog(context, listing);
+    if (offer == null || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Offer sent to ${offer.sellerName}. Track it in the Market tab.'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -174,7 +184,7 @@ class _ListingPageState extends State<ListingPage> {
                       label: 'Make Offer',
                       color: AppColors.green,
                       textColor: AppColors.white,
-                      onPressed: () => showMakeOfferDialog(context, 'display name', listing.price),
+                      onPressed: () => _makeOffer(context, listing),
                     ),
                   ),
                 ],

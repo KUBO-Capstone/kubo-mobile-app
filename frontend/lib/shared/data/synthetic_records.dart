@@ -72,6 +72,11 @@ class SyntheticListingRecord {
     this.groups = const <String>[],
     this.latitude,
     this.longitude,
+    this.productId,
+    this.sellerId,
+    this.basePrice,
+    this.availableQuantity,
+    this.unit,
   });
 
   factory SyntheticListingRecord.fromJson(Map<String, dynamic> json) {
@@ -92,6 +97,11 @@ class SyntheticListingRecord {
       groups: <String>[json['category']?.toString() ?? 'produce'],
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
+      productId: (json['product_id'] as num?)?.toInt(),
+      sellerId: (json['seller_id'] as num?)?.toInt(),
+      basePrice: (json['base_price'] as num?)?.toDouble(),
+      availableQuantity: (json['available_quantity'] as num?)?.toDouble(),
+      unit: json['unit_measurement']?.toString(),
     );
   }
 
@@ -134,8 +144,26 @@ class SyntheticListingRecord {
   /// Seller address longitude, null when the seller has no geocoded address.
   final double? longitude;
 
+  /// Backend product id. Null for mock records, which cannot receive offers.
+  final int? productId;
+
+  /// Backend user id of the seller, used to stop a farmer bidding on their own listing.
+  final int? sellerId;
+
+  /// Numeric asking price; [price] is the formatted label.
+  final double? basePrice;
+
+  /// Stock on hand, in [unit].
+  final double? availableQuantity;
+
+  /// Unit of measurement (`kg`, `piece`, …) from the backend enum.
+  final String? unit;
+
   /// Whether this listing can be plotted on the map view.
   bool get hasCoordinates => latitude != null && longitude != null;
+
+  /// Whether this record came from the API and can be negotiated on.
+  bool get canReceiveOffers => productId != null && sellerId != null;
 }
 
 /// Synthetic suggestions shown in the Search page.

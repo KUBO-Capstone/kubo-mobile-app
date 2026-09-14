@@ -10,13 +10,31 @@ class ListingPageController extends ChangeNotifier {
         _images = images ?? const <String>[],
         _isFavorite = false;
 
-  final SyntheticListingRecord _listing;
+  SyntheticListingRecord _listing;
   final List<String> _images;
+
+  /// Set once the seller edits, archives or removes the listing from this
+  /// page, so the caller knows to refresh its list when we pop.
+  bool _changed = false;
 
   bool _isFavorite = false;
   int _currentImageIndex = 0;
 
   SyntheticListingRecord get listing => _listing;
+
+  bool get changed => _changed;
+
+  /// Swaps in the record returned by the server after a seller action.
+  void replaceListing(SyntheticListingRecord listing) {
+    _listing = listing;
+    _changed = true;
+    notifyListeners();
+  }
+
+  /// Marks the listing as removed; the page pops right after.
+  void markRemoved() {
+    _changed = true;
+  }
 
   List<String> get images => List<String>.unmodifiable(_images);
 

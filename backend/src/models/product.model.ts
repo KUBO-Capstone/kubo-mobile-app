@@ -9,6 +9,15 @@ export interface ProductInput {
     unit_measurement: string;
 }
 
+// Mirrors the CHECK constraint on products.status in config/database.ts.
+// 'delisted' is the soft delete: negotiations cascade on a real DELETE, so
+// removing a listing must never drop the row.
+export type ProductStatus = 'available' | 'out of stock' | 'delisted';
+
+// Fields a seller may change after publishing. Everything is optional so a
+// status-only change does not have to resend the whole listing.
+export type ProductChanges = Partial<Omit<ProductInput, 'seller_id'> & { status: ProductStatus }>;
+
 export interface ProductListing {
     product_id: number;
     seller_id: number;
@@ -64,9 +73,11 @@ function mapListing(row: Record<string, unknown>): ProductListing {
 }
 
 export const ProductModel = {
-    findAll(query = '', sellerId?: number): ProductListing[] {
+    // includeUnavailable adds 'out of stock' rows for a seller's own tab;
+    // delisted rows never come back from a list query.
+    findAll(query = '', sellerId?: number, includeUnavailable = false): ProductListing[] {
         const normalizedQuery = query.trim().toLowerCase();
-        const conditions = [`p.status = 'available'`];
+        const conditions = [includeUnavailable ? `p.status IN ('available', 'out of stock')` : `p.status = 'available'`];
         if (normalizedQuery) {
             conditions.push(`(LOWER(p.crop_name) LIKE @query OR LOWER(u.first_name || ' ' || u.last_name) LIKE @query OR LOWER(a.city_municipality) LIKE @query)`);
         }
@@ -98,5 +109,15 @@ export const ProductModel = {
             return productId;
         });
         return ProductModel.findById(transaction()) as ProductListing;
+    },
+
+    // Applies only the keys present in changes; images are not editable yet.
+    update(productId: number, changes: ProductChanges): ProductListing | undefined {
+        const columns = (Object.keys(changes) as (keyof ProductChanges)[]).filter((key) => changes[key] !== undefined);
+        if (columns.length === 0) return ProductModel.findById(productId);
+        const assignments = columns.map((column) => `${column} = @${column}`).join(', ');
+        db.prepare(`UPDATE products SET ${assignments}, updated_at = CURRENT_TIMESTAMP WHERE product_id = @product_id`)
+            .run({ ...changes, product_id: productId });
+        return ProductModel.findById(productId);
     },
 };

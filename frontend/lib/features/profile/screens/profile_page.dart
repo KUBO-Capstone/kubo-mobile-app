@@ -8,7 +8,9 @@ import '../../../shared/widgets/kubo_placeholder_page.dart';
 import '../../explore/screens/explore_page.dart';
 import '../../market/screens/market_page.dart';
 import '../../search/screens/search_page.dart';
+import '../../../shared/data/synthetic_records.dart';
 import '../../listing/screens/create_listing_page.dart';
+import '../../listing/widgets/manage_listing_sheet.dart';
 import '../../login/services/auth_service.dart';
 import '../providers/profile_page_controller.dart';
 import '../widgets/profile_empty_state.dart';
@@ -115,12 +117,34 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  void _openCreateListing() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
+  Future<void> _openCreateListing() async {
+    final created = await Navigator.of(context).push<SyntheticListingRecord>(
+      MaterialPageRoute<SyntheticListingRecord>(
         builder: (_) => const CreateListingPage(),
       ),
     );
+    if (created != null) {
+      _controller.loadListings();
+    }
+  }
+
+  // Seller actions on one of their own cards: edit, sold out, remove.
+  Future<void> _manageListing(SyntheticListingRecord listing) async {
+    final outcome = await showManageListingSheet(context, listing);
+    if (outcome == null || !mounted) return;
+    _controller.applyOutcome(listing.id, updated: outcome.listing);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          outcome.removed
+              ? 'Listing removed.'
+              : outcome.listing!.isSoldOut
+                  ? 'Marked as sold out.'
+                  : 'Listing updated.',
+        ),
+      ),
+    );
+    _controller.loadListings();
   }
 
   void _openEditProfile() {
@@ -291,7 +315,15 @@ class _ProfilePageState extends State<ProfilePage> {
           childAspectRatio: 0.72,
         ),
         itemBuilder: (context, index) {
-          return KuboListingCard(listing: listings[index]);
+          final listing = listings[index];
+          final canManage =
+              widget.isOwnProfile &&
+              listing.isOwnedBy(AuthService.currentUserId);
+          return KuboListingCard(
+            listing: listing,
+            onManage: canManage ? () => _manageListing(listing) : null,
+            onChanged: _controller.loadListings,
+          );
         },
       ),
     );

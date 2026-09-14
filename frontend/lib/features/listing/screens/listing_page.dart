@@ -7,10 +7,15 @@ import '../widgets/listing_info_row.dart';
 import '../widgets/listing_tag.dart';
 import '../widgets/seller_card.dart';
 import '../widgets/make_offer_dialog.dart';
+import '../widgets/manage_listing_sheet.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/synthetic_records.dart';
+import '../../login/services/auth_service.dart';
 
 /// Detail screen for a single listing item selected from a card grid.
+///
+/// Pops with `true` when the signed-in seller changed or removed the
+/// listing from here, so list screens know to reload.
 class ListingPage extends StatefulWidget {
   const ListingPage({super.key, required this.listing});
 
@@ -40,12 +45,41 @@ class _ListingPageState extends State<ListingPage> {
     );
   }
 
-  Future<void> _makeOffer(BuildContext context, SyntheticListingRecord listing) async {
+  // Seller-only: edit, mark sold out / restore, or remove.
+  Future<void> _manage(
+    BuildContext context,
+    SyntheticListingRecord listing,
+  ) async {
+    final outcome = await showManageListingSheet(context, listing);
+    if (outcome == null || !context.mounted) return;
+    if (outcome.removed) {
+      _controller.markRemoved();
+      Navigator.of(context).pop(true);
+      return;
+    }
+    _controller.replaceListing(outcome.listing!);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          outcome.listing!.isSoldOut
+              ? 'Marked as sold out. Buyers can no longer make offers.'
+              : 'Listing updated.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _makeOffer(
+    BuildContext context,
+    SyntheticListingRecord listing,
+  ) async {
     final offer = await showMakeOfferDialog(context, listing);
     if (offer == null || !context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Offer sent to ${offer.sellerName}. Track it in the Market tab.'),
+        content: Text(
+          'Offer sent to ${offer.sellerName}. Track it in the Market tab.',
+        ),
       ),
     );
   }
@@ -56,138 +90,165 @@ class _ListingPageState extends State<ListingPage> {
       animation: _controller,
       builder: (_, __) {
         final listing = _controller.listing;
+        final isOwner = listing.isOwnedBy(AuthService.currentUserId);
 
-        return Scaffold(
-          backgroundColor: AppColors.white,
-          body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ListingImageCarousel(
-                    images: _controller.images,
-                    isFavorite: _controller.isFavorite,
-                    onBackPressed: () => Navigator.of(context).pop(),
-                    onFavoriteToggle: _controller.toggleFavorite,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) return;
+            Navigator.of(context).pop(_controller.changed);
+          },
+          child: Scaffold(
+            backgroundColor: AppColors.white,
+            body: SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ListingImageCarousel(
+                      images: _controller.images,
+                      isFavorite: _controller.isFavorite,
+                      onBackPressed:
+                          () => Navigator.of(context).pop(_controller.changed),
+                      onFavoriteToggle: _controller.toggleFavorite,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      listing.price,
+                                      style: const TextStyle(
+                                        color: AppColors.green,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w800,
+                                        height: 1.2,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      listing.title,
+                                      style: const TextStyle(
+                                        color: AppColors.black,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w800,
+                                        height: 1.2,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 18),
+                                    Wrap(
+                                      spacing: 10,
+                                      runSpacing: 10,
+                                      children: [
+                                        if (listing.isSoldOut)
+                                          const ListingTag(label: 'Sold out'),
+                                        ListingTag(label: listing.regionLabel),
+                                        ...listing.groups
+                                            .take(2)
+                                            .map(
+                                              (groupName) =>
+                                                  ListingTag(label: groupName),
+                                            ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
+                          Column(
+                            children: [
+                              ListingInfoRow(
+                                icon: Icons.location_on_outlined,
+                                value: listing.locationLabel,
+                              ),
+                              const SizedBox(height: 8),
+                              ListingInfoRow(
+                                icon: Icons.favorite_border,
+                                value: '${listing.numLikes} likes',
+                              ),
+                              const SizedBox(height: 8),
+                              ListingInfoRow(
+                                icon: Icons.calendar_today_outlined,
+                                value: listing.date,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          const Text(
+                            'About this listing',
+                            style: TextStyle(
+                              color: AppColors.black,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            listing.description,
+                            style: const TextStyle(
+                              color: AppColors.gray,
+                              fontSize: 15,
+                              height: 1.6,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          SellerCard(listing: listing),
+                          const SizedBox(height: 28),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            bottomNavigationBar: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                child:
+                    isOwner
+                        // The seller has nothing to message or offer on; give
+                        // them the manage actions instead.
+                        ? ActionButton(
+                          label: 'Manage listing',
+                          color: AppColors.green,
+                          textColor: AppColors.white,
+                          onPressed: () => _manage(context, listing),
+                        )
+                        : Row(
                           children: [
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    listing.price,
-                                    style: const TextStyle(
-                                      color: AppColors.green,
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.w800,
-                                      height: 1.2,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    listing.title,
-                                    style: const TextStyle(
-                                      color: AppColors.black,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800,
-                                      height: 1.2,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 18),
-                                  Wrap(
-                                    spacing: 10,
-                                    runSpacing: 10,
-                                    children: [
-                                      ListingTag(label: listing.regionLabel),
-                                      ...listing.groups
-                                          .take(2)
-                                          .map((groupName) => ListingTag(label: groupName)),
-                                    ],
-                                  ),
-                                ],
+                              child: ActionButton(
+                                label: 'Message',
+                                color: AppColors.softBackground,
+                                textColor: AppColors.black,
+                                onPressed: () {},
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ActionButton(
+                                label: 'Make Offer',
+                                color: AppColors.green,
+                                textColor: AppColors.white,
+                                onPressed: () => _makeOffer(context, listing),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 18),
-                        Column(
-                          children: [
-                            ListingInfoRow(
-                              icon: Icons.location_on_outlined,
-                              value: listing.locationLabel,
-                            ),
-                            const SizedBox(height: 8),
-                            ListingInfoRow(
-                              icon: Icons.favorite_border,
-                              value: '${listing.numLikes} likes',
-                            ),
-                            const SizedBox(height: 8),
-                            ListingInfoRow(
-                              icon: Icons.calendar_today_outlined,
-                              value: listing.date,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        const Text(
-                          'About this listing',
-                          style: TextStyle(
-                            color: AppColors.black,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          listing.description,
-                          style: const TextStyle(
-                            color: AppColors.gray,
-                            fontSize: 15,
-                            height: 1.6,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        SellerCard(listing: listing),
-                        const SizedBox(height: 28),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          bottomNavigationBar: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: ActionButton(
-                      label: 'Message',
-                      color: AppColors.softBackground,
-                      textColor: AppColors.black,
-                      onPressed: () {},
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ActionButton(
-                      label: 'Make Offer',
-                      color: AppColors.green,
-                      textColor: AppColors.white,
-                      onPressed: () => _makeOffer(context, listing),
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
@@ -196,4 +257,3 @@ class _ListingPageState extends State<ListingPage> {
     );
   }
 }
-

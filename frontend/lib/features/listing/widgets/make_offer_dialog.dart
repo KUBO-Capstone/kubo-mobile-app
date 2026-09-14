@@ -20,6 +20,10 @@ Future<NegotiationRecord?> showMakeOfferDialog(
     messenger.showSnackBar(const SnackBar(content: Text('Log in to make an offer.')));
     return Future.value(null);
   }
+  if (listing.isSoldOut) {
+    messenger.showSnackBar(const SnackBar(content: Text('This listing is sold out.')));
+    return Future.value(null);
+  }
   if (!listing.canReceiveOffers) {
     messenger.showSnackBar(const SnackBar(content: Text('This listing cannot receive offers.')));
     return Future.value(null);

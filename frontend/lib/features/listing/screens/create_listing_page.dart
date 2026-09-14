@@ -2,10 +2,18 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/listing_service.dart';
+import '../../../shared/data/synthetic_records.dart';
 import '../../login/services/auth_service.dart';
 
+/// Create form for a new listing, or the edit form when [existing] is given.
+///
+/// Pops with the saved [SyntheticListingRecord] on success so the caller can
+/// refresh without another fetch.
 class CreateListingPage extends StatefulWidget {
-  const CreateListingPage({super.key});
+  const CreateListingPage({super.key, this.existing});
+
+  /// Listing being edited; null means create.
+  final SyntheticListingRecord? existing;
 
   @override
   State<CreateListingPage> createState() => _CreateListingPageState();
@@ -13,12 +21,12 @@ class CreateListingPage extends StatefulWidget {
 
 class _CreateListingPageState extends State<CreateListingPage> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _priceController = TextEditingController();
-  final _quantityController = TextEditingController();
+  late final TextEditingController _nameController;
+  late final TextEditingController _priceController;
+  late final TextEditingController _quantityController;
   final _service = ListingService();
-  String _category = 'vegetable';
-  String _unit = 'kg';
+  late String _category;
+  late String _unit;
   bool _isSaving = false;
 
   static const _images = <String>[
@@ -26,6 +34,19 @@ class _CreateListingPageState extends State<CreateListingPage> {
     'https://picsum.photos/id/1015/600/400',
     'https://picsum.photos/id/1016/600/400',
   ];
+
+  bool get _isEditing => widget.existing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    _nameController = TextEditingController(text: existing?.title ?? '');
+    _priceController = TextEditingController(text: _formatNumber(existing?.basePrice));
+    _quantityController = TextEditingController(text: _formatNumber(existing?.availableQuantity));
+    _category = existing?.groups.firstOrNull ?? 'vegetable';
+    _unit = existing?.unit ?? 'kg';
+  }
 
   @override
   void dispose() {
@@ -36,28 +57,48 @@ class _CreateListingPageState extends State<CreateListingPage> {
     super.dispose();
   }
 
+  // Prefills "12" rather than "12.0" for whole numbers.
+  static String _formatNumber(double? value) {
+    if (value == null) return '';
+    return value == value.roundToDouble() ? value.toInt().toString() : value.toString();
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    final sellerId = int.tryParse(AuthService.currentUser?['user_id']?.toString() ?? '');
+    final sellerId = AuthService.currentUserId;
     if (sellerId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please log in before creating a listing')),
+        SnackBar(content: Text('Please log in before ${_isEditing ? 'editing' : 'creating'} a listing')),
       );
       return;
     }
     setState(() => _isSaving = true);
     try {
-      await _service.createListing(
-        sellerId: sellerId,
-        cropName: _nameController.text.trim(),
-        category: _category,
-        price: double.parse(_priceController.text),
-        quantity: double.parse(_quantityController.text),
-        unit: _unit,
-        images: _images,
-      );
+      final existing = widget.existing;
+      final SyntheticListingRecord saved;
+      if (existing != null) {
+        saved = await _service.updateListing(
+          productId: existing.productId!,
+          sellerId: sellerId,
+          cropName: _nameController.text.trim(),
+          category: _category,
+          price: double.parse(_priceController.text),
+          quantity: double.parse(_quantityController.text),
+          unit: _unit,
+        );
+      } else {
+        saved = await _service.createListing(
+          sellerId: sellerId,
+          cropName: _nameController.text.trim(),
+          category: _category,
+          price: double.parse(_priceController.text),
+          quantity: double.parse(_quantityController.text),
+          unit: _unit,
+          images: _images,
+        );
+      }
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop(saved);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
@@ -77,16 +118,16 @@ class _CreateListingPageState extends State<CreateListingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Listing'), backgroundColor: AppColors.white),
+      appBar: AppBar(title: Text(_isEditing ? 'Edit Listing' : 'Create Listing'), backgroundColor: AppColors.white),
       backgroundColor: AppColors.white,
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            const Text('Add your produce', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+            Text(_isEditing ? 'Update your produce' : 'Add your produce', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
-            const Text('List your produce in just a few quick steps', style: TextStyle(color: AppColors.gray)),
+            Text(_isEditing ? 'Changes show up for buyers right away' : 'List your produce in just a few quick steps', style: const TextStyle(color: AppColors.gray)),
             const SizedBox(height: 24),
             TextFormField(controller: _nameController, decoration: _decoration('Product name'), validator: _required),
             const SizedBox(height: 14),
@@ -100,7 +141,14 @@ class _CreateListingPageState extends State<CreateListingPage> {
               Expanded(child: DropdownButtonFormField<String>(initialValue: _unit, decoration: _decoration('Unit'), items: const ['kg', 'g', 'lb', 'oz', 'liter', 'ml', 'piece'].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(), onChanged: (value) => setState(() => _unit = value!))),
             ]),
             const SizedBox(height: 28),
-            SizedBox(height: 52, child: ElevatedButton(onPressed: _isSaving ? null : _submit, style: ElevatedButton.styleFrom(backgroundColor: AppColors.green, foregroundColor: AppColors.white), child: Text(_isSaving ? 'Publishing...' : 'Publish listing'))),
+            SizedBox(
+              height: 52,
+              child: ElevatedButton(
+                onPressed: _isSaving ? null : _submit,
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.green, foregroundColor: AppColors.white),
+                child: Text(_isSaving ? (_isEditing ? 'Saving...' : 'Publishing...') : (_isEditing ? 'Save changes' : 'Publish listing')),
+              ),
+            ),
           ],
         ),
       ),

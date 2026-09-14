@@ -111,12 +111,30 @@ class ProfilePageController extends ChangeNotifier {
         notifyListeners();
         return;
       }
-      _listings = await _listingService.fetchListings(sellerId: userId);
+      // Only the owner sees their sold-out listings; visitors get the same
+      // list the explore tab shows.
+      _listings = await _listingService.fetchListings(
+        sellerId: userId,
+        includeUnavailable: isOwnProfile,
+      );
       notifyListeners();
     } catch (_) {
       _listings = const <SyntheticListingRecord>[];
       notifyListeners();
     }
+  }
+
+  /// Applies a manage-sheet outcome locally so the grid updates at once;
+  /// the caller still reloads to pick up server-side ordering.
+  void applyOutcome(String listingId, {SyntheticListingRecord? updated}) {
+    _listings = <SyntheticListingRecord>[
+      for (final listing in _listings)
+        if (listing.id != listingId)
+          listing
+        else if (updated != null)
+          updated,
+    ];
+    notifyListeners();
   }
 
   @override

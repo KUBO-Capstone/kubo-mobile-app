@@ -12,10 +12,17 @@ class ListingService {
   String get _baseUrl => ApiConfig.baseUrl;
   final http.Client _client;
 
-  Future<List<SyntheticListingRecord>> fetchListings({String query = '', int? sellerId}) async {
+  /// [includeUnavailable] also returns the seller's sold-out listings; only
+  /// the owner's profile tab asks for them.
+  Future<List<SyntheticListingRecord>> fetchListings({
+    String query = '',
+    int? sellerId,
+    bool includeUnavailable = false,
+  }) async {
     final queryParameters = <String, String>{};
     if (query.trim().isNotEmpty) queryParameters['q'] = query.trim();
     if (sellerId != null) queryParameters['seller_id'] = '$sellerId';
+    if (includeUnavailable) queryParameters['include_unavailable'] = 'true';
     final uri = Uri.parse('$_baseUrl/products').replace(
       queryParameters: queryParameters.isEmpty ? null : queryParameters,
     );
@@ -48,6 +55,62 @@ class ListingService {
           'unit_measurement': unit,
           'images': images,
         }),
+      ),
+    );
+    return SyntheticListingRecord.fromJson(readData(response) as Map<String, dynamic>);
+  }
+
+  /// Seller edits the listing's details. Only non-null fields are sent.
+  Future<SyntheticListingRecord> updateListing({
+    required int productId,
+    required int sellerId,
+    String? cropName,
+    String? category,
+    double? price,
+    double? quantity,
+    String? unit,
+  }) {
+    return _patch(productId, {
+      'seller_id': sellerId,
+      if (cropName != null) 'crop_name': cropName,
+      if (category != null) 'category': category,
+      if (price != null) 'base_price': price,
+      if (quantity != null) 'available_quantity': quantity,
+      if (unit != null) 'unit_measurement': unit,
+    });
+  }
+
+  /// Marks the listing sold out ([soldOut] true) or available again.
+  Future<SyntheticListingRecord> setSoldOut({
+    required int productId,
+    required int sellerId,
+    required bool soldOut,
+  }) {
+    return _patch(productId, {
+      'seller_id': sellerId,
+      'status': soldOut ? 'out of stock' : 'available',
+    });
+  }
+
+  /// Removes the listing from every view. The backend delists rather than
+  /// deletes so buyers' past offers on it still resolve.
+  Future<void> removeListing({required int productId, required int sellerId}) async {
+    final response = await sendRequest(
+      () => _client.delete(
+        Uri.parse('$_baseUrl/products/$productId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'seller_id': sellerId}),
+      ),
+    );
+    checkResponse(response);
+  }
+
+  Future<SyntheticListingRecord> _patch(int productId, Map<String, dynamic> body) async {
+    final response = await sendRequest(
+      () => _client.patch(
+        Uri.parse('$_baseUrl/products/$productId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
       ),
     );
     return SyntheticListingRecord.fromJson(readData(response) as Map<String, dynamic>);

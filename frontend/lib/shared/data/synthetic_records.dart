@@ -77,6 +77,7 @@ class SyntheticListingRecord {
     this.basePrice,
     this.availableQuantity,
     this.unit,
+    this.status,
   });
 
   factory SyntheticListingRecord.fromJson(Map<String, dynamic> json) {
@@ -102,6 +103,7 @@ class SyntheticListingRecord {
       basePrice: (json['base_price'] as num?)?.toDouble(),
       availableQuantity: (json['available_quantity'] as num?)?.toDouble(),
       unit: json['unit_measurement']?.toString(),
+      status: json['status']?.toString(),
     );
   }
 
@@ -159,11 +161,23 @@ class SyntheticListingRecord {
   /// Unit of measurement (`kg`, `piece`, …) from the backend enum.
   final String? unit;
 
+  /// Backend `products.status`: `available`, `out of stock`, or `delisted`.
+  /// Null for mock records.
+  final String? status;
+
   /// Whether this listing can be plotted on the map view.
   bool get hasCoordinates => latitude != null && longitude != null;
 
   /// Whether this record came from the API and can be negotiated on.
-  bool get canReceiveOffers => productId != null && sellerId != null;
+  bool get canReceiveOffers =>
+      productId != null && sellerId != null && !isSoldOut;
+
+  /// Seller archived this listing; it stays on their profile but takes no offers.
+  bool get isSoldOut => status == 'out of stock';
+
+  /// True when [userId] is the seller, which unlocks edit/archive/remove.
+  bool isOwnedBy(int? userId) =>
+      userId != null && sellerId != null && sellerId == userId;
 }
 
 /// Synthetic suggestions shown in the Search page.

@@ -9,6 +9,7 @@ import '../../explore/screens/explore_page.dart';
 import '../../market/screens/market_page.dart';
 import '../../search/screens/search_page.dart';
 import '../../listing/screens/create_listing_page.dart';
+import '../../login/services/auth_service.dart';
 import '../providers/profile_page_controller.dart';
 import '../widgets/profile_empty_state.dart';
 import '../widgets/profile_header_card.dart';
@@ -21,7 +22,28 @@ class ProfilePage extends StatefulWidget {
     super.key,
     this.initialLocationLabel = 'Caybiga',
     this.isOwnProfile = true,
+    this.subject,
   });
+
+  /// Opens the profile behind a listing's seller box. Falls back to the own
+  /// profile when the viewer is looking at their own listing.
+  factory ProfilePage.forSeller({
+    required int sellerId,
+    required String sellerName,
+    String? locationLabel,
+  }) {
+    if (sellerId == AuthService.currentUserId) {
+      return const ProfilePage();
+    }
+    return ProfilePage(
+      isOwnProfile: false,
+      subject: ProfileSubject(
+        userId: sellerId,
+        displayName: sellerName,
+        locationLabel: locationLabel,
+      ),
+    );
+  }
 
   /// Route name used by the app shell when opening the profile tab.
   static const routeName = '/profile';
@@ -31,6 +53,9 @@ class ProfilePage extends StatefulWidget {
 
   /// Whether this page should render as the signed-in user's own account.
   final bool isOwnProfile;
+
+  /// Account to show when [isOwnProfile] is false.
+  final ProfileSubject? subject;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -42,7 +67,10 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
-    _controller = ProfilePageController(isOwnProfile: widget.isOwnProfile);
+    _controller = ProfilePageController(
+      isOwnProfile: widget.isOwnProfile,
+      subject: widget.subject,
+    );
     _controller.loadListings();
   }
 
@@ -159,6 +187,23 @@ class _ProfilePageState extends State<ProfilePage> {
                           fit: BoxFit.cover,
                         ),
                       ),
+                      // Visitor profiles are pushed over a listing, so give
+                      // them a way back that the own-profile tab never needs.
+                      if (!widget.isOwnProfile && Navigator.of(context).canPop())
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: Material(
+                            color: AppColors.white,
+                            shape: const CircleBorder(),
+                            elevation: 2,
+                            child: IconButton(
+                              icon: const Icon(Icons.arrow_back),
+                              color: AppColors.black,
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                          ),
+                        ),
                       Padding(
                         padding: const EdgeInsets.only(top: 90),
                         child: ProfileHeaderCard(

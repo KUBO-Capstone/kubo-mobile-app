@@ -10,11 +10,13 @@ import '../../../shared/widgets/kubo_location_badge.dart';
 import '../../../shared/widgets/kubo_search_field.dart';
 import '../../../shared/widgets/kubo_view_toggle_button.dart';
 import '../../explore/screens/explore_page.dart';
+import '../../explore/widgets/listings_map.dart';
+import '../../explore/widgets/map_result_cards.dart';
 import '../../market/screens/market_page.dart';
 import '../../profile/screens/profile_page.dart';
 import '../../listing/screens/create_listing_page.dart';
 
-/// Search results page with list/map toggles and synthetic listing results.
+/// Search results page with list/map toggles over the matching listings.
 class SearchResultsPage extends StatefulWidget {
   const SearchResultsPage({
     super.key,
@@ -39,11 +41,24 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   late final TextEditingController _searchController;
   late final ListingService _listingService;
   List<SyntheticListingRecord> _listings = const <SyntheticListingRecord>[];
+
+  /// Term the current results were fetched for; the field can be edited
+  /// without changing this until the user submits.
+  late String _query;
+
+  /// Set when the fetch failed, so a network problem is not shown as
+  /// "no results".
+  String? _loadError;
+
   bool _isListView = true;
+
+  /// Collapses the map to a strip, same control as the explore tab.
+  bool _mapMinimized = false;
 
   @override
   void initState() {
     super.initState();
+    _query = widget.query;
     _searchController = TextEditingController(text: widget.query);
     _listingService = ListingService();
     _loadListings();
@@ -56,14 +71,23 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
     super.dispose();
   }
 
-  List<SyntheticListingRecord> get _visibleListings => _listings;
-
   Future<void> _loadListings() async {
     try {
-      final listings = await _listingService.fetchListings(query: widget.query);
-      if (mounted) setState(() => _listings = listings);
+      final listings = await _listingService.fetchListings(query: _query);
+      if (mounted) {
+        setState(() {
+          _listings = listings;
+          _loadError = null;
+        });
+      }
     } catch (error) {
-      if (mounted) setState(() {});
+      debugPrint('Search listing fetch failed: $error');
+      if (mounted) {
+        setState(() {
+          _listings = const <SyntheticListingRecord>[];
+          _loadError = 'Could not reach the Kubo server. Try again.';
+        });
+      }
     }
   }
 
@@ -72,13 +96,17 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
     return value.isEmpty ? 'Caybiga' : value;
   }
 
+  // Re-runs the search for whatever is in the field.
   void _submitSearch(String value) {
+    final query = value.trim();
     setState(() {
-      _searchController.text = value.trim();
+      _query = query;
+      _searchController.text = query;
       _searchController.selection = TextSelection.collapsed(
-        offset: _searchController.text.length,
+        offset: query.length,
       );
     });
+    _loadListings();
   }
 
   void _navigateToTab(int index) {
@@ -101,7 +129,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
         break;
       default:
         destination = SearchResultsPage(
-          query: _searchController.text,
+          query: _query,
           initialLocationLabel: widget.initialLocationLabel,
         );
         break;
@@ -122,7 +150,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final listings = _visibleListings;
+    final listings = _listings;
 
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -152,7 +180,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                             onClear: () => _submitSearch(''),
                           ),
                         ),
-                        
+
                       ],
                     ),
                     const SizedBox(height: 20),
@@ -178,12 +206,12 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                         ],
                       ),
                     ),
-                    
+
                     const SizedBox(height: 20),
                     Padding(
                       padding: const EdgeInsets.only(left: 16),
                       child: Text(
-                      'Results for "${_searchController.text}"',
+                      'Results for "$_query"',
                       style: const TextStyle(
                         color: AppColors.black,
                         fontSize: 16,
@@ -197,12 +225,12 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
             ),
             if (_isListView)
               if (listings.isEmpty)
-                const SliverToBoxAdapter(
+                SliverToBoxAdapter(
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(16, 24, 16, 0),
+                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
                     child: Text(
-                      'No search results yet for this term.',
-                      style: TextStyle(
+                      _loadError ?? 'No search results yet for this term.',
+                      style: const TextStyle(
                         color: AppColors.gray,
                         fontSize: 14,
                         height: 1.45,
@@ -227,46 +255,24 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                   ),
                 )
             else
+              // Same map as the explore tab, minus the bagsakan toggle: a
+              // produce search has nothing to say about drop-off centers.
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppColors.softBackground,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: const Column(
-                      children: [
-                        SizedBox(height: 8),
-                        Icon(
-                          Icons.map_outlined,
-                          size: 72,
-                          color: AppColors.green,
-                        ),
-                        SizedBox(height: 18),
-                        Text(
-                          'Map View',
-                          style: TextStyle(
-                            color: AppColors.black,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Map results for the searched item will appear here.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: AppColors.gray,
-                            fontSize: 14,
-                            height: 1.45,
-                          ),
-                        ),
-                      ],
-                    ),
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ListingsMap(
+                        listings: listings,
+                        minimized: _mapMinimized,
+                        loadError: _loadError,
+                        onToggleMinimized:
+                            () => setState(() => _mapMinimized = !_mapMinimized),
+                      ),
+                      const SizedBox(height: 16),
+                      MapListingCards(listings: listings, loadError: _loadError),
+                    ],
                   ),
                 ),
               ),

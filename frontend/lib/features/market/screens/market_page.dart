@@ -6,9 +6,10 @@ import '../../explore/screens/explore_page.dart';
 import '../../listing/screens/create_listing_page.dart';
 import '../../profile/screens/profile_page.dart';
 import '../../search/screens/search_page.dart';
-import '../widgets/offers_view.dart';
+import '../../../shared/widgets/kubo_placeholder_page.dart';
 
-/// Market tab: the signed-in user's offers, received and sent.
+/// Market tab placeholder. Offers and chats live behind the app-bar chat
+/// icon (`MessagesPage`); this tab is reserved for market insights.
 class MarketPage extends StatelessWidget {
   const MarketPage({super.key, this.initialLocationLabel = 'Caybiga'});
 
@@ -53,7 +54,10 @@ class MarketPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,
-      body: const OffersView(),
+      body: const KuboPlaceholderContent(
+        title: 'Market',
+        message: 'Market insights and activity summaries will appear here.',
+      ),
       bottomNavigationBar: KuboBottomNavigationBar(
         currentIndex: 2,
         onDestinationSelected: (index) => _navigateToTab(context, index),

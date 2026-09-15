@@ -29,6 +29,7 @@ enum NegotiationStatus {
 class NegotiationRecord {
   const NegotiationRecord({
     required this.id,
+    required this.conversationId,
     required this.productId,
     required this.buyerId,
     required this.sellerId,
@@ -46,6 +47,7 @@ class NegotiationRecord {
   factory NegotiationRecord.fromJson(Map<String, dynamic> json) {
     return NegotiationRecord(
       id: (json['negotiation_id'] as num).toInt(),
+      conversationId: (json['conversation_id'] as num).toInt(),
       productId: (json['product_id'] as num).toInt(),
       buyerId: (json['buyer_id'] as num).toInt(),
       sellerId: (json['seller_id'] as num).toInt(),
@@ -62,6 +64,9 @@ class NegotiationRecord {
   }
 
   final int id;
+
+  /// Thread this offer lives in; the chat screen opens on it after an offer.
+  final int conversationId;
   final int productId;
   final int buyerId;
   final int sellerId;

@@ -17,6 +17,7 @@ import '../../../shared/widgets/kubo_icon_action_button.dart';
 import '../../../shared/widgets/kubo_listing_card.dart';
 import '../../../shared/widgets/kubo_location_badge.dart';
 import '../../../shared/widgets/kubo_placeholder_page.dart';
+import '../../chat/screens/messages_page.dart';
 import '../../login/screens/login_page.dart';
 import '../../market/screens/market_page.dart';
 import '../../listing/screens/create_listing_page.dart';
@@ -349,12 +350,7 @@ class _ExplorePageState extends State<ExplorePage> {
           const SizedBox(width: 8),
           KuboIconActionButton(
             assetPath: AppIcons.chat,
-            onTap:
-                () => _openSection(
-                  context,
-                  'Messages',
-                  'Your chats will appear here.',
-                ),
+            onTap: () => Navigator.of(context).pushNamed(MessagesPage.routeName),
           ),
           const SizedBox(width: 10),
         ],

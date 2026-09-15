@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
-import { NegotiationModel, NegotiationStatus, OPEN_STATUSES } from "#models/negotiation.model";
+import { Negotiation, NegotiationModel, NegotiationStatus, OPEN_STATUSES } from "#models/negotiation.model";
 import { ProductModel } from "#models/product.model";
+import { ConversationModel, MessageType } from "#models/conversation.model";
 
 // KNOWN DEBT: there is no auth middleware yet, so the acting user is taken
 // from the request (`buyer_id` on create, `user_id` on respond) and trusted.
@@ -18,6 +19,29 @@ const positiveNumber = (value: unknown): number | undefined => {
 const readId = (value: unknown): number | undefined => {
     const n = Number(value);
     return Number.isInteger(n) && n > 0 ? n : undefined;
+};
+
+const formatAmount = (value: number): string =>
+    Number.isInteger(value) ? String(value) : value.toFixed(2);
+
+// Every offer step is also a message in the thread, so the chat reads as the
+// negotiation history even though the negotiations row only keeps the latest
+// terms. `content` is a plain-text fallback for clients that ignore the type.
+const recordOfferEvent = (negotiation: Negotiation, actorId: number, type: MessageType): void => {
+    const terms = `PHP ${formatAmount(negotiation.offered_price)}/${negotiation.unit_measurement} x ${formatAmount(negotiation.offered_quantity)} ${negotiation.unit_measurement}`;
+    const content = type === 'offer' ? `Offered ${terms}`
+        : type === 'counter' ? `Countered ${terms}`
+        : type === 'accepted' ? `Accepted the offer of ${terms}`
+        : `Declined the offer of ${terms}`;
+    ConversationModel.addMessage({
+        conversation_id: negotiation.conversation_id,
+        sender_id: actorId,
+        content,
+        message_type: type,
+        negotiation_id: negotiation.negotiation_id,
+        offer_price: negotiation.offered_price,
+        offer_quantity: negotiation.offered_quantity,
+    });
 };
 
 export const getNegotiations = (req: Request, res: Response): void => {
@@ -82,6 +106,7 @@ export const createNegotiation = (req: Request, res: Response): void => {
         offered_price: offeredPrice,
         offered_quantity: offeredQuantity,
     });
+    recordOfferEvent(negotiation, buyerId, 'offer');
     res.status(201).json({ success: true, data: negotiation });
 };
 
@@ -116,7 +141,9 @@ export const respondToNegotiation = (req: Request, res: Response): void => {
     const isMyTurn = awaitingSeller ? isSeller : isBuyer;
 
     if (action === 'decline') {
-        res.json({ success: true, data: NegotiationModel.update(negotiation.negotiation_id, { status: 'declined' }) });
+        const declined = NegotiationModel.update(negotiation.negotiation_id, { status: 'declined' }) as Negotiation;
+        recordOfferEvent(declined, userId, 'declined');
+        res.json({ success: true, data: declined });
         return;
     }
     if (!isMyTurn) {
@@ -124,7 +151,9 @@ export const respondToNegotiation = (req: Request, res: Response): void => {
         return;
     }
     if (action === 'accept') {
-        res.json({ success: true, data: NegotiationModel.update(negotiation.negotiation_id, { status: 'accepted' }) });
+        const accepted = NegotiationModel.update(negotiation.negotiation_id, { status: 'accepted' }) as Negotiation;
+        recordOfferEvent(accepted, userId, 'accepted');
+        res.json({ success: true, data: accepted });
         return;
     }
 
@@ -144,6 +173,7 @@ export const respondToNegotiation = (req: Request, res: Response): void => {
         status: isSeller ? 'countered' : 'pending',
         offered_price: offeredPrice,
         offered_quantity: offeredQuantity,
-    });
+    }) as Negotiation;
+    recordOfferEvent(updated, userId, 'counter');
     res.json({ success: true, data: updated });
 };

@@ -33,6 +33,13 @@ class ListingService {
         .toList(growable: false);
   }
 
+  /// One listing by id, whatever its status (the chat header links to it
+  /// even after it is sold out).
+  Future<SyntheticListingRecord> fetchListing(int productId) async {
+    final response = await sendRequest(() => _client.get(Uri.parse('$_baseUrl/products/$productId')));
+    return SyntheticListingRecord.fromJson(readData(response) as Map<String, dynamic>);
+  }
+
   Future<SyntheticListingRecord> createListing({
     required int sellerId,
     required String cropName,

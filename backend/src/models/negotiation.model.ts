@@ -1,4 +1,5 @@
 import { db } from "#config/database";
+import { ConversationModel } from "#models/conversation.model";
 
 // Mirrors the CHECK constraint on negotiations.status in config/database.ts.
 // The status also encodes whose turn it is: 'pending' means the buyer moved
@@ -92,19 +93,12 @@ export const NegotiationModel = {
         return row ? mapNegotiation(row) : undefined;
     },
 
-    // negotiations.conversation_id is NOT NULL, so an offer always sits inside
-    // the buyer/seller conversation for that listing, created here if missing.
-    // Messaging has no endpoints yet, but the row is ready for it.
+    // An offer always lives inside the buyer/seller thread for that listing
+    // (negotiations.conversation_id is NOT NULL), so the chat screen can show
+    // it as the first message the way Carousell does.
     create(input: NegotiationInput): Negotiation {
         const insert = db.transaction(() => {
-            const existing = db.prepare(`
-                SELECT conversation_id FROM conversations
-                WHERE buyer_id = ? AND seller_id = ? AND product_id = ?
-            `).get(input.buyer_id, input.seller_id, input.product_id) as { conversation_id: number } | undefined;
-            const conversationId = existing
-                ? existing.conversation_id
-                : Number(db.prepare(`INSERT INTO conversations (buyer_id, seller_id, product_id) VALUES (?, ?, ?)`)
-                    .run(input.buyer_id, input.seller_id, input.product_id).lastInsertRowid);
+            const conversationId = ConversationModel.findOrCreate(input.buyer_id, input.seller_id, input.product_id);
 
             const result = db.prepare(`
                 INSERT INTO negotiations (conversation_id, product_id, buyer_id, seller_id, offered_price, offered_quantity)

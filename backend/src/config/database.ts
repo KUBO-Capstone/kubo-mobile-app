@@ -149,10 +149,16 @@ export function initDb(): void {
             conversation_id INTEGER NOT NULL,
             sender_id INTEGER NOT NULL,
             content TEXT NOT NULL,
+            message_type VARCHAR(20) NOT NULL DEFAULT 'text' CHECK (message_type IN ('text', 'offer', 'counter', 'accepted', 'declined')),
+            negotiation_id INTEGER,
+            offer_price REAL,
+            offer_quantity REAL,
+            read_at DATETIME,
             sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
             FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE,
-            FOREIGN KEY (sender_id) REFERENCES users(user_id) ON DELETE CASCADE
+            FOREIGN KEY (sender_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY (negotiation_id) REFERENCES negotiations(negotiation_id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS negotiations (

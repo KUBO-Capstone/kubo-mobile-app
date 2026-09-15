@@ -10,6 +10,8 @@ import '../widgets/make_offer_dialog.dart';
 import '../widgets/manage_listing_sheet.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/synthetic_records.dart';
+import '../../../shared/data/message_service.dart';
+import '../../chat/screens/chat_page.dart';
 import '../../login/services/auth_service.dart';
 
 /// Detail screen for a single listing item selected from a card grid.
@@ -75,13 +77,44 @@ class _ListingPageState extends State<ListingPage> {
   ) async {
     final offer = await showMakeOfferDialog(context, listing);
     if (offer == null || !context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Offer sent to ${offer.sellerName}. Track it in the Market tab.',
-        ),
+    // The offer is the first message of the thread; land the buyer in it.
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ChatPage(conversationId: offer.conversationId),
       ),
     );
+  }
+
+  // Opens (or creates) the buyer's thread on this listing without an offer.
+  Future<void> _message(
+    BuildContext context,
+    SyntheticListingRecord listing,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final buyerId = AuthService.currentUserId;
+    final productId = listing.productId;
+    if (buyerId == null) {
+      messenger.showSnackBar(const SnackBar(content: Text('Log in to message the seller.')));
+      return;
+    }
+    if (productId == null) {
+      messenger.showSnackBar(const SnackBar(content: Text('This listing cannot be messaged.')));
+      return;
+    }
+    final service = MessageService();
+    try {
+      final thread = await service.openConversation(buyerId: buyerId, productId: productId);
+      if (!context.mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => ChatPage(conversationId: thread.id)),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      service.dispose();
+    }
   }
 
   @override
@@ -235,7 +268,7 @@ class _ListingPageState extends State<ListingPage> {
                                 label: 'Message',
                                 color: AppColors.softBackground,
                                 textColor: AppColors.black,
-                                onPressed: () {},
+                                onPressed: () => _message(context, listing),
                               ),
                             ),
                             const SizedBox(width: 12),

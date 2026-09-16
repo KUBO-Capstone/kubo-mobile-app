@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/synthetic_records.dart';
+import '../../../shared/widgets/kubo_save_button.dart';
 import '../../listing/screens/listing_page.dart';
 import '../models/bagsakan_center.dart';
 
@@ -47,11 +48,7 @@ class MapListingCards extends StatelessWidget {
           subtitle: '${listing.price} | ${listing.locationLabel}',
           footer: listing.sellerLabel,
           footerIcon: Icons.storefront_outlined,
-          trailing: const Icon(
-            Icons.favorite_border,
-            size: 20,
-            color: AppColors.gray,
-          ),
+          trailing: KuboSaveButton(listing: listing, size: 32, iconSize: 20),
           onTap:
               () => Navigator.of(context).push(
                 MaterialPageRoute<void>(

@@ -12,6 +12,7 @@ import '../../../shared/data/synthetic_records.dart';
 import '../../listing/screens/create_listing_page.dart';
 import '../../listing/widgets/manage_listing_sheet.dart';
 import '../../login/services/auth_service.dart';
+import '../../saved/providers/saved_listings_controller.dart';
 import '../providers/profile_page_controller.dart';
 import '../widgets/profile_empty_state.dart';
 import '../widgets/profile_header_card.dart';
@@ -74,6 +75,7 @@ class _ProfilePageState extends State<ProfilePage> {
       subject: widget.subject,
     );
     _controller.loadListings();
+    if (widget.isOwnProfile) SavedListingsController.instance.load();
   }
 
   @override
@@ -194,7 +196,7 @@ class _ProfilePageState extends State<ProfilePage> {
       body: SafeArea(
         bottom: false,
         child: AnimatedBuilder(
-          animation: _controller,
+          animation: Listenable.merge([_controller, SavedListingsController.instance]),
           builder: (context, _) {
             return CustomScrollView(
               physics: const BouncingScrollPhysics(),

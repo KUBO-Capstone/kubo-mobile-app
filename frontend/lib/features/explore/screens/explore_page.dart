@@ -16,13 +16,14 @@ import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
 import '../../../shared/widgets/kubo_icon_action_button.dart';
 import '../../../shared/widgets/kubo_listing_card.dart';
 import '../../../shared/widgets/kubo_location_badge.dart';
-import '../../../shared/widgets/kubo_placeholder_page.dart';
 import '../../chat/screens/messages_page.dart';
 import '../../login/screens/login_page.dart';
 import '../../market/screens/market_page.dart';
 import '../../listing/screens/create_listing_page.dart';
 import '../../notification/screens/notification_page.dart';
 import '../../profile/screens/profile_page.dart';
+import '../../saved/providers/saved_listings_controller.dart';
+import '../../saved/screens/saved_listings_page.dart';
 import '../../search/screens/search_page.dart';
 import '../widgets/drawer_list_tile.dart';
 import '../../../shared/widgets/kubo_view_toggle_button.dart';
@@ -116,6 +117,9 @@ class _ExplorePageState extends State<ExplorePage> {
             : widget.initialLocationLabel;
     _loadListings();
     _loadCenters();
+    // Explore is the landing screen after login, so this is where the hearts
+    // on every grid get their initial state (and re-key on a different user).
+    SavedListingsController.instance.loadIds();
   }
 
   @override
@@ -341,11 +345,7 @@ class _ExplorePageState extends State<ExplorePage> {
           KuboIconActionButton(
             assetPath: AppIcons.heartSaved,
             onTap:
-                () => _openSection(
-                  context,
-                  'Saved',
-                  'Your saved listings will appear here.',
-                ),
+                () => Navigator.of(context).pushNamed(SavedListingsPage.routeName),
           ),
           const SizedBox(width: 8),
           KuboIconActionButton(
@@ -510,15 +510,6 @@ class _ExplorePageState extends State<ExplorePage> {
       ),
     );
   }
-
-  // Opens one of the placeholder explore sections as a separate page.
-  void _openSection(BuildContext context, String title, String message) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => KuboPlaceholderPage(title: title, message: message),
-      ),
-    );
-  }
 }
 
 /// Drawer template for explore menu entries.
@@ -558,7 +549,14 @@ class _ExploreDrawer extends StatelessWidget {
               ), // gap before list items and header (Explore Menu)
 
               DrawerListTile(title: 'Market', iconPath: AppIcons.chartLine),
-              DrawerListTile(title: 'Saved', iconPath: AppIcons.heartSaved),
+              DrawerListTile(
+                title: 'Saved',
+                iconPath: AppIcons.heartSaved,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pushNamed(SavedListingsPage.routeName);
+                },
+              ),
               DrawerListTile(
                 title: 'Notification',
                 iconPath: AppIcons.bellNotification,

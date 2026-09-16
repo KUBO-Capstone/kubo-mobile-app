@@ -14,7 +14,9 @@ class ListingImageCarousel extends StatefulWidget {
 
   final List<String> images;
   final VoidCallback onBackPressed;
-  final VoidCallback onFavoriteToggle;
+
+  /// Null hides the heart (the viewer's own listing, or a mock row).
+  final VoidCallback? onFavoriteToggle;
   final bool isFavorite;
 
   @override
@@ -88,20 +90,21 @@ class _ListingImageCarouselState extends State<ListingImageCarousel> {
             ),
           ),
         ),
-        Positioned(
-          top: 12,
-          right: 12,
-          child: CircleAvatar(
-            backgroundColor: Colors.white.withValues(alpha: 0.9),
-            child: IconButton(
-              icon: Icon(
-                widget.isFavorite ? Icons.favorite : Icons.favorite_border,
-                color: widget.isFavorite ? AppColors.green : AppColors.black,
+        if (widget.onFavoriteToggle != null)
+          Positioned(
+            top: 12,
+            right: 12,
+            child: CircleAvatar(
+              backgroundColor: Colors.white.withValues(alpha: 0.9),
+              child: IconButton(
+                icon: Icon(
+                  widget.isFavorite ? Icons.favorite : Icons.favorite_border,
+                  color: widget.isFavorite ? AppColors.green : AppColors.black,
+                ),
+                onPressed: widget.onFavoriteToggle,
               ),
-              onPressed: widget.onFavoriteToggle,
             ),
           ),
-        ),
       ],
     );
   }

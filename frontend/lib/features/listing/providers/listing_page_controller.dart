@@ -8,8 +8,7 @@ class ListingPageController extends ChangeNotifier {
     required SyntheticListingRecord listing,
     List<String>? images,
   })  : _listing = listing,
-        _images = images ?? const <String>[],
-        _isFavorite = false;
+        _images = images ?? const <String>[];
 
   SyntheticListingRecord _listing;
   final List<String> _images;
@@ -18,7 +17,6 @@ class ListingPageController extends ChangeNotifier {
   /// page, so the caller knows to refresh its list when we pop.
   bool _changed = false;
 
-  bool _isFavorite = false;
   int _currentImageIndex = 0;
 
   final MarketService _market = MarketService();
@@ -61,19 +59,12 @@ class ListingPageController extends ChangeNotifier {
 
   List<String> get images => List<String>.unmodifiable(_images);
 
-  bool get isFavorite => _isFavorite;
-
   int get currentImageIndex => _currentImageIndex;
 
   @override
   void dispose() {
     _market.dispose();
     super.dispose();
-  }
-
-  void toggleFavorite() {
-    _isFavorite = !_isFavorite;
-    notifyListeners();
   }
 
   void updateCurrentImage(int index) {

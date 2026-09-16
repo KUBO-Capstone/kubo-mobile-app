@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../core/constants/app_assets.dart';
 import '../../core/constants/app_colors.dart';
-import '../../core/widgets/app_svg_icon.dart';
 import '../../features/listing/screens/listing_page.dart';
 import '../data/synthetic_records.dart';
+import 'kubo_save_button.dart';
 
 /// Shared listing card used across explore and search result grids.
 class KuboListingCard extends StatelessWidget {
@@ -132,40 +131,10 @@ class KuboListingCard extends StatelessWidget {
               if (onManage != null)
                 _ManageButton(onPressed: onManage!)
               else
-                _SaveButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('${listing.title} saved')),
-                    );
-                  },
-                ),
+                KuboSaveButton(listing: listing, iconSize: 16),
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SaveButton extends StatelessWidget {
-  const _SaveButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkResponse(
-      onTap: onPressed,
-      radius: 22,
-      child: Container(
-        width: 26,
-        height: 26,
-        alignment: Alignment.center,
-        child: const AppSvgIcon(
-          assetPath: AppIcons.heartSaved,
-          size: 16,
-          color: AppColors.gray,
-        ),
       ),
     );
   }

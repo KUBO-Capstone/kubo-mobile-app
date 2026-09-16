@@ -139,63 +139,6 @@ final List<SyntheticListingRecord> syntheticProfileListings =
       ),
     ];
 
-/// Synthetic saved listings surfaced in the saved tab.
-final List<SyntheticListingRecord> syntheticProfileSavedListings =
-    <SyntheticListingRecord>[
-      const SyntheticListingRecord(
-        id: 'profile-saved-0',
-        title: 'Product name placeholder product name placeholder',
-        price: 'PHP XX,XXX',
-        locationLabel: 'Caybiga',
-        regionLabel: 'NCR',
-        sellerLabel: 'Username',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-        description: 'Saved listing placeholder description.',
-        date: 'Saved recently',
-        numLikes: 30,
-        groups: <String>['vegetables'],
-      ),
-      const SyntheticListingRecord(
-        id: 'profile-saved-1',
-        title: 'Product name placeholder product name placeholder',
-        price: 'PHP XX,XXX',
-        locationLabel: 'Caybiga',
-        regionLabel: 'NCR',
-        sellerLabel: 'Username',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-        description: 'Saved listing placeholder description.',
-        date: 'Saved 3 days ago',
-        numLikes: 42,
-        groups: <String>['fruits'],
-      ),
-      const SyntheticListingRecord(
-        id: 'profile-saved-2',
-        title: 'Product name placeholder product name placeholder',
-        price: 'PHP XX,XXX',
-        locationLabel: 'Caybiga',
-        regionLabel: 'NCR',
-        sellerLabel: 'Username',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-        description: 'Saved listing placeholder description.',
-        date: 'Saved 5 days ago',
-        numLikes: 28,
-        groups: <String>['grains'],
-      ),
-      const SyntheticListingRecord(
-        id: 'profile-saved-3',
-        title: 'Product name placeholder product name placeholder',
-        price: 'PHP XX,XXX',
-        locationLabel: 'Caybiga',
-        regionLabel: 'NCR',
-        sellerLabel: 'Username',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-        description: 'Saved listing placeholder description.',
-        date: 'Saved 1 week ago',
-        numLikes: 35,
-        groups: <String>['dairy'],
-      ),
-    ];
-
 /// Synthetic reviews surfaced in the reviews tab.
 final List<SyntheticProfileReviewRecord>
 syntheticProfileReviews = <SyntheticProfileReviewRecord>[

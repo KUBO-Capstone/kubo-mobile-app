@@ -37,7 +37,9 @@ export interface ProductListing {
     images: string[];
 }
 
-const listingQuery = `
+// Exported so other models (saved listings) can list products in exactly the
+// shape the explore grid gets; keep the two in step.
+export const listingQuery = `
     SELECT p.*, u.first_name || ' ' || u.last_name AS seller_name,
            COALESCE(a.city_municipality, 'Philippines') AS location_label,
            COALESCE(a.region, 'NCR') AS region_label,
@@ -51,7 +53,7 @@ const listingQuery = `
     LEFT JOIN product_images pi ON pi.product_id = p.product_id
 `;
 
-function mapListing(row: Record<string, unknown>): ProductListing {
+export function mapListing(row: Record<string, unknown>): ProductListing {
     return {
         product_id: Number(row.product_id),
         seller_id: Number(row.seller_id),

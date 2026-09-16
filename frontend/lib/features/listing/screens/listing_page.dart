@@ -12,8 +12,10 @@ import '../widgets/market_reference_line.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/synthetic_records.dart';
 import '../../../shared/data/message_service.dart';
+import '../../../shared/widgets/kubo_save_button.dart';
 import '../../chat/screens/chat_page.dart';
 import '../../login/services/auth_service.dart';
+import '../../saved/providers/saved_listings_controller.dart';
 
 /// Detail screen for a single listing item selected from a card grid.
 ///
@@ -128,10 +130,13 @@ class _ListingPageState extends State<ListingPage> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _controller,
+      // The carousel heart reads the app-wide saved set, so a toggle here or
+      // on any card behind this page repaints it.
+      animation: Listenable.merge([_controller, SavedListingsController.instance]),
       builder: (_, __) {
         final listing = _controller.listing;
         final isOwner = listing.isOwnedBy(AuthService.currentUserId);
+        final canSave = KuboSaveButton.canSave(listing);
 
         return PopScope(
           canPop: false,
@@ -149,10 +154,14 @@ class _ListingPageState extends State<ListingPage> {
                   children: [
                     ListingImageCarousel(
                       images: _controller.images,
-                      isFavorite: _controller.isFavorite,
+                      isFavorite: SavedListingsController.instance.isSaved(
+                        listing.productId,
+                      ),
                       onBackPressed:
                           () => Navigator.of(context).pop(_controller.changed),
-                      onFavoriteToggle: _controller.toggleFavorite,
+                      onFavoriteToggle: canSave
+                          ? () => KuboSaveButton.toggle(context, listing)
+                          : null,
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),

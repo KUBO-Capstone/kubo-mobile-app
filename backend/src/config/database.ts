@@ -217,6 +217,20 @@ export function initDb(): void {
             UNIQUE (market_product_id, region, province_city, recorded_at)
         );
 
+        -- A buyer's saved (hearted) listings. One row per user x product. The
+        -- product row is never hard-deleted (see products.status), so a saved
+        -- listing that gets delisted is simply filtered out of the list query.
+        CREATE TABLE IF NOT EXISTS saved_listings (
+            saved_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            saved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE,
+            UNIQUE (user_id, product_id)
+        );
+
     `);
     console.log('Database tables created')
 }

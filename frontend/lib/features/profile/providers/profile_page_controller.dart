@@ -4,6 +4,7 @@ import '../../../shared/data/profile_records.dart';
 import '../../../shared/data/synthetic_records.dart';
 import '../../../shared/data/listing_service.dart';
 import '../../login/services/auth_service.dart';
+import '../../saved/providers/saved_listings_controller.dart';
 
 /// Profile sections shown in the tab row.
 enum ProfileSection { listings, reviews, about, saved }
@@ -99,9 +100,10 @@ class ProfilePageController extends ChangeNotifier {
   /// Synthetic reviews used by the reviews tab.
   List<SyntheticProfileReviewRecord> get reviews => syntheticProfileReviews;
 
-  /// Synthetic saved listings used by the saved tab.
+  /// The signed-in user's saved listings (own profile only), from the
+  /// app-wide store so the tab and the hearts elsewhere agree.
   List<SyntheticListingRecord> get savedListings =>
-      syntheticProfileSavedListings;
+      SavedListingsController.instance.listings;
 
   Future<void> loadListings() async {
     try {

@@ -5,6 +5,7 @@ import productRoutes from "./product.routes";
 import bagsakanRoutes from "./bagsakan.routes";
 import negotiationRoutes from "./negotiation.routes";
 import conversationRoutes from "./conversation.routes";
+import marketRoutes from "./market.routes";
 
 const router = Router();
 
@@ -14,5 +15,6 @@ router.use('/products', productRoutes);
 router.use('/bagsakan-centers', bagsakanRoutes);
 router.use('/negotiations', negotiationRoutes);
 router.use('/conversations', conversationRoutes);
+router.use('/market', marketRoutes);
 
 export default router;

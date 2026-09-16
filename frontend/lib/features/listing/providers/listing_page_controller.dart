@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../shared/data/market_service.dart';
 import '../../../shared/data/synthetic_records.dart';
 
 class ListingPageController extends ChangeNotifier {
@@ -19,6 +20,28 @@ class ListingPageController extends ChangeNotifier {
 
   bool _isFavorite = false;
   int _currentImageIndex = 0;
+
+  final MarketService _market = MarketService();
+
+  /// Market Watch reference for this crop in the seller's region; null when
+  /// nothing matched (mock rows, unknown crops, server down).
+  MarketReference? marketReference;
+
+  /// Looks up the reference price. Failures are silent: the comparison is a
+  /// hint under the price, not something the page depends on.
+  Future<void> loadMarketReference() async {
+    if (_listing.productId == null) return;
+    try {
+      marketReference = await _market.fetchReference(
+        crop: _listing.title,
+        region: _listing.regionLabel,
+      );
+    } catch (error) {
+      debugPrint('Market reference lookup failed: $error');
+      marketReference = null;
+    }
+    notifyListeners();
+  }
 
   SyntheticListingRecord get listing => _listing;
 
@@ -41,6 +64,12 @@ class ListingPageController extends ChangeNotifier {
   bool get isFavorite => _isFavorite;
 
   int get currentImageIndex => _currentImageIndex;
+
+  @override
+  void dispose() {
+    _market.dispose();
+    super.dispose();
+  }
 
   void toggleFavorite() {
     _isFavorite = !_isFavorite;

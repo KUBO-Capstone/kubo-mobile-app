@@ -8,6 +8,7 @@ import '../widgets/listing_tag.dart';
 import '../widgets/seller_card.dart';
 import '../widgets/make_offer_dialog.dart';
 import '../widgets/manage_listing_sheet.dart';
+import '../widgets/market_reference_line.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/synthetic_records.dart';
 import '../../../shared/data/message_service.dart';
@@ -45,6 +46,7 @@ class _ListingPageState extends State<ListingPage> {
       listing: widget.listing,
       images: _listingImages,
     );
+    _controller.loadMarketReference();
   }
 
   // Seller-only: edit, mark sold out / restore, or remove.
@@ -118,6 +120,12 @@ class _ListingPageState extends State<ListingPage> {
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _controller,
@@ -166,6 +174,13 @@ class _ListingPageState extends State<ListingPage> {
                                         fontWeight: FontWeight.w800,
                                         height: 1.2,
                                       ),
+                                    ),
+                                    // The buyer's overprice check: how the
+                                    // asking price sits against Market Watch.
+                                    MarketReferenceLine(
+                                      reference: _controller.marketReference,
+                                      askingPrice: listing.basePrice,
+                                      unit: listing.unit,
                                     ),
                                     const SizedBox(height: 8),
                                     Text(

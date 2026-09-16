@@ -1,5 +1,6 @@
 import { db } from '#config/database';
 import { hashPassword } from '#utils/password';
+import { seedMarketWatch } from './seed-market';
 
 // Shared plaintext for every seeded account, hashed once below. These rows only
 // simulate farmers for development; real farmers self-register through the app.
@@ -225,3 +226,4 @@ const seed = db.transaction(() => {
 });
 
 console.log('Seeded Kubo records:', seed());
+console.log('Seeded Market Watch reference prices:', seedMarketWatch());

@@ -16,14 +16,12 @@ String formatPeso(double value) {
   return parts.length > 1 ? '$buffer.${parts[1]}' : buffer.toString();
 }
 
-/// `June 2026` for the "as of" labels.
-String formatMonth(DateTime? date) {
+/// `Sep 16, 2026` for the "as of" labels. DA publishes daily, so the day
+/// matters.
+String formatDate(DateTime? date) {
   if (date == null) return '—';
-  const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ];
-  return '${months[date.month - 1]} ${date.year}';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${months[date.month - 1]} ${date.day}, ${date.year}';
 }
 
 /// The +/- column: green ▲ for a rise, red ▼ for a drop, grey dash when

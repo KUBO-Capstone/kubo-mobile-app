@@ -188,8 +188,12 @@ export function initDb(): void {
             FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
         );
 
-        -- Market Watch: reference prices per area (DA/DTI-style price monitoring),
-        -- independent of Kubo listings. Seeded by scripts/seed-market.ts.
+        -- Market Watch: reference prices per area, independent of Kubo listings.
+        -- Rows come from two writers: scripts/seed-market.ts (demo fallback,
+        -- source = 'seed') and market/market-import.ts, which scrapes DA Bantay
+        -- Presyo daily (source = 'da-bantay-presyo'). external_key ties a product
+        -- to its DA commodity ('da:<category>:<commodity>') so re-imports find
+        -- the same row; seed products that DA also covers carry the same key.
         CREATE TABLE IF NOT EXISTS market_products (
             market_product_id INTEGER PRIMARY KEY AUTOINCREMENT,
             name VARCHAR(100) UNIQUE NOT NULL,
@@ -197,25 +201,38 @@ export function initDb(): void {
             product_groups TEXT NOT NULL,
             unit_measurement VARCHAR(20) NOT NULL CHECK (unit_measurement IN ('kg', 'g', 'lb', 'oz', 'liter', 'ml', 'piece')),
             dti_srp REAL,
-            crop_keywords TEXT NOT NULL
+            crop_keywords TEXT NOT NULL,
+            external_key VARCHAR(100) UNIQUE
         );
+        -- Two kinds of row share this table (area_type):
+        --   'region' - one per product x region x day: avg / lowest / highest
+        --              across that region's markets, sample_size = market count,
+        --              province_city = '' and lat/lng = the region's centroid.
+        --              This is the history the trend arrows compare.
+        --   'market' - one per product x market for the LATEST day only (the
+        --              importer deletes older market rows): province_city is
+        --              the market name, lat/lng from market/market-areas.ts
+        --              when known. These are the map pins.
         CREATE TABLE IF NOT EXISTS market_prices (
             market_price_id INTEGER PRIMARY KEY AUTOINCREMENT,
             market_product_id INTEGER NOT NULL,
             region VARCHAR(50) NOT NULL,
             region_name VARCHAR(100) NOT NULL,
+            area_type VARCHAR(10) NOT NULL DEFAULT 'market' CHECK (area_type IN ('region', 'market')),
             province_city VARCHAR(100) NOT NULL,
             latitude REAL,
             longitude REAL,
             avg_price REAL NOT NULL,
             lowest_price REAL NOT NULL,
             highest_price REAL NOT NULL,
+            sample_size INTEGER NOT NULL DEFAULT 1,
             recorded_at DATE NOT NULL,
             source VARCHAR(50) NOT NULL DEFAULT 'seed',
 
             FOREIGN KEY (market_product_id) REFERENCES market_products(market_product_id) ON DELETE CASCADE,
             UNIQUE (market_product_id, region, province_city, recorded_at)
         );
+        CREATE INDEX IF NOT EXISTS idx_market_prices_product_date ON market_prices (market_product_id, recorded_at);
 
         -- A buyer's saved (hearted) listings. One row per user x product. The
         -- product row is never hard-deleted (see products.status), so a saved

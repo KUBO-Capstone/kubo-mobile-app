@@ -19,9 +19,13 @@ class MarketSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final area = this.area;
-    final title = area == null ? product.name : '${area.regionName} - ${area.provinceCity}';
+    final title = area == null ? product.name : area.title;
     final highest = area?.highestPrice ?? product.highestPrice;
     final lowest = area?.lowestPrice ?? product.lowestPrice;
+    final source = area?.source ?? product.source;
+    // A region card says how many markets its numbers cover; a single
+    // market has one price, so highest/lowest would just repeat it.
+    final isSingleMarket = area != null && !area.isRegion;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -47,7 +51,7 @@ class MarketSummaryCard extends StatelessWidget {
                 ),
               ),
               Text(
-                'as of ${formatMonth(area?.asOf ?? product.asOf)}',
+                'as of ${formatDate(area?.asOf ?? product.asOf)}',
                 style: const TextStyle(color: AppColors.gray, fontSize: 10),
               ),
             ],
@@ -57,14 +61,35 @@ class MarketSummaryCard extends StatelessWidget {
             _Line(label: 'Product', value: product.name),
           ],
           const SizedBox(height: 8),
-          _Line(label: 'Highest Price', value: _peso(highest)),
-          _Line(label: 'Lowest Price', value: _peso(lowest)),
+          if (isSingleMarket)
+            _Line(label: 'Price at this market', value: _peso(area.avgPrice))
+          else ...[
+            _Line(label: 'Highest Price', value: _peso(highest)),
+            _Line(label: 'Lowest Price', value: _peso(lowest)),
+            if (area != null)
+              _Line(label: 'Markets covered', value: '${area.sampleSize}'),
+          ],
           const SizedBox(height: 6),
           _Line(label: 'Nationwide Avg. Price', value: _peso(product.nationwideAvg)),
           _Line(label: 'DTI SRP', value: product.dtiSrp == null ? 'Not covered' : _peso(product.dtiSrp)),
           const SizedBox(height: 6),
           _Line(label: 'Classification', value: product.classification),
           _Line(label: 'Group(s)', value: product.groups.join(', ')),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(
+                source == marketSourceDa ? Icons.verified_outlined : Icons.science_outlined,
+                size: 12,
+                color: AppColors.gray,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Source: ${marketSourceLabel(source)}',
+                style: const TextStyle(color: AppColors.gray, fontSize: 10),
+              ),
+            ],
+          ),
         ],
       ),
     );

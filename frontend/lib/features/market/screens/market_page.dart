@@ -162,6 +162,10 @@ class _MarketPageState extends State<MarketPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: 16),
         children: [
+          _SourceNote(
+            realDataCount: _controller.realDataCount,
+            latestRealAsOf: _controller.latestRealAsOf,
+          ),
           for (final group in groups)
             _ClassificationSection(
               name: group.key,
@@ -170,6 +174,37 @@ class _MarketPageState extends State<MarketPage> {
               onToggle: () => _controller.toggleExpanded(group.key),
               onOpen: _openProduct,
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Where the numbers come from. Until the DA import has run everything is
+/// the illustrative seed, and the tab should say so rather than pass it off.
+class _SourceNote extends StatelessWidget {
+  const _SourceNote({required this.realDataCount, required this.latestRealAsOf});
+
+  final int realDataCount;
+  final DateTime? latestRealAsOf;
+
+  @override
+  Widget build(BuildContext context) {
+    final live = realDataCount > 0;
+    final text = live
+        ? 'Prices from DA Bantay Presyo, as of ${formatDate(latestRealAsOf)} '
+            '($realDataCount ${realDataCount == 1 ? 'product' : 'products'}); the rest are illustrative.'
+        : 'Illustrative prices — the DA Bantay Presyo import has not run yet.';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(live ? Icons.verified_outlined : Icons.science_outlined, size: 13, color: AppColors.gray),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(text, style: const TextStyle(color: AppColors.gray, fontSize: 10, height: 1.4)),
+          ),
         ],
       ),
     );

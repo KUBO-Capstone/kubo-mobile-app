@@ -25,6 +25,19 @@ class MarketWatchController extends ChangeNotifier {
   /// Classifications the user expanded past [collapsedRowLimit].
   final Set<String> expanded = <String>{};
 
+  /// Products whose current figures come from the DA import (vs. the seed).
+  int get realDataCount => _all.where((p) => p.isRealData).length;
+
+  /// Newest DA date across products; null until the importer has run.
+  DateTime? get latestRealAsOf {
+    DateTime? latest;
+    for (final p in _all) {
+      final date = p.asOf;
+      if (p.isRealData && date != null && (latest == null || date.isAfter(latest))) latest = date;
+    }
+    return latest;
+  }
+
   Future<void> load() async {
     isLoading = true;
     errorMessage = null;

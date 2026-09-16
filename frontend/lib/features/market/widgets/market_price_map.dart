@@ -131,7 +131,7 @@ class _MarketPriceMapState extends State<MarketPriceMap> {
                                 circles: [
                                   CircleMarker(
                                     point: LatLng(widget.selectedArea!.latitude!, widget.selectedArea!.longitude!),
-                                    radius: 6000,
+                                    radius: widget.selectedArea!.isRegion ? 6000 : 1500,
                                     useRadiusInMeter: true,
                                     color: AppColors.green.withValues(alpha: 0.15),
                                     borderColor: AppColors.green,

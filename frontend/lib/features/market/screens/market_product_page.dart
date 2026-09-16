@@ -137,20 +137,31 @@ class _MarketProductPageState extends State<MarketProductPage> {
           child: MarketSummaryCard(product: product),
         ),
         const SizedBox(height: 8),
-        const MarketTableHeader(labels: ['Region', 'Province/City', 'Avg. Price (Php)', 'Unit', '+/-']),
+        const MarketTableHeader(labels: ['Region', 'Markets', 'Avg. Price (Php)', 'Unit', '+/-']),
         const Divider(height: 1, color: AppColors.border),
         if (product.areas.isEmpty)
           const Padding(
             padding: EdgeInsets.all(24),
             child: Text('No area prices recorded yet.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.gray)),
           ),
+        // One row per region: the average across its monitored markets, and
+        // how many markets that is. The per-market prices are on the map.
         for (final area in product.areas)
           MarketTableRow(
             leading: area.region,
-            secondary: area.provinceCity,
+            secondary: '${area.sampleSize} ${area.sampleSize == 1 ? 'market' : 'markets'}',
             price: area.avgPrice,
             unit: area.unit,
             changePct: area.changePct,
+          ),
+        if (product.areas.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Text(
+              '+/- compares with the same region a week earlier. Regions record on different days; '
+              'each row shows its own latest date on the map.',
+              style: const TextStyle(color: AppColors.gray, fontSize: 10, height: 1.4),
+            ),
           ),
       ],
     );

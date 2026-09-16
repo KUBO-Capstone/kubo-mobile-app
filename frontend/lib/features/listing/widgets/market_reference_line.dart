@@ -73,7 +73,8 @@ class MarketReferenceLine extends StatelessWidget {
               ),
             ),
             Text(
-              'Market avg PHP ${comparison.toStringAsFixed(comparison == comparison.roundToDouble() ? 0 : 2)}/${ref.unit} $scope · ${ref.name}',
+              'Market avg PHP ${comparison.toStringAsFixed(comparison == comparison.roundToDouble() ? 0 : 2)}/${ref.unit} $scope · ${ref.name}'
+              '${ref.source == marketSourceDa ? ' · DA Bantay Presyo' : ''}',
               style: const TextStyle(color: AppColors.gray, fontSize: 12),
             ),
             const Icon(Icons.chevron_right, size: 14, color: AppColors.gray),

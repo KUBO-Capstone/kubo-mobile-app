@@ -19,6 +19,13 @@ class AuthService {
   static int? get currentUserId =>
       int.tryParse(currentUser?['user_id']?.toString() ?? '');
 
+  /// Ends the in-memory session. There is no server-side session to end
+  /// yet; callers also clear any per-user caches (saved listings) and
+  /// rebuild the navigator so nothing from the old account stays mounted.
+  static void logout() {
+    currentUser = null;
+  }
+
   Future<Map<String, dynamic>> register({
     required String firstName,
     required String lastName,

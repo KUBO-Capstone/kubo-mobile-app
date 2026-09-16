@@ -13,6 +13,7 @@ class KuboIconActionButton extends StatelessWidget {
     this.iconSize = 20,
     this.backgroundColor = AppColors.white,
     this.iconColor = AppColors.black,
+    this.badgeCount = 0,
   });
 
   /// SVG icon asset rendered inside the button.
@@ -33,24 +34,62 @@ class KuboIconActionButton extends StatelessWidget {
   /// Tint color applied to the icon.
   final Color iconColor;
 
+  /// Count shown in a green badge on the top-right corner (same green as the
+  /// inbox unread dot); 0 hides the badge.
+  final int badgeCount;
+
   @override
   Widget build(BuildContext context) {
     return InkResponse(
       onTap: onTap,
       radius: size / 2 + 6,
-      child: Container(
+      child: SizedBox(
         width: size,
         height: size,
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          shape: BoxShape.circle,
-        ),
-        child: Center(
-          child: AppSvgIcon(
-            assetPath: assetPath,
-            size: iconSize,
-            color: iconColor,
-          ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: AppSvgIcon(
+                  assetPath: assetPath,
+                  size: iconSize,
+                  color: iconColor,
+                ),
+              ),
+            ),
+            if (badgeCount > 0)
+              Positioned(
+                top: -3,
+                right: -3,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 16),
+                  height: 16,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.green,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: backgroundColor, width: 1.5),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    badgeCount > 99 ? '99+' : '$badgeCount',
+                    style: const TextStyle(
+                      color: AppColors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

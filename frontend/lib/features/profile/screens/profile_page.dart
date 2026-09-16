@@ -11,6 +11,7 @@ import '../../search/screens/search_page.dart';
 import '../../../shared/data/synthetic_records.dart';
 import '../../listing/screens/create_listing_page.dart';
 import '../../listing/widgets/manage_listing_sheet.dart';
+import '../../login/screens/login_page.dart';
 import '../../login/services/auth_service.dart';
 import '../../saved/providers/saved_listings_controller.dart';
 import '../providers/profile_page_controller.dart';
@@ -440,9 +441,57 @@ class _ProfilePageState extends State<ProfilePage> {
             icon: Icons.person_outline,
             value: _controller.profile.username,
           ),
+          if (widget.isOwnProfile) ...[
+            const SizedBox(height: 28),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _logout,
+                icon: const Icon(Icons.logout, size: 18),
+                label: const Text(
+                  'Log out',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.black,
+                  side: const BorderSide(color: AppColors.border),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  // Ends the session and drops the whole navigator stack so no screen from
+  // the old account stays mounted behind the login page.
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text('You will need to sign in again to make offers or message sellers.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    AuthService.logout();
+    SavedListingsController.instance.clear();
+    Navigator.of(context).pushNamedAndRemoveUntil(LoginPage.routeName, (_) => false);
   }
 
   Widget _buildSavedSection() {

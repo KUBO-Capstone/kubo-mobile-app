@@ -16,8 +16,8 @@ import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
 import '../../../shared/widgets/kubo_icon_action_button.dart';
 import '../../../shared/widgets/kubo_listing_card.dart';
 import '../../../shared/widgets/kubo_location_badge.dart';
+import '../../chat/providers/messages_controller.dart';
 import '../../chat/screens/messages_page.dart';
-import '../../login/screens/login_page.dart';
 import '../../market/screens/market_page.dart';
 import '../../listing/screens/create_listing_page.dart';
 import '../../notification/screens/notification_page.dart';
@@ -70,6 +70,10 @@ class _ExplorePageState extends State<ExplorePage> {
 
   final ListingService _listingService = ListingService();
   final BagsakanService _bagsakanService = BagsakanService();
+
+  /// Inbox summary for the unread badge on the chat icon. Loaded on entry and
+  /// again whenever the inbox pops back to this screen.
+  final MessagesController _messages = MessagesController();
   List<SyntheticListingRecord> _allListings = const <SyntheticListingRecord>[];
   List<BagsakanCenter> _allCenters = const <BagsakanCenter>[];
 
@@ -120,12 +124,14 @@ class _ExplorePageState extends State<ExplorePage> {
     // Explore is the landing screen after login, so this is where the hearts
     // on every grid get their initial state (and re-key on a different user).
     SavedListingsController.instance.loadIds();
+    _messages.load();
   }
 
   @override
   void dispose() {
     _listingService.dispose();
     _bagsakanService.dispose();
+    _messages.dispose();
     super.dispose();
   }
 
@@ -348,9 +354,17 @@ class _ExplorePageState extends State<ExplorePage> {
                 () => Navigator.of(context).pushNamed(SavedListingsPage.routeName),
           ),
           const SizedBox(width: 8),
-          KuboIconActionButton(
-            assetPath: AppIcons.chat,
-            onTap: () => Navigator.of(context).pushNamed(MessagesPage.routeName),
+          AnimatedBuilder(
+            animation: _messages,
+            builder: (context, _) => KuboIconActionButton(
+              assetPath: AppIcons.chat,
+              badgeCount: _messages.unreadThreadCount,
+              onTap: () async {
+                await Navigator.of(context).pushNamed(MessagesPage.routeName);
+                // Threads opened from the inbox were marked read; recount.
+                _messages.load();
+              },
+            ),
           ),
           const SizedBox(width: 10),
         ],
@@ -570,36 +584,6 @@ class _ExploreDrawer extends StatelessWidget {
                 iconPath: AppIcons.helpGuide,
               ),
               DrawerListTile(title: 'Report', iconPath: AppIcons.flagReport),
-
-              // Push logout button to the bottom of the drawer
-              const Spacer(),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    fixedSize: const Size.fromHeight(50),
-                    backgroundColor: AppColors.green,
-                    foregroundColor: AppColors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const LoginPage(),
-                      ),
-                    );
-                    // add more logout logic like deleting user session or clear user data
-                  },
-                  child: const Text(
-                    'Logout',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
             ],
           ),
         ),

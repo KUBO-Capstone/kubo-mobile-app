@@ -118,6 +118,12 @@ class SavedListingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Forgets everything; called on logout so the next account starts clean.
+  void clear() {
+    _reset();
+    notifyListeners();
+  }
+
   void _reset() {
     _savedIds = <int>{};
     listings = const [];

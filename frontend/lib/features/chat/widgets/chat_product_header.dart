@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/message_service.dart';
 import '../../../shared/data/negotiation_service.dart';
+import '../../../shared/data/order_service.dart';
 import 'counter_offer_dialog.dart';
 
 /// Listing card pinned above the thread, with the offer control the
 /// wireframe puts in its corner: "Make offer" for a buyer with no open
-/// offer, Accept / Counter / Decline for whoever's turn it is, or a status
-/// line while waiting on the other side.
+/// offer, Accept / Counter / Decline for whoever's turn it is, a status
+/// line while waiting on the other side, then "Arrange pickup" once the
+/// offer is accepted and "View order" once it has been ordered.
 class ChatProductHeader extends StatelessWidget {
   const ChatProductHeader({
     super.key,
@@ -17,6 +19,8 @@ class ChatProductHeader extends StatelessWidget {
     required this.busy,
     required this.onMakeOffer,
     required this.onRespond,
+    required this.onPlaceOrder,
+    required this.onOpenOrder,
     this.onOpenListing,
   });
 
@@ -28,6 +32,12 @@ class ChatProductHeader extends StatelessWidget {
 
   final VoidCallback onMakeOffer;
   final void Function(NegotiationAction action, {double? price, double? quantity}) onRespond;
+
+  /// Buyer arranges pickup / delivery for the accepted offer.
+  final VoidCallback onPlaceOrder;
+
+  /// Either side opens the order placed on this thread.
+  final void Function(int orderId) onOpenOrder;
   final VoidCallback? onOpenListing;
 
   @override
@@ -107,6 +117,8 @@ class ChatProductHeader extends StatelessWidget {
             busy: busy,
             onMakeOffer: onMakeOffer,
             onRespond: onRespond,
+            onPlaceOrder: onPlaceOrder,
+            onOpenOrder: onOpenOrder,
           ),
         ],
       ),
@@ -121,6 +133,8 @@ class _OfferControl extends StatelessWidget {
     required this.busy,
     required this.onMakeOffer,
     required this.onRespond,
+    required this.onPlaceOrder,
+    required this.onOpenOrder,
   });
 
   final ConversationRecord conversation;
@@ -128,6 +142,8 @@ class _OfferControl extends StatelessWidget {
   final bool busy;
   final VoidCallback onMakeOffer;
   final void Function(NegotiationAction action, {double? price, double? quantity}) onRespond;
+  final VoidCallback onPlaceOrder;
+  final void Function(int orderId) onOpenOrder;
 
   Future<void> _counter(BuildContext context) async {
     final offer = conversation.negotiation;
@@ -195,6 +211,54 @@ class _OfferControl extends StatelessWidget {
             onTap: busy ? null : () => onRespond(NegotiationAction.decline),
           ),
         ],
+      );
+    }
+
+    // Ordered: the deal has moved on to fulfilment.
+    final orderId = thread.orderId;
+    if (orderId != null) {
+      final orderStatus = thread.orderStatus ?? OrderStatus.pending;
+      final statusLabel = switch (orderStatus) {
+        OrderStatus.pending => 'placed',
+        OrderStatus.inTransit => 'on its way',
+        OrderStatus.delivered => 'completed',
+        OrderStatus.cancelled => 'cancelled',
+      };
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Order #$orderId $statusLabel · $termsLabel',
+              style: const TextStyle(color: AppColors.gray, fontSize: 12),
+            ),
+          ),
+          _SmallButton(
+            label: 'View order',
+            filled: orderStatus.isOpen,
+            onTap: () => onOpenOrder(orderId),
+          ),
+        ],
+      );
+    }
+
+    // Accepted, not yet ordered: the buyer's move.
+    if (thread.isAwaitingOrder) {
+      if (thread.canPlaceOrder(userId)) {
+        return Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Offer accepted · $termsLabel',
+                style: const TextStyle(color: AppColors.gray, fontSize: 12),
+              ),
+            ),
+            _SmallButton(label: 'Arrange pickup', filled: true, onTap: busy ? null : onPlaceOrder),
+          ],
+        );
+      }
+      return Text(
+        'Offer accepted · waiting for ${thread.buyerName} to arrange pickup or delivery',
+        style: const TextStyle(color: AppColors.gray, fontSize: 12),
       );
     }
 

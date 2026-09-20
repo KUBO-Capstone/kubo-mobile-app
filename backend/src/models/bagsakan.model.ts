@@ -45,4 +45,9 @@ export const BagsakanModel = {
         }) as Record<string, unknown>[];
         return rows.map(mapCenter);
     },
+
+    findById(centerId: number): BagsakanCenter | undefined {
+        const row = db.prepare(`${centerQuery} WHERE c.center_id = ?`).get(centerId) as Record<string, unknown> | undefined;
+        return row ? mapCenter(row) : undefined;
+    },
 };

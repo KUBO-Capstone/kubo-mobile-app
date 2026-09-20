@@ -10,6 +10,7 @@ class ProfileSectionTabBar extends StatelessWidget {
     required this.selectedSection,
     required this.onSectionSelected,
     this.showSavedTab = true,
+    this.showOrdersTab = true,
   });
 
   /// Currently selected section.
@@ -20,6 +21,9 @@ class ProfileSectionTabBar extends StatelessWidget {
 
   /// Whether the Saved tab should be shown.
   final bool showSavedTab;
+
+  /// Whether the Orders tab should be shown (own profile only).
+  final bool showOrdersTab;
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +53,12 @@ class ProfileSectionTabBar extends StatelessWidget {
               label: 'Saved',
               selected: selectedSection == ProfileSection.saved,
               onTap: () => onSectionSelected(ProfileSection.saved),
+            ),
+          if (showOrdersTab)
+            _ProfileTabButton(
+              label: 'Orders',
+              selected: selectedSection == ProfileSection.orders,
+              onTap: () => onSectionSelected(ProfileSection.orders),
             ),
         ],
       ),

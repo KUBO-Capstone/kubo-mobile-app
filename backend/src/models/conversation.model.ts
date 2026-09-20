@@ -3,8 +3,10 @@ import { db } from "#config/database";
 // Mirrors the CHECK constraint on messages.message_type in config/database.ts.
 // 'text' is a chat line; the rest are offer events written by the negotiation
 // controller so the thread doubles as the offer history (a counter overwrites
-// the price on the negotiations row, the messages keep every step).
-export type MessageType = 'text' | 'offer' | 'counter' | 'accepted' | 'declined';
+// the price on the negotiations row, the messages keep every step). 'order'
+// is written by the order controller for placed / shipped / delivered /
+// cancelled, with `order_id` pointing at the order.
+export type MessageType = 'text' | 'offer' | 'counter' | 'accepted' | 'declined' | 'order';
 
 export interface Message {
     message_id: number;
@@ -14,6 +16,7 @@ export interface Message {
     content: string;
     message_type: MessageType;
     negotiation_id: number | null;
+    order_id: number | null;
     offer_price: number | null;
     offer_quantity: number | null;
     read_at: string | null;
@@ -45,6 +48,9 @@ export interface ConversationSummary {
     negotiation_status: string | null;
     offered_price: number | null;
     offered_quantity: number | null;
+    // The order placed on that latest negotiation, if any.
+    order_id: number | null;
+    order_status: string | null;
 }
 
 const messageQuery = `
@@ -63,6 +69,7 @@ function mapMessage(row: Record<string, unknown>): Message {
         content: String(row.content),
         message_type: String(row.message_type) as MessageType,
         negotiation_id: num(row.negotiation_id),
+        order_id: num(row.order_id),
         offer_price: num(row.offer_price),
         offer_quantity: num(row.offer_quantity),
         read_at: row.read_at ? String(row.read_at) : null,
@@ -81,7 +88,8 @@ const conversationQuery = `
            COALESCE(a.city_municipality, 'Philippines') AS seller_location,
            lm.content AS last_message, lm.message_type AS last_message_type, lm.sent_at AS last_message_at,
            (SELECT COUNT(*) FROM messages um WHERE um.conversation_id = c.conversation_id AND um.sender_id != @userId AND um.read_at IS NULL) AS unread_count,
-           n.negotiation_id, n.status AS negotiation_status, n.offered_price, n.offered_quantity
+           n.negotiation_id, n.status AS negotiation_status, n.offered_price, n.offered_quantity,
+           o.order_id, o.order_status
     FROM conversations c
     JOIN users b ON b.user_id = c.buyer_id
     JOIN users s ON s.user_id = c.seller_id
@@ -94,6 +102,7 @@ const conversationQuery = `
     LEFT JOIN negotiations n ON n.negotiation_id = (
         SELECT negotiation_id FROM negotiations WHERE conversation_id = c.conversation_id ORDER BY negotiation_id DESC LIMIT 1
     )
+    LEFT JOIN orders o ON o.negotiation_id = n.negotiation_id
 `;
 
 function mapConversation(row: Record<string, unknown>): ConversationSummary {
@@ -121,6 +130,8 @@ function mapConversation(row: Record<string, unknown>): ConversationSummary {
         negotiation_status: str(row.negotiation_status),
         offered_price: num(row.offered_price),
         offered_quantity: num(row.offered_quantity),
+        order_id: num(row.order_id),
+        order_status: str(row.order_status),
     };
 }
 
@@ -167,18 +178,20 @@ export const ConversationModel = {
         content: string;
         message_type?: MessageType;
         negotiation_id?: number;
+        order_id?: number;
         offer_price?: number;
         offer_quantity?: number;
     }): Message {
         const result = db.prepare(`
-            INSERT INTO messages (conversation_id, sender_id, content, message_type, negotiation_id, offer_price, offer_quantity)
-            VALUES (@conversation_id, @sender_id, @content, @message_type, @negotiation_id, @offer_price, @offer_quantity)
+            INSERT INTO messages (conversation_id, sender_id, content, message_type, negotiation_id, order_id, offer_price, offer_quantity)
+            VALUES (@conversation_id, @sender_id, @content, @message_type, @negotiation_id, @order_id, @offer_price, @offer_quantity)
         `).run({
             conversation_id: input.conversation_id,
             sender_id: input.sender_id,
             content: input.content,
             message_type: input.message_type ?? 'text',
             negotiation_id: input.negotiation_id ?? null,
+            order_id: input.order_id ?? null,
             offer_price: input.offer_price ?? null,
             offer_quantity: input.offer_quantity ?? null,
         });

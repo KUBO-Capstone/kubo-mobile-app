@@ -5,25 +5,28 @@ import 'package:http/http.dart' as http;
 import '../../core/constants/api_config.dart';
 import 'api_request.dart';
 import 'negotiation_service.dart';
+import 'order_service.dart';
 
 /// Kind of chat line. Mirrors the `messages.message_type` CHECK constraint.
 ///
-/// [text] is a typed message; the rest are offer events the server writes
-/// when an offer is made, countered, accepted or declined, so the thread is
-/// also the negotiation history.
+/// [text] is a typed message; the rest are events the server writes so the
+/// thread is also the deal's history: offer events when an offer is made,
+/// countered, accepted or declined, and [order] when the order behind an
+/// accepted offer is placed, shipped, picked up or cancelled.
 enum MessageType {
   text,
   offer,
   counter,
   accepted,
-  declined;
+  declined,
+  order;
 
   static MessageType parse(String? raw) => MessageType.values.firstWhere(
         (type) => type.name == raw,
         orElse: () => MessageType.text,
       );
 
-  bool get isOfferEvent => this != text;
+  bool get isOfferEvent => this != text && this != order;
 }
 
 /// One line in a conversation, as returned by
@@ -38,6 +41,7 @@ class MessageRecord {
     required this.type,
     required this.sentAt,
     this.negotiationId,
+    this.orderId,
     this.offerPrice,
     this.offerQuantity,
     this.readAt,
@@ -53,6 +57,7 @@ class MessageRecord {
       type: MessageType.parse(json['message_type']?.toString()),
       sentAt: DateTime.tryParse(json['sent_at']?.toString() ?? ''),
       negotiationId: (json['negotiation_id'] as num?)?.toInt(),
+      orderId: (json['order_id'] as num?)?.toInt(),
       offerPrice: (json['offer_price'] as num?)?.toDouble(),
       offerQuantity: (json['offer_quantity'] as num?)?.toDouble(),
       readAt: DateTime.tryParse(json['read_at']?.toString() ?? ''),
@@ -67,6 +72,9 @@ class MessageRecord {
   final MessageType type;
   final DateTime? sentAt;
   final int? negotiationId;
+
+  /// Set on [MessageType.order] lines; opens the order page.
+  final int? orderId;
   final double? offerPrice;
   final double? offerQuantity;
   final DateTime? readAt;
@@ -98,10 +106,13 @@ class ConversationRecord {
     this.negotiationStatus,
     this.offeredPrice,
     this.offeredQuantity,
+    this.orderId,
+    this.orderStatus,
   });
 
   factory ConversationRecord.fromJson(Map<String, dynamic> json) {
     final rawStatus = json['negotiation_status']?.toString();
+    final rawOrderStatus = json['order_status']?.toString();
     return ConversationRecord(
       id: (json['conversation_id'] as num).toInt(),
       buyerId: (json['buyer_id'] as num).toInt(),
@@ -125,6 +136,8 @@ class ConversationRecord {
       negotiationStatus: rawStatus == null ? null : NegotiationStatus.parse(rawStatus),
       offeredPrice: (json['offered_price'] as num?)?.toDouble(),
       offeredQuantity: (json['offered_quantity'] as num?)?.toDouble(),
+      orderId: (json['order_id'] as num?)?.toInt(),
+      orderStatus: rawOrderStatus == null ? null : OrderStatus.parse(rawOrderStatus),
     );
   }
 
@@ -151,6 +164,10 @@ class ConversationRecord {
   final double? offeredPrice;
   final double? offeredQuantity;
 
+  /// The order placed on that latest offer, if any.
+  final int? orderId;
+  final OrderStatus? orderStatus;
+
   bool isBuyer(int userId) => buyerId == userId;
   bool isSeller(int userId) => sellerId == userId;
 
@@ -174,9 +191,18 @@ class ConversationRecord {
   }
 
   /// Whether [userId] can open a fresh offer: only the buyer, only when the
-  /// last one is closed (or there is none) and the listing is still up.
+  /// last one is closed (or there is none) and the listing is still up. An
+  /// accepted offer that has not been ordered yet blocks a new one — the
+  /// buyer should place the order (or the seller should wait) instead.
   bool canMakeOffer(int userId) =>
-      isBuyer(userId) && !hasOpenOffer && isProductAvailable;
+      isBuyer(userId) && !hasOpenOffer && !canPlaceOrder(userId) && isProductAvailable;
+
+  /// Accepted and not yet ordered: the buyer's next step is to arrange
+  /// pickup or delivery.
+  bool get isAwaitingOrder =>
+      negotiationStatus == NegotiationStatus.accepted && orderId == null;
+
+  bool canPlaceOrder(int userId) => isBuyer(userId) && isAwaitingOrder;
 
   /// Bridges to the negotiation client, which wants a [NegotiationRecord].
   NegotiationRecord? get negotiation {

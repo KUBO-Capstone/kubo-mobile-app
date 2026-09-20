@@ -7,6 +7,7 @@ import negotiationRoutes from "./negotiation.routes";
 import conversationRoutes from "./conversation.routes";
 import marketRoutes from "./market.routes";
 import savedListingRoutes from "./saved-listing.routes";
+import orderRoutes from "./order.routes";
 
 const router = Router();
 
@@ -18,5 +19,6 @@ router.use('/negotiations', negotiationRoutes);
 router.use('/conversations', conversationRoutes);
 router.use('/market', marketRoutes);
 router.use('/saved-listings', savedListingRoutes);
+router.use('/orders', orderRoutes);
 
 export default router;

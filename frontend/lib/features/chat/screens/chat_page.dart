@@ -4,9 +4,12 @@ import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/listing_service.dart';
 import '../../../shared/data/message_service.dart';
 import '../../../shared/data/negotiation_service.dart';
+import '../../../shared/data/order_service.dart';
 import '../../../shared/data/synthetic_records.dart';
 import '../../listing/screens/listing_page.dart';
 import '../../listing/widgets/make_offer_dialog.dart';
+import '../../orders/screens/order_page.dart';
+import '../../orders/screens/place_order_page.dart';
 import '../../profile/screens/profile_page.dart';
 import '../providers/chat_controller.dart';
 import '../widgets/chat_input_bar.dart';
@@ -111,6 +114,28 @@ class _ChatPageState extends State<ChatPage> {
     _showError(await _controller.respond(action, price: price, quantity: quantity));
   }
 
+  // Buyer turns the accepted offer into an order; the server writes the
+  // "Placed order" line, so the thread only needs re-reading afterwards.
+  Future<void> _placeOrder(ConversationRecord thread) async {
+    final offer = thread.negotiation;
+    if (offer == null) return;
+    final order = await Navigator.of(context).push<OrderRecord>(
+      MaterialPageRoute<OrderRecord>(builder: (_) => PlaceOrderPage(offer: offer)),
+    );
+    if (order == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Order #${order.id} placed.')),
+    );
+    await _controller.refresh(silent: true);
+  }
+
+  Future<void> _openOrder(int orderId) async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(builder: (_) => OrderPage(orderId: orderId, openChat: false)),
+    );
+    if (mounted) await _controller.refresh(silent: true);
+  }
+
   Future<void> _openListing(ConversationRecord thread) async {
     final service = ListingService();
     try {
@@ -170,6 +195,8 @@ class _ChatPageState extends State<ChatPage> {
                   busy: _controller.isOfferBusy,
                   onMakeOffer: () => _makeOffer(thread),
                   onRespond: _respond,
+                  onPlaceOrder: () => _placeOrder(thread),
+                  onOpenOrder: _openOrder,
                   onOpenListing: () => _openListing(thread),
                 ),
                 _CounterpartyBlock(
@@ -233,6 +260,7 @@ class _ChatPageState extends State<ChatPage> {
         return ChatMessageBubble(
           message: message,
           isMine: userId != null && message.isMine(userId),
+          onOpenOrder: _openOrder,
         );
       },
     );

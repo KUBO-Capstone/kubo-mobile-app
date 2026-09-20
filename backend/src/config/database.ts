@@ -61,14 +61,19 @@ export function initDb(): void {
 
         CREATE TABLE IF NOT EXISTS orders (
             order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            negotiation_id INTEGER NOT NULL UNIQUE,
             buyer_id INTEGER NOT NULL,
+            seller_id INTEGER NOT NULL,
             drop_off_center_id INTEGER,
             total_amount REAL NOT NULL,
             order_status VARCHAR(20) DEFAULT 'pending' CHECK (order_status IN ('pending', 'in transit', 'delivered', 'cancelled')),
             delivery_method VARCHAR(20) NOT NULL CHECK (delivery_method IN ('courier', 'meetup')),
             order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
+            FOREIGN KEY (negotiation_id) REFERENCES negotiations(negotiation_id) ON DELETE CASCADE,
             FOREIGN KEY (buyer_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY (seller_id) REFERENCES users(user_id) ON DELETE CASCADE,
             FOREIGN KEY (drop_off_center_id) REFERENCES bagsakan_centers(center_id)
         );
 
@@ -149,8 +154,9 @@ export function initDb(): void {
             conversation_id INTEGER NOT NULL,
             sender_id INTEGER NOT NULL,
             content TEXT NOT NULL,
-            message_type VARCHAR(20) NOT NULL DEFAULT 'text' CHECK (message_type IN ('text', 'offer', 'counter', 'accepted', 'declined')),
+            message_type VARCHAR(20) NOT NULL DEFAULT 'text' CHECK (message_type IN ('text', 'offer', 'counter', 'accepted', 'declined', 'order')),
             negotiation_id INTEGER,
+            order_id INTEGER,
             offer_price REAL,
             offer_quantity REAL,
             read_at DATETIME,
@@ -158,7 +164,8 @@ export function initDb(): void {
 
             FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE,
             FOREIGN KEY (sender_id) REFERENCES users(user_id) ON DELETE CASCADE,
-            FOREIGN KEY (negotiation_id) REFERENCES negotiations(negotiation_id) ON DELETE SET NULL
+            FOREIGN KEY (negotiation_id) REFERENCES negotiations(negotiation_id) ON DELETE SET NULL,
+            FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS negotiations (

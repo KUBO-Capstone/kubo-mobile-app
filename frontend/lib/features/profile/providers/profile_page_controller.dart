@@ -6,8 +6,9 @@ import '../../../shared/data/listing_service.dart';
 import '../../login/services/auth_service.dart';
 import '../../saved/providers/saved_listings_controller.dart';
 
-/// Profile sections shown in the tab row.
-enum ProfileSection { listings, reviews, about, saved }
+/// Profile sections shown in the tab row. [saved] and [orders] are only
+/// meaningful on the signed-in user's own profile.
+enum ProfileSection { listings, reviews, about, saved, orders }
 
 /// The account a visitor profile shows. Built from whatever the caller
 /// already has (a listing's seller fields), since there is no user endpoint

@@ -13,6 +13,9 @@ import '../../listing/screens/create_listing_page.dart';
 import '../../listing/widgets/manage_listing_sheet.dart';
 import '../../login/screens/login_page.dart';
 import '../../login/services/auth_service.dart';
+import '../../orders/providers/orders_controller.dart';
+import '../../orders/screens/order_page.dart';
+import '../../orders/widgets/order_card.dart';
 import '../../saved/providers/saved_listings_controller.dart';
 import '../providers/profile_page_controller.dart';
 import '../widgets/profile_empty_state.dart';
@@ -68,6 +71,9 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   late final ProfilePageController _controller;
 
+  // Own profile only: purchases and sales for the Orders tab.
+  final OrdersController _orders = OrdersController();
+
   @override
   void initState() {
     super.initState();
@@ -76,13 +82,29 @@ class _ProfilePageState extends State<ProfilePage> {
       subject: widget.subject,
     );
     _controller.loadListings();
-    if (widget.isOwnProfile) SavedListingsController.instance.load();
+    if (widget.isOwnProfile) {
+      SavedListingsController.instance.load();
+      _orders.load();
+    }
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _orders.dispose();
     super.dispose();
+  }
+
+  Future<void> _openOrder(int orderId) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(builder: (_) => OrderPage(orderId: orderId)),
+    );
+    if (!mounted) return;
+    // A cancelled order puts stock back on a listing, so reload both.
+    if (changed == true) {
+      _orders.load();
+      _controller.loadListings();
+    }
   }
 
   void _navigateToTab(int index) {
@@ -197,7 +219,7 @@ class _ProfilePageState extends State<ProfilePage> {
       body: SafeArea(
         bottom: false,
         child: AnimatedBuilder(
-          animation: Listenable.merge([_controller, SavedListingsController.instance]),
+          animation: Listenable.merge([_controller, SavedListingsController.instance, _orders]),
           builder: (context, _) {
             return CustomScrollView(
               physics: const BouncingScrollPhysics(),
@@ -251,10 +273,13 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: ProfileSectionTabBar(
                     selectedSection: _controller.selectedSection,
                     showSavedTab: widget.isOwnProfile,
+                    showOrdersTab: widget.isOwnProfile,
                     onSectionSelected: (section) {
-                      if (!widget.isOwnProfile && section == ProfileSection.saved) {
+                      if (!widget.isOwnProfile &&
+                          (section == ProfileSection.saved || section == ProfileSection.orders)) {
                         return;
                       }
+                      if (section == ProfileSection.orders) _orders.load();
                       _controller.selectSection(section);
                     },
                   ),
@@ -289,7 +314,53 @@ class _ProfilePageState extends State<ProfilePage> {
         return _buildAboutSection();
       case ProfileSection.saved:
         return _buildSavedSection();
+      case ProfileSection.orders:
+        return _buildOrdersSection();
     }
+  }
+
+  Widget _buildOrdersSection() {
+    final orders = _orders.orders;
+    final userId = AuthService.currentUserId ?? 0;
+    if (_orders.isLoading && orders.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(child: CircularProgressIndicator(color: AppColors.green)),
+      );
+    }
+    final error = _orders.errorMessage;
+    if (error != null && orders.isEmpty) {
+      return ProfileEmptyState(
+        title: 'Could not load orders',
+        message: error,
+        actionLabel: 'Retry',
+        onActionPressed: _orders.load,
+      );
+    }
+    if (orders.isEmpty) {
+      return ProfileEmptyState(
+        title: 'No orders yet',
+        message: 'When an offer is accepted, arrange pickup or delivery from the chat and it shows up here.',
+        actionLabel: 'Browse listings',
+        onActionPressed: _navigateHomeToExplore,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+      child: Column(
+        children: [
+          for (final order in orders) ...[
+            OrderCard(
+              order: order,
+              userId: userId,
+              onTap: () => _openOrder(order.id),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _buildListingsSection() {

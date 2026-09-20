@@ -7,16 +7,28 @@ import 'counter_offer_dialog.dart';
 /// One line of the thread. Text lines are grey bubbles with the sender's
 /// avatar on the outside, as in the wireframe; offer events are the same
 /// shape with a green border and a bold headline so the negotiation stands
-/// out from the small talk around it.
+/// out from the small talk around it. Order events look like offer events
+/// and open the order when tapped.
 class ChatMessageBubble extends StatelessWidget {
-  const ChatMessageBubble({super.key, required this.message, required this.isMine});
+  const ChatMessageBubble({super.key, required this.message, required this.isMine, this.onOpenOrder});
 
   final MessageRecord message;
   final bool isMine;
 
+  /// Called with the order id when an order event is tapped.
+  final void Function(int orderId)? onOpenOrder;
+
   @override
   Widget build(BuildContext context) {
-    final bubble = message.type.isOfferEvent ? _OfferBubble(message: message) : _TextBubble(message: message);
+    final orderId = message.orderId;
+    final Widget bubble = message.type == MessageType.order
+        ? _OrderBubble(
+            message: message,
+            onTap: orderId == null || onOpenOrder == null ? null : () => onOpenOrder!(orderId),
+          )
+        : message.type.isOfferEvent
+            ? _OfferBubble(message: message)
+            : _TextBubble(message: message);
     final avatar = Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: CircleAvatar(
@@ -89,7 +101,7 @@ class _OfferBubble extends StatelessWidget {
       MessageType.counter => 'Counter offer',
       MessageType.accepted => 'Offer accepted',
       MessageType.declined => 'Offer declined',
-      MessageType.text => '',
+      MessageType.text || MessageType.order => '',
     };
     final terms = price == null
         ? message.content
@@ -123,6 +135,57 @@ class _OfferBubble extends StatelessWidget {
               style: const TextStyle(color: AppColors.gray, fontSize: 11),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _OrderBubble extends StatelessWidget {
+  const _OrderBubble({required this.message, required this.onTap});
+
+  final MessageRecord message;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 280),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.green, width: 1.2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.local_shipping_outlined, size: 13, color: AppColors.green),
+                SizedBox(width: 4),
+                Text(
+                  'Order update',
+                  style: TextStyle(color: AppColors.green, fontSize: 11, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              message.content,
+              style: const TextStyle(color: AppColors.black, fontSize: 13, fontWeight: FontWeight.w600, height: 1.35),
+            ),
+            if (onTap != null)
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text('View order', style: TextStyle(color: AppColors.gray, fontSize: 11)),
+              ),
+          ],
+        ),
       ),
     );
   }

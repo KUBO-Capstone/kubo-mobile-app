@@ -317,18 +317,20 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                         ),
                       ),
 
-                    const SizedBox(height: 20),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 16),
-                      child: Text(
-                      'Results for "$_query"',
-                      style: const TextStyle(
-                        color: AppColors.black,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                    if (_query.trim().isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16),
+                        child: Text(
+                          'Results for "$_query"',
+                          style: const TextStyle(
+                            color: AppColors.black,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
-                      ),
-                    ),
+                    ],
                   ],
                 ),
               ),

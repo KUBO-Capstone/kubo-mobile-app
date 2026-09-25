@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
@@ -10,6 +11,8 @@ import '../../../shared/widgets/kubo_location_badge.dart';
 import '../../../shared/widgets/kubo_search_field.dart';
 import '../../../shared/widgets/kubo_view_toggle_button.dart';
 import '../../explore/screens/explore_page.dart';
+import '../../explore/models/location_result.dart';
+import '../../explore/widgets/location_filter_sheet.dart';
 import '../../explore/widgets/listings_map.dart';
 import '../../explore/widgets/map_result_cards.dart';
 import '../../market/screens/market_page.dart';
@@ -21,7 +24,7 @@ class SearchResultsPage extends StatefulWidget {
   const SearchResultsPage({
     super.key,
     required this.query,
-    this.initialLocationLabel = 'Caybiga',
+    this.initialLocationLabel = ExplorePage.defaultLocationLabel,
   });
 
   /// Route name used if the page is opened directly.
@@ -42,6 +45,12 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   late final ListingService _listingService;
   List<SyntheticListingRecord> _listings = const <SyntheticListingRecord>[];
 
+  /// Location and radius used to narrow the current search results.
+  LocationResult? _focusLocation;
+  double _radiusKm = 25;
+  final List<LocationResult> _recentLocations = <LocationResult>[];
+  late String _accountLocationLabel;
+
   /// Term the current results were fetched for; the field can be edited
   /// without changing this until the user submits.
   late String _query;
@@ -61,6 +70,10 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
     _query = widget.query;
     _searchController = TextEditingController(text: widget.query);
     _listingService = ListingService();
+    _accountLocationLabel =
+        widget.initialLocationLabel.trim().isEmpty
+            ? ExplorePage.defaultLocationLabel
+            : widget.initialLocationLabel;
     _loadListings();
   }
 
@@ -91,9 +104,71 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
     }
   }
 
-  String get _locationLabel {
-    final value = widget.initialLocationLabel.trim();
-    return value.isEmpty ? 'Caybiga' : value;
+  String get _locationLabel => _accountLocationLabel;
+
+  bool _withinRadius(double? latitude, double? longitude) {
+    final focus = _focusLocation;
+    if (focus == null) {
+      return true;
+    }
+    if (latitude == null || longitude == null) {
+      return false;
+    }
+    final km = const Distance().as(
+      LengthUnit.Kilometer,
+      LatLng(focus.latitude, focus.longitude),
+      LatLng(latitude, longitude),
+    );
+    return km <= _radiusKm;
+  }
+
+  List<SyntheticListingRecord> get _visibleListings {
+    if (_focusLocation == null) {
+      return _listings;
+    }
+    return _listings
+        .where((listing) => _withinRadius(listing.latitude, listing.longitude))
+        .toList(growable: false);
+  }
+
+  Future<void> _openLocationSheet() async {
+    final selection = await showModalBottomSheet<LocationFilterSelection>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder:
+          (_) => LocationFilterSheet(
+            initialRadiusKm: _radiusKm,
+            recentLocations: _recentLocations,
+            initialLocation: _focusLocation,
+          ),
+    );
+
+    if (selection == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _focusLocation = selection.location;
+      _radiusKm = selection.radiusKm;
+      _accountLocationLabel = selection.location.label;
+      _recentLocations
+        ..removeWhere((entry) => entry == selection.location)
+        ..insert(0, selection.location);
+      if (_recentLocations.length > 5) {
+        _recentLocations.removeRange(5, _recentLocations.length);
+      }
+    });
+  }
+
+  void _clearLocationFilter() {
+    setState(() {
+      _focusLocation = null;
+      _accountLocationLabel = ExplorePage.defaultLocationLabel;
+    });
   }
 
   // Re-runs the search for whatever is in the field.
@@ -118,7 +193,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
     switch (index) {
       case 0:
         destination = ExplorePage(
-          initialLocationLabel: widget.initialLocationLabel,
+          initialLocationLabel: _accountLocationLabel,
         );
         break;
       case 2:
@@ -130,7 +205,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
       default:
         destination = SearchResultsPage(
           query: _query,
-          initialLocationLabel: widget.initialLocationLabel,
+          initialLocationLabel: _accountLocationLabel,
         );
         break;
     }
@@ -150,7 +225,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final listings = _listings;
+    final listings = _visibleListings;
 
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -202,10 +277,45 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                             onTap: () => setState(() => _isListView = false),
                           ),
                           const Spacer(),
-                          KuboLocationBadge(label: _locationLabel),
+                          InkWell(
+                            onTap: _openLocationSheet,
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
+                              child: KuboLocationBadge(label: _locationLabel),
+                            ),
+                          ),
                         ],
                       ),
                     ),
+
+                    if (_focusLocation != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16, top: 12),
+                        child: InputChip(
+                          avatar: const Icon(
+                            Icons.my_location,
+                            size: 16,
+                            color: AppColors.green,
+                          ),
+                          label: Text(
+                            'Within ${_radiusKm.toStringAsFixed(0)} km of '
+                            '${_focusLocation!.label}',
+                            style: const TextStyle(
+                              color: AppColors.black,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          backgroundColor: AppColors.softBackground,
+                          side: const BorderSide(color: AppColors.border),
+                          onDeleted: _clearLocationFilter,
+                          onPressed: _openLocationSheet,
+                        ),
+                      ),
 
                     const SizedBox(height: 20),
                     Padding(
@@ -265,6 +375,8 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                     children: [
                       ListingsMap(
                         listings: listings,
+                        focusLocation: _focusLocation,
+                        radiusKm: _radiusKm,
                         minimized: _mapMinimized,
                         loadError: _loadError,
                         onToggleMinimized:

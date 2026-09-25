@@ -15,7 +15,10 @@ import '../widgets/search_suggestion_card.dart';
 
 /// Search tab that shows query input, recent searches, and random suggestions.
 class SearchPage extends StatefulWidget {
-  const SearchPage({super.key, this.initialLocationLabel = 'Caybiga'});
+  const SearchPage({
+    super.key,
+    this.initialLocationLabel = ExplorePage.defaultLocationLabel,
+  });
 
   /// Route name used when the search page is registered in the app shell.
   static const routeName = '/search';

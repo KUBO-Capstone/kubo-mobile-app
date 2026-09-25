@@ -170,7 +170,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
           builder: (_) => ExplorePage(
             initialLocationLabel: _controller.selectedCity?.name ??
                 _controller.selectedRegion?.regionName ??
-                'Caybiga',
+              ExplorePage.defaultLocationLabel,
           ),
         ),
       );

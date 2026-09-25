@@ -33,7 +33,12 @@ enum ExploreViewMode { list, map }
 
 /// Main explore screen that shows filters, sample listings, and navigation shortcuts.
 class ExplorePage extends StatefulWidget {
-  const ExplorePage({super.key, this.initialLocationLabel = 'Caybiga'});
+  static const defaultLocationLabel = 'All';
+
+  const ExplorePage({
+    super.key,
+    this.initialLocationLabel = defaultLocationLabel,
+  });
 
   /// Route name used by the app shell when opening the explore/home screen.
   static const routeName = '/explore';
@@ -117,7 +122,7 @@ class _ExplorePageState extends State<ExplorePage> {
     // Keep the onboarding location label usable even when the caller passes blank text.
     _accountLocationLabel =
         widget.initialLocationLabel.trim().isEmpty
-            ? 'Caybiga'
+        ? ExplorePage.defaultLocationLabel
             : widget.initialLocationLabel;
     _loadListings();
     _loadCenters();
@@ -188,6 +193,9 @@ class _ExplorePageState extends State<ExplorePage> {
   // alongside the region chips rather than replacing them, so both narrow the
   // same feed and a point must satisfy each active filter.
   bool _withinRadius(double? latitude, double? longitude) {
+    if (_selectedRegionFilter != 'All') {
+      return true;
+    }
     final focus = _focusLocation;
     if (focus == null) {
       return true;
@@ -267,6 +275,7 @@ class _ExplorePageState extends State<ExplorePage> {
     setState(() {
       _focusLocation = selection.location;
       _radiusKm = selection.radiusKm;
+      _selectedRegionFilter = 'All';
       _accountLocationLabel = selection.location.label;
       _recentLocations
         ..removeWhere((entry) => entry == selection.location)
@@ -277,9 +286,12 @@ class _ExplorePageState extends State<ExplorePage> {
     });
   }
 
-  // Clears the distance filter, leaving the region chips in charge.
+  // Clears the distance filter and restores the account-wide location label.
   void _clearRadius() {
-    setState(() => _focusLocation = null);
+    setState(() {
+      _focusLocation = null;
+      _accountLocationLabel = ExplorePage.defaultLocationLabel;
+    });
   }
 
   // Chooses the label shown in the location badge at the top of the screen.
@@ -452,7 +464,7 @@ class _ExplorePageState extends State<ExplorePage> {
               ),
               // The radius filter stacks on top of the region chips, so show
               // it as its own dismissible chip rather than folding it in.
-              if (_focusLocation != null)
+              if (_selectedRegionFilter == 'All' && _focusLocation != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
                   child: Align(
@@ -492,7 +504,8 @@ class _ExplorePageState extends State<ExplorePage> {
                   pinMode: _pinMode,
                   minimized: _mapMinimized,
                   regionLabel: _selectedRegionFilter,
-                  focusLocation: _focusLocation,
+                  focusLocation:
+                      _selectedRegionFilter == 'All' ? _focusLocation : null,
                   radiusKm: _radiusKm,
                   loadError: _loadError,
                   onPinModeChanged:

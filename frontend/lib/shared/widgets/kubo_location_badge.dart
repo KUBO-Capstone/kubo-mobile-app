@@ -8,6 +8,8 @@ import '../../core/widgets/app_svg_icon.dart';
 class KuboLocationBadge extends StatelessWidget {
   const KuboLocationBadge({super.key, required this.label});
 
+  static const maxLabelLength = 20;
+
   /// Location text rendered next to the pin icon.
   final String label;
 
@@ -23,7 +25,9 @@ class KuboLocationBadge extends StatelessWidget {
         ),
         const SizedBox(width: 4),
         Text(
-          label,
+          _displayLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: AppColors.green,
             fontSize: 13,
@@ -32,5 +36,12 @@ class KuboLocationBadge extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  String get _displayLabel {
+    if (label.length <= maxLabelLength) {
+      return label;
+    }
+    return '${label.substring(0, maxLabelLength - 3)}...';
   }
 }

@@ -51,7 +51,11 @@ class AuthMethodPage extends StatelessWidget {
                 onPressed: () {
                   Navigator.of(context).pushReplacement(
                     MaterialPageRoute<void>(
-                      builder: (_) => const ExplorePage(initialLocationLabel: 'Caybiga'),
+                      builder:
+                          (_) => const ExplorePage(
+                            initialLocationLabel:
+                                ExplorePage.defaultLocationLabel,
+                          ),
                     ),
                   );
                 },

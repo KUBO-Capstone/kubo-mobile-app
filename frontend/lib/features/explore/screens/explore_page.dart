@@ -575,7 +575,14 @@ class _ExploreDrawer extends StatelessWidget {
                 height: 16,
               ), // gap before list items and header (Explore Menu)
 
-              DrawerListTile(title: 'Market', iconPath: AppIcons.chartLine),
+              DrawerListTile(
+                title: 'Market',
+                iconPath: AppIcons.chartLine,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pushNamed(MarketPage.routeName);
+                },
+              ),
               DrawerListTile(
                 title: 'Saved',
                 iconPath: AppIcons.heartSaved,

@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import { UserModel } from "#models/user.model";
+import { signToken } from "#utils/token";
+import { authUserId } from "#middleware/auth.middleware";
 
 export const getUsers = (req: Request, res: Response): void => {
     const users = UserModel.findAll();
@@ -23,10 +25,12 @@ export const createUser = (req: Request, res: Response): void => {
         return;
     }
 
-    const requestedRole = role === 'farmer' || role === 'admin' ? role : 'consumer';
+    // Admins are never self-registered; anything but 'farmer' signs up as a consumer.
+    const requestedRole = role === 'farmer' ? role : 'consumer';
     const user = UserModel.create({ first_name, last_name, email: normalizedEmail, password, contact_number, role: requestedRole });
     const { password_hash: _passwordHash, ...safeUser } = user;
-    res.status(201).json({ success: true, data: safeUser });
+    // Registering signs the user in, same as login.
+    res.status(201).json({ success: true, data: { ...safeUser, token: signToken(user.user_id, user.role) } });
 };
 
 // Builds the addresses row payload shared by the pickup and farm endpoints.
@@ -49,6 +53,9 @@ export const addFarmAddress = (req: Request<{ id: string }>, res: Response) => {
         if (isNaN(userId)) {
             return res.status(400).json({ success: false, message: "Invalid user ID format" });
         }
+        if (userId !== authUserId(res)) {
+            return res.status(403).json({ success: false, message: "You can only change your own farm address" });
+        }
         if (!UserModel.findById(userId)) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
@@ -67,6 +74,9 @@ export const addUserAddress = (req: Request<{ id: string }>, res: Response) => {
 
         if (isNaN(userId)) {
             return res.status(400).json({ error: "Invalid user ID format" });
+        }
+        if (userId !== authUserId(res)) {
+            return res.status(403).json({ error: "You can only change your own address" });
         }
 
         const addressId = UserModel.setPreferredAddress(userId, readAddressBody(req.body));

@@ -244,7 +244,7 @@ class MarketReference {
 
 /// HTTP client for Market Watch. Read-only; nothing here needs a user.
 class MarketService {
-  MarketService({http.Client? client}) : _client = client ?? http.Client();
+  MarketService({http.Client? client}) : _client = client ?? apiClient();
 
   String get _baseUrl => ApiConfig.baseUrl;
   final http.Client _client;

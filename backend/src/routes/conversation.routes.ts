@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requireAuth } from "#middleware/auth.middleware";
 import {
     createConversation,
     getConversation,
@@ -9,6 +10,8 @@ import {
 } from "#controllers/conversation.controller";
 
 const router = Router();
+// Every route here acts as, or reads for, the signed-in user.
+router.use(requireAuth);
 router.get('/', getConversations);
 router.post('/', createConversation);
 router.get('/:id', getConversation);

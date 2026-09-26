@@ -6,7 +6,7 @@ import 'api_request.dart';
 
 /// HTTP client for the bagsakan drop-off center endpoints.
 class BagsakanService {
-  BagsakanService({http.Client? client}) : _client = client ?? http.Client();
+  BagsakanService({http.Client? client}) : _client = client ?? apiClient();
 
   String get _baseUrl => ApiConfig.baseUrl;
   final http.Client _client;

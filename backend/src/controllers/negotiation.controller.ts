@@ -2,11 +2,9 @@ import { Request, Response } from "express";
 import { Negotiation, NegotiationModel, NegotiationStatus, OPEN_STATUSES } from "#models/negotiation.model";
 import { ProductModel } from "#models/product.model";
 import { ConversationModel, MessageType } from "#models/conversation.model";
+import { authUserId } from "#middleware/auth.middleware";
 
-// KNOWN DEBT: there is no auth middleware yet, so the acting user is taken
-// from the request (`buyer_id` on create, `user_id` on respond) and trusted.
-// PLAN.md Phase 2 replaces this with a token; nothing else should have to
-// change here when it does.
+// Mounted behind requireAuth: the acting user is always authUserId(res).
 
 const statuses = new Set<string>(['pending', 'countered', 'accepted', 'declined']);
 const actions = new Set<string>(['accept', 'decline', 'counter']);
@@ -45,11 +43,7 @@ const recordOfferEvent = (negotiation: Negotiation, actorId: number, type: Messa
 };
 
 export const getNegotiations = (req: Request, res: Response): void => {
-    const userId = readId(req.query.user_id);
-    if (!userId) {
-        res.status(400).json({ success: false, message: 'user_id is required' });
-        return;
-    }
+    const userId = authUserId(res);
     const role = req.query.role === 'buyer' || req.query.role === 'seller' ? req.query.role : undefined;
     const status = typeof req.query.status === 'string' && statuses.has(req.query.status)
         ? (req.query.status as NegotiationStatus)
@@ -63,17 +57,22 @@ export const getNegotiation = (req: Request, res: Response): void => {
         res.status(404).json({ success: false, message: 'Offer not found' });
         return;
     }
+    const userId = authUserId(res);
+    if (negotiation.buyer_id !== userId && negotiation.seller_id !== userId) {
+        res.status(403).json({ success: false, message: 'You are not part of this offer' });
+        return;
+    }
     res.json({ success: true, data: negotiation });
 };
 
 // Buyer opens a negotiation on a listing.
 export const createNegotiation = (req: Request, res: Response): void => {
-    const buyerId = readId(req.body.buyer_id);
+    const buyerId = authUserId(res);
     const productId = readId(req.body.product_id);
     const offeredPrice = positiveNumber(req.body.offered_price);
     const offeredQuantity = positiveNumber(req.body.offered_quantity);
-    if (!buyerId || !productId || !offeredPrice || !offeredQuantity) {
-        res.status(400).json({ success: false, message: 'buyer_id, product_id, offered_price, and offered_quantity are required and must be positive' });
+    if (!productId || !offeredPrice || !offeredQuantity) {
+        res.status(400).json({ success: false, message: 'product_id, offered_price, and offered_quantity are required and must be positive' });
         return;
     }
 
@@ -114,10 +113,10 @@ export const createNegotiation = (req: Request, res: Response): void => {
 // turn it is: 'pending' waits on the seller, 'countered' waits on the buyer.
 // Declining is allowed from either side at any point while the offer is open.
 export const respondToNegotiation = (req: Request, res: Response): void => {
-    const userId = readId(req.body.user_id);
+    const userId = authUserId(res);
     const action = typeof req.body.action === 'string' ? req.body.action : '';
-    if (!userId || !actions.has(action)) {
-        res.status(400).json({ success: false, message: 'user_id and an action of accept, decline, or counter are required' });
+    if (!actions.has(action)) {
+        res.status(400).json({ success: false, message: 'An action of accept, decline, or counter is required' });
         return;
     }
 

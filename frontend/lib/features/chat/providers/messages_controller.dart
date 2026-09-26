@@ -29,7 +29,7 @@ class MessagesController extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
-      conversations = await _service.fetchConversations(userId: id);
+      conversations = await _service.fetchConversations();
     } catch (error) {
       errorMessage = error.toString().replaceFirst('Exception: ', '');
     } finally {

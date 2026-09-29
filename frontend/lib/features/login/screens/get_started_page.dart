@@ -321,7 +321,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
                         LoginFieldSection(
                           label: 'Region',
                           child: DropdownButtonFormField<Region>(
-                            initialValue: _controller.selectedRegion,
+                            value: _controller.selectedRegion,
                             items: _controller.regions
                                 .map(
                                   (region) => DropdownMenuItem<Region>(
@@ -341,7 +341,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
                         LoginFieldSection(
                           label: 'City',
                           child: DropdownButtonFormField<Municipality>(
-                            initialValue: _controller.selectedCity,
+                            value: _controller.selectedCity,
                             items: _controller.availableCities
                                 .map(
                                   (city) => DropdownMenuItem<Municipality>(

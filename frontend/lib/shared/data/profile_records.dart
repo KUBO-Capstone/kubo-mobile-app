@@ -13,6 +13,7 @@ class SyntheticProfileRecord {
     required this.listingCount,
     required this.reviewScore,
     required this.reviewCount,
+    this.photoUrl = '',
   });
 
   /// Name shown in the profile header.
@@ -44,6 +45,8 @@ class SyntheticProfileRecord {
 
   /// Review count shown in the reviews tab.
   final int reviewCount;
+
+  final String photoUrl;
 }
 
 /// Synthetic review record for the profile reviews tab.
@@ -93,6 +96,7 @@ const syntheticProfileRecord = SyntheticProfileRecord(
   listingCount: 3,
   reviewScore: 5.0,
   reviewCount: 5,
+  photoUrl: '',
 );
 
 /// Synthetic listings surfaced in the profile listings tab.

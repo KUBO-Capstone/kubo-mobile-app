@@ -4,6 +4,7 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/app_svg_icon.dart';
 import '../../../shared/data/profile_records.dart';
+import '../../../shared/data/profile_service.dart';
 
 /// Profile header card that sits on top of the profile content.
 class ProfileHeaderCard extends StatelessWidget {
@@ -16,6 +17,7 @@ class ProfileHeaderCard extends StatelessWidget {
     required this.onSettings,
     required this.onFollow,
     required this.onMessage,
+    required this.onChangePhoto,
   });
 
   /// Shared profile record shown in the header.
@@ -38,6 +40,7 @@ class ProfileHeaderCard extends StatelessWidget {
 
   /// Sends a message to the visitor profile.
   final VoidCallback onMessage;
+  final VoidCallback onChangePhoto;
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +84,7 @@ class ProfileHeaderCard extends StatelessWidget {
                 _HeaderActionButton(label: 'Message', onTap: onMessage),
             ],
           ),
-          const _ProfileAvatar(),
+          _ProfileAvatar(photoUrl: profile.photoUrl, onTap: isOwnProfile ? onChangePhoto : null),
           const SizedBox(height: 10),
           Text(
             profile.displayName,
@@ -125,25 +128,25 @@ class ProfileHeaderCard extends StatelessWidget {
 }
 
 class _ProfileAvatar extends StatelessWidget {
-  const _ProfileAvatar();
+  const _ProfileAvatar({required this.photoUrl, this.onTap});
+
+  final String photoUrl;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final avatar = Container(
       width: 104,
       height: 85,
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
         color: Color(0xFFF3F3F3),
       ),
-      child: const Center(
-        child: AppSvgIcon(
-          assetPath: AppIcons.circleUserProfile,
-          size: 76,
-          color: AppColors.black,
-        ),
-      ),
+      child: photoUrl.isEmpty
+          ? const Center(child: AppSvgIcon(assetPath: AppIcons.circleUserProfile, size: 76, color: AppColors.black))
+          : ClipOval(child: Image.network(resolveProfilePhotoUrl(photoUrl), width: 104, height: 104, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const AppSvgIcon(assetPath: AppIcons.circleUserProfile, size: 76, color: AppColors.black))),
     );
+    return onTap == null ? avatar : GestureDetector(onTap: onTap, child: avatar);
   }
 }
 

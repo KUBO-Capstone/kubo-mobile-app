@@ -1,4 +1,6 @@
 import { Request, Response } from "express";
+import fs from "fs";
+import path from "path";
 import { UserModel } from "#models/user.model";
 import { signToken } from "#utils/token";
 import { authUserId } from "#middleware/auth.middleware";
@@ -31,6 +33,83 @@ export const createUser = (req: Request, res: Response): void => {
     const { password_hash: _passwordHash, ...safeUser } = user;
     // Registering signs the user in, same as login.
     res.status(201).json({ success: true, data: { ...safeUser, token: signToken(user.user_id, user.role) } });
+};
+
+const publicUser = (user: ReturnType<typeof UserModel.findById>) => {
+    if (!user) return undefined;
+    const { password_hash: _passwordHash, ...safeUser } = user;
+    return safeUser;
+};
+
+export const getProfile = (req: Request<{ id: string }>, res: Response): void => {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+        res.status(400).json({ success: false, message: 'Invalid user ID format' });
+        return;
+    }
+    const user = UserModel.findById(userId);
+    if (!user) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+    }
+    res.json({ success: true, data: publicUser(user) });
+};
+
+export const updateProfile = (req: Request<{ id: string }>, res: Response): void => {
+    const userId = Number(req.params.id);
+    const firstName = typeof req.body.first_name === 'string' ? req.body.first_name.trim() : '';
+    const lastName = typeof req.body.last_name === 'string' ? req.body.last_name.trim() : '';
+    const contactNumber = typeof req.body.contact_number === 'string' ? req.body.contact_number.trim() : '';
+    const bio = typeof req.body.bio === 'string' ? req.body.bio.trim() : '';
+    if (!Number.isInteger(userId) || userId <= 0 || !firstName || !lastName || !contactNumber) {
+        res.status(400).json({ success: false, message: 'Name and contact number are required' });
+        return;
+    }
+    if (firstName.length > 50 || lastName.length > 50 || contactNumber.length > 20 || bio.length > 500) {
+        res.status(400).json({ success: false, message: 'Profile fields exceed their allowed length' });
+        return;
+    }
+    const user = UserModel.updateProfile(userId, { first_name: firstName, last_name: lastName, contact_number: contactNumber, bio });
+    if (!user) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+    }
+    res.json({ success: true, data: publicUser(user) });
+};
+
+export const uploadProfilePhoto = (req: Request<{ id: string }>, res: Response): void => {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId <= 0 || !req.file) {
+        res.status(400).json({ success: false, message: 'A profile photo is required' });
+        return;
+    }
+    const existingUser = UserModel.findById(userId);
+    if (!existingUser) {
+        fs.unlinkSync(req.file.path);
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+    }
+    const photoUrl = `/uploads/profile/${req.file.filename}`;
+    const user = UserModel.setProfilePhoto(userId, photoUrl);
+    if (existingUser.profile_photo_url?.startsWith('/uploads/profile/')) {
+        const previousPath = path.resolve(__dirname, '../../uploads/profile', path.basename(existingUser.profile_photo_url));
+        if (fs.existsSync(previousPath)) fs.unlinkSync(previousPath);
+    }
+    res.json({ success: true, data: publicUser(user) });
+};
+
+export const deleteProfilePhoto = (req: Request<{ id: string }>, res: Response): void => {
+    const userId = Number(req.params.id);
+    const user = UserModel.findById(userId);
+    if (!user) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+    }
+    if (user.profile_photo_url?.startsWith('/uploads/profile/')) {
+        const photoPath = path.resolve(__dirname, '../../uploads/profile', path.basename(user.profile_photo_url));
+        if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
+    }
+    res.json({ success: true, data: publicUser(UserModel.setProfilePhoto(userId, null)) });
 };
 
 // Builds the addresses row payload shared by the pickup and farm endpoints.

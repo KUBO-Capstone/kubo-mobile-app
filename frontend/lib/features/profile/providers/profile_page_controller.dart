@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../../shared/data/profile_records.dart';
 import '../../../shared/data/synthetic_records.dart';
 import '../../../shared/data/listing_service.dart';
+import '../../../shared/data/profile_service.dart';
 import '../../login/services/auth_service.dart';
 import '../../saved/providers/saved_listings_controller.dart';
 
@@ -18,6 +19,8 @@ class ProfileSubject {
     required this.userId,
     required this.displayName,
     this.locationLabel,
+    this.photoUrl,
+    this.about,
   });
 
   /// Backend user id, used to fetch this account's listings.
@@ -28,6 +31,8 @@ class ProfileSubject {
 
   /// Farm town from the listing, shown on the About tab when known.
   final String? locationLabel;
+  final String? photoUrl;
+  final String? about;
 }
 
 /// Controller that keeps the selected profile section and current view mode.
@@ -41,7 +46,9 @@ class ProfilePageController extends ChangeNotifier {
   final ProfileSubject? subject;
 
   final ListingService _listingService = ListingService();
+  final ProfileService _profileService = ProfileService();
   List<SyntheticListingRecord> _listings = const <SyntheticListingRecord>[];
+  Map<String, dynamic>? _loadedProfile;
 
   /// Whose listings the Listings tab shows.
   int? get _subjectUserId =>
@@ -56,20 +63,22 @@ class ProfilePageController extends ChangeNotifier {
   SyntheticProfileRecord get profile {
     final visitor = subject;
     if (!isOwnProfile && visitor != null) {
-      // Only the name, town and listing count are real; the rest stays
-      // synthetic until reviews and follows exist on the backend.
+      final loadedName = '${_loadedProfile?['first_name'] ?? ''} ${_loadedProfile?['last_name'] ?? ''}'.trim();
       return SyntheticProfileRecord(
-        displayName: visitor.displayName,
-        username: 'Kubo grower',
+        displayName: loadedName.isEmpty ? visitor.displayName : loadedName,
+        username: _loadedProfile?['email']?.toString() ?? 'Kubo grower',
         locationLabel:
             visitor.locationLabel ?? syntheticProfileRecord.locationLabel,
-        about: 'Fresh local produce from a Kubo grower.',
+        about: _loadedProfile?['bio']?.toString().trim().isNotEmpty == true
+            ? _loadedProfile!['bio'].toString()
+            : visitor.about ?? 'Fresh local produce from a Kubo grower.',
         joinedLabel: syntheticProfileRecord.joinedLabel,
         followingCount: syntheticProfileRecord.followingCount,
         followersCount: syntheticProfileRecord.followersCount,
         listingCount: _listings.length,
         reviewScore: syntheticProfileRecord.reviewScore,
         reviewCount: syntheticProfileRecord.reviewCount,
+        photoUrl: _loadedProfile?['profile_photo_url']?.toString() ?? visitor.photoUrl ?? '',
       );
     }
 
@@ -92,7 +101,28 @@ class ProfilePageController extends ChangeNotifier {
       listingCount: _listings.length,
       reviewScore: syntheticProfileRecord.reviewScore,
       reviewCount: syntheticProfileRecord.reviewCount,
+      photoUrl: _loadedProfile?['profile_photo_url']?.toString() ?? '',
     );
+  }
+
+  Map<String, dynamic>? get loadedProfile => _loadedProfile;
+
+  Future<void> loadProfile() async {
+    final userId = _subjectUserId;
+    if (userId == null) return;
+    try {
+      _loadedProfile = await _profileService.fetchProfile(userId);
+      if (isOwnProfile) AuthService.updateCurrentUser(_loadedProfile!);
+      notifyListeners();
+    } catch (_) {
+      // The cached login profile remains visible while the network is unavailable.
+    }
+  }
+
+  Future<void> setProfile(Map<String, dynamic> profile) async {
+    _loadedProfile = profile;
+    if (isOwnProfile) AuthService.updateCurrentUser(profile);
+    notifyListeners();
   }
 
   /// Synthetic listings used by the listings tab.
@@ -143,6 +173,7 @@ class ProfilePageController extends ChangeNotifier {
   @override
   void dispose() {
     _listingService.dispose();
+    _profileService.dispose();
     super.dispose();
   }
 

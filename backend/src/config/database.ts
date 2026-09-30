@@ -1,7 +1,9 @@
 import Database from 'better-sqlite3';
+import fs from 'fs';
 import path from 'path';
 
 const dbPath = path.resolve(__dirname, '../database/db.sqlite');
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 export const db = new Database(dbPath, { verbose: console.log });
 
 // enable foreign key constraints (off by default)
@@ -34,6 +36,8 @@ export function initDb(): void {
             role VARCHAR(20) NOT NULL DEFAULT 'consumer' CHECK (role IN ('farmer', 'consumer', 'admin')),
             preferred_address_id INTEGER,
             is_verified BOOLEAN DEFAULT FALSE,
+            profile_photo_url TEXT,
+            bio TEXT NOT NULL DEFAULT '',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
             FOREIGN KEY (preferred_address_id) REFERENCES addresses(address_id) ON DELETE SET NULL
@@ -256,6 +260,18 @@ export function initDb(): void {
         );
 
     `);
+    for (const statement of [
+        'ALTER TABLE users ADD COLUMN profile_photo_url TEXT',
+        "ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''",
+    ]) {
+        try {
+            db.exec(statement);
+        } catch (error) {
+            if (!(error instanceof Error) || !error.message.includes('duplicate column name')) {
+                throw error;
+            }
+        }
+    }
     console.log('Database tables created')
 }
 

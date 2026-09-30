@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
 import '../../../shared/widgets/kubo_listing_card.dart';
-import '../../../shared/widgets/kubo_placeholder_page.dart';
 import '../../explore/screens/explore_page.dart';
 import '../../market/screens/market_page.dart';
 import '../../search/screens/search_page.dart';
@@ -22,6 +22,8 @@ import '../widgets/profile_empty_state.dart';
 import '../widgets/profile_header_card.dart';
 import '../widgets/profile_review_card.dart';
 import '../widgets/profile_section_tab_bar.dart';
+import 'edit_profile_page.dart';
+import 'account_settings_page.dart';
 
 /// Profile tab that renders the own-account or visitor profile experience.
 class ProfilePage extends StatefulWidget {
@@ -82,6 +84,7 @@ class _ProfilePageState extends State<ProfilePage> {
       subject: widget.subject,
     );
     _controller.loadListings();
+    _controller.loadProfile();
     if (widget.isOwnProfile) {
       SavedListingsController.instance.load();
       _orders.load();
@@ -172,32 +175,32 @@ class _ProfilePageState extends State<ProfilePage> {
     _controller.loadListings();
   }
 
-  void _openEditProfile() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const KuboPlaceholderPage(
-          title: 'Edit Profile',
-          message: 'The profile editor will live here.',
-        ),
-      ),
+  Future<void> _openEditProfile() async {
+    final user = AuthService.currentUser;
+    if (user == null) return;
+    final updated = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute<Map<String, dynamic>>(builder: (_) => EditProfilePage(user: user)),
     );
+    if (updated != null && mounted) await _controller.setProfile(updated);
   }
 
-  void _openShare() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Share profile action tapped')),
-    );
+  Future<void> _openShare() async {
+    final profile = _controller.profile;
+    final userId = AuthService.currentUserId;
+    if (userId == null) return;
+    final shareText = '${profile.displayName} on Kubo\n\n${profile.about}\n\nView this profile: https://kubo.app/profile/$userId';
+    await Share.share(shareText, subject: '${profile.displayName} on Kubo');
   }
 
-  void _openSettings() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const KuboPlaceholderPage(
-          title: 'Settings',
-          message: 'The account settings screen will live here.',
-        ),
+  Future<void> _openSettings() async {
+    final user = AuthService.currentUser;
+    if (user == null) return;
+    final updated = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute<Map<String, dynamic>>(
+        builder: (_) => AccountSettingsPage(user: user, onLogout: _logout),
       ),
     );
+    if (updated != null && mounted) await _controller.setProfile(updated);
   }
 
   void _followProfile() {
@@ -263,6 +266,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           onSettings: _openSettings,
                           onFollow: _followProfile,
                           onMessage: _messageProfile,
+                          onChangePhoto: _openEditProfile,
                         ),
                       ),
                     ],

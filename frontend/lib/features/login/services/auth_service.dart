@@ -19,10 +19,13 @@ class AuthService {
   static int? get currentUserId =>
       int.tryParse(currentUser?['user_id']?.toString() ?? '');
 
-  /// Ends the in-memory session by forgetting the user and their token. The
-  /// token is stateless, so there is nothing to revoke server-side; callers
-  /// also clear any per-user caches (saved listings) and rebuild the
-  /// navigator so nothing from the old account stays mounted.
+  static void updateCurrentUser(Map<String, dynamic> user) {
+    currentUser = user;
+  }
+
+  /// Ends the in-memory session. There is no server-side session to end
+  /// yet; callers also clear any per-user caches (saved listings) and
+  /// rebuild the navigator so nothing from the old account stays mounted.
   static void logout() {
     currentUser = null;
     ApiSession.token = null;

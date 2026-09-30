@@ -12,6 +12,8 @@ export interface User {
     contact_number: string;
     role: UserRole;
     is_verified: boolean;
+    profile_photo_url: string | null;
+    bio: string;
     created_at: Date;
 }
 
@@ -45,9 +47,26 @@ export const UserModel = {
         return db.prepare(query).get(email) as User | undefined;
     },
 
+    updateProfile: (userId: number, input: { first_name: string; last_name: string; contact_number: string; bio: string }): User | undefined => {
+        db.prepare(`
+            UPDATE users
+            SET first_name = @first_name,
+                last_name = @last_name,
+                contact_number = @contact_number,
+                bio = @bio
+            WHERE user_id = @user_id
+        `).run({ ...input, user_id: userId });
+        return UserModel.findById(userId);
+    },
+
+    setProfilePhoto: (userId: number, profilePhotoUrl: string | null): User | undefined => {
+        db.prepare('UPDATE users SET profile_photo_url = ? WHERE user_id = ?').run(profilePhotoUrl, userId);
+        return UserModel.findById(userId);
+    },
+
     // to insert a new user; the plaintext password is hashed before storage
     create(
-        user: Omit<User, "user_id" | "created_at" | "is_verified" | "password_hash" | "role"> & {
+        user: Omit<User, "user_id" | "created_at" | "is_verified" | "password_hash" | "role" | "profile_photo_url" | "bio"> & {
             password: string;
             role?: UserRole;
         },
@@ -68,6 +87,8 @@ export const UserModel = {
             password_hash,
             contact_number,
             role,
+            profile_photo_url: null,
+            bio: '',
             created_at: new Date(),
             is_verified: false,
         };

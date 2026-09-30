@@ -13,8 +13,8 @@
     "import:market": "tsx src/scripts/import-market.ts",
     "db:reset": "tsx src/scripts/reset-db.ts && tsx src/scripts/seed.ts",
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
-    "start": "node dist/index.js"
+    "build": "tsc && tsc-alias",
+    "start": "node dist/server.js"
   },
   "keywords": [],
   "author": "",
@@ -27,13 +27,16 @@
     "better-sqlite3": "^13.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "multer": "^2.4.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/multer": "^2.3.0",
     "@types/node": "^26.5.0",
+    "tsc-alias": "^1.8.16",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
   },

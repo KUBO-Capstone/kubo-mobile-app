@@ -7,7 +7,7 @@ import '../../../shared/data/api_request.dart';
 
 /// HTTP client for the backend account and login endpoints.
 class AuthService {
-  AuthService({http.Client? client}) : _client = client ?? http.Client();
+  AuthService({http.Client? client}) : _client = client ?? apiClient();
 
   String get _baseUrl => ApiConfig.baseUrl;
 
@@ -19,11 +19,25 @@ class AuthService {
   static int? get currentUserId =>
       int.tryParse(currentUser?['user_id']?.toString() ?? '');
 
+  static void updateCurrentUser(Map<String, dynamic> user) {
+    currentUser = user;
+  }
+
   /// Ends the in-memory session. There is no server-side session to end
   /// yet; callers also clear any per-user caches (saved listings) and
   /// rebuild the navigator so nothing from the old account stays mounted.
   static void logout() {
     currentUser = null;
+    ApiSession.token = null;
+  }
+
+  /// Login and register both answer with the user row plus a `token`; the
+  /// token goes to [ApiSession] and the rest becomes [currentUser].
+  static Map<String, dynamic> _startSession(Map<String, dynamic> data) {
+    final user = Map<String, dynamic>.of(data);
+    ApiSession.token = user.remove('token') as String?;
+    currentUser = user;
+    return user;
   }
 
   Future<Map<String, dynamic>> register({
@@ -41,9 +55,7 @@ class AuthService {
       'contact_number': contactNumber,
     });
 
-    final user = readData(response) as Map<String, dynamic>;
-    currentUser = user;
-    return user;
+    return _startSession(readData(response) as Map<String, dynamic>);
   }
 
   Future<Map<String, dynamic>> login({
@@ -55,9 +67,7 @@ class AuthService {
       'password': password,
     });
 
-    final user = readData(response) as Map<String, dynamic>;
-    currentUser = user;
-    return user;
+    return _startSession(readData(response) as Map<String, dynamic>);
   }
 
   Future<http.Response> _post(String path, Map<String, String> body) {

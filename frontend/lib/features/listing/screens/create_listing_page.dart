@@ -79,7 +79,6 @@ class _CreateListingPageState extends State<CreateListingPage> {
       if (existing != null) {
         saved = await _service.updateListing(
           productId: existing.productId!,
-          sellerId: sellerId,
           cropName: _nameController.text.trim(),
           category: _category,
           price: double.parse(_priceController.text),
@@ -88,7 +87,6 @@ class _CreateListingPageState extends State<CreateListingPage> {
         );
       } else {
         saved = await _service.createListing(
-          sellerId: sellerId,
           cropName: _nameController.text.trim(),
           category: _category,
           price: double.parse(_priceController.text),
@@ -131,14 +129,14 @@ class _CreateListingPageState extends State<CreateListingPage> {
             const SizedBox(height: 24),
             TextFormField(controller: _nameController, decoration: _decoration('Product name'), validator: _required),
             const SizedBox(height: 14),
-            DropdownButtonFormField<String>(initialValue: _category, decoration: _decoration('Category'), items: const ['vegetable', 'fruit', 'grain', 'legume', 'herb', 'spice'].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(), onChanged: (value) => setState(() => _category = value!)),
+            DropdownButtonFormField<String>(value: _category, decoration: _decoration('Category'), items: const ['vegetable', 'fruit', 'grain', 'legume', 'herb', 'spice'].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(), onChanged: (value) => setState(() => _category = value!)),
             const SizedBox(height: 14),
             TextFormField(controller: _priceController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: _decoration('Price (PHP)'), validator: _positiveNumber),
             const SizedBox(height: 14),
             Row(children: [
               Expanded(child: TextFormField(controller: _quantityController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: _decoration('Available quantity'), validator: _positiveNumber)),
               const SizedBox(width: 12),
-              Expanded(child: DropdownButtonFormField<String>(initialValue: _unit, decoration: _decoration('Unit'), items: const ['kg', 'g', 'lb', 'oz', 'liter', 'ml', 'piece'].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(), onChanged: (value) => setState(() => _unit = value!))),
+              Expanded(child: DropdownButtonFormField<String>(value: _unit, decoration: _decoration('Unit'), items: const ['kg', 'g', 'lb', 'oz', 'liter', 'ml', 'piece'].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(), onChanged: (value) => setState(() => _unit = value!))),
             ]),
             const SizedBox(height: 28),
             SizedBox(

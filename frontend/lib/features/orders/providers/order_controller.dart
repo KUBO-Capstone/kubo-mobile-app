@@ -36,7 +36,7 @@ class OrderController extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
     try {
-      order = await _service.fetchOrder(orderId: orderId, userId: id);
+      order = await _service.fetchOrder(orderId: orderId);
       errorMessage = null;
     } catch (error) {
       errorMessage = error.toString().replaceFirst('Exception: ', '');
@@ -55,7 +55,6 @@ class OrderController extends ChangeNotifier {
     try {
       order = await _service.respond(
         orderId: orderId,
-        userId: id,
         action: action,
         courierName: courierName,
         trackingNumber: trackingNumber,

@@ -228,20 +228,18 @@ class ConversationRecord {
   }
 }
 
-/// HTTP client for the conversation and message endpoints.
-///
-/// KNOWN DEBT: `user_id` / `sender_id` / `buyer_id` go in the request because
-/// there is no auth token yet; drop them here when Phase 2 lands.
+/// HTTP client for the conversation and message endpoints. The server knows
+/// the caller from the token, so no call carries a user id.
 class MessageService {
-  MessageService({http.Client? client}) : _client = client ?? http.Client();
+  MessageService({http.Client? client}) : _client = client ?? apiClient();
 
   String get _baseUrl => ApiConfig.baseUrl;
   final http.Client _client;
 
   Map<String, String> get _json => const {'Content-Type': 'application/json'};
 
-  Future<List<ConversationRecord>> fetchConversations({required int userId}) async {
-    final uri = Uri.parse('$_baseUrl/conversations').replace(queryParameters: {'user_id': '$userId'});
+  Future<List<ConversationRecord>> fetchConversations() async {
+    final uri = Uri.parse('$_baseUrl/conversations');
     final response = await sendRequest(() => _client.get(uri));
     return (readData(response) as List<dynamic>)
         .whereType<Map<String, dynamic>>()
@@ -249,27 +247,26 @@ class MessageService {
         .toList(growable: false);
   }
 
-  Future<ConversationRecord> fetchConversation({required int conversationId, required int userId}) async {
-    final uri = Uri.parse('$_baseUrl/conversations/$conversationId').replace(queryParameters: {'user_id': '$userId'});
+  Future<ConversationRecord> fetchConversation({required int conversationId}) async {
+    final uri = Uri.parse('$_baseUrl/conversations/$conversationId');
     final response = await sendRequest(() => _client.get(uri));
     return ConversationRecord.fromJson(readData(response) as Map<String, dynamic>);
   }
 
   /// Finds or creates the buyer's thread on a listing (the Message button).
-  Future<ConversationRecord> openConversation({required int buyerId, required int productId}) async {
+  Future<ConversationRecord> openConversation({required int productId}) async {
     final response = await sendRequest(
       () => _client.post(
         Uri.parse('$_baseUrl/conversations'),
         headers: _json,
-        body: jsonEncode({'buyer_id': buyerId, 'product_id': productId}),
+        body: jsonEncode({'product_id': productId}),
       ),
     );
     return ConversationRecord.fromJson(readData(response) as Map<String, dynamic>);
   }
 
-  Future<List<MessageRecord>> fetchMessages({required int conversationId, required int userId}) async {
-    final uri = Uri.parse('$_baseUrl/conversations/$conversationId/messages')
-        .replace(queryParameters: {'user_id': '$userId'});
+  Future<List<MessageRecord>> fetchMessages({required int conversationId}) async {
+    final uri = Uri.parse('$_baseUrl/conversations/$conversationId/messages');
     final response = await sendRequest(() => _client.get(uri));
     return (readData(response) as List<dynamic>)
         .whereType<Map<String, dynamic>>()
@@ -279,26 +276,21 @@ class MessageService {
 
   Future<MessageRecord> sendMessage({
     required int conversationId,
-    required int senderId,
     required String content,
   }) async {
     final response = await sendRequest(
       () => _client.post(
         Uri.parse('$_baseUrl/conversations/$conversationId/messages'),
         headers: _json,
-        body: jsonEncode({'sender_id': senderId, 'content': content}),
+        body: jsonEncode({'content': content}),
       ),
     );
     return MessageRecord.fromJson(readData(response) as Map<String, dynamic>);
   }
 
-  Future<void> markRead({required int conversationId, required int userId}) async {
+  Future<void> markRead({required int conversationId}) async {
     final response = await sendRequest(
-      () => _client.patch(
-        Uri.parse('$_baseUrl/conversations/$conversationId/read'),
-        headers: _json,
-        body: jsonEncode({'user_id': userId}),
-      ),
+      () => _client.patch(Uri.parse('$_baseUrl/conversations/$conversationId/read')),
     );
     checkResponse(response);
   }

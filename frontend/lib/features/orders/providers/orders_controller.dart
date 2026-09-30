@@ -30,7 +30,7 @@ class OrdersController extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
     try {
-      orders = await _service.fetchOrders(userId: id);
+      orders = await _service.fetchOrders();
       errorMessage = null;
     } catch (error) {
       errorMessage = error.toString().replaceFirst('Exception: ', '');

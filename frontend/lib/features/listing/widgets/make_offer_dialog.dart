@@ -36,15 +36,14 @@ Future<NegotiationRecord?> showMakeOfferDialog(
   return showDialog<NegotiationRecord>(
     context: context,
     barrierDismissible: true,
-    builder: (_) => _MakeOfferDialog(listing: listing, buyerId: buyerId),
+    builder: (_) => _MakeOfferDialog(listing: listing),
   );
 }
 
 class _MakeOfferDialog extends StatefulWidget {
-  const _MakeOfferDialog({required this.listing, required this.buyerId});
+  const _MakeOfferDialog({required this.listing});
 
   final SyntheticListingRecord listing;
-  final int buyerId;
 
   @override
   State<_MakeOfferDialog> createState() => _MakeOfferDialogState();
@@ -91,7 +90,6 @@ class _MakeOfferDialogState extends State<_MakeOfferDialog> {
     });
     try {
       final offer = await _service.createOffer(
-        buyerId: widget.buyerId,
         productId: listing.productId!,
         price: price,
         quantity: quantity,

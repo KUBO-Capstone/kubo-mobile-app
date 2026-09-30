@@ -73,7 +73,6 @@ class _PlaceOrderPageState extends State<PlaceOrderPage> {
     setState(() => _placing = true);
     try {
       final order = await _orders.placeOrder(
-        buyerId: buyerId,
         negotiationId: widget.offer.id,
         method: _method,
         centerId: _method == DeliveryMethod.meetup ? int.tryParse(_center!.id) : null,

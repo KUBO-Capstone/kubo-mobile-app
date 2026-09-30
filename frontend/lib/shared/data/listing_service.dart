@@ -7,7 +7,7 @@ import 'api_request.dart';
 import 'synthetic_records.dart';
 
 class ListingService {
-  ListingService({http.Client? client}) : _client = client ?? http.Client();
+  ListingService({http.Client? client}) : _client = client ?? apiClient();
 
   String get _baseUrl => ApiConfig.baseUrl;
   final http.Client _client;
@@ -40,8 +40,8 @@ class ListingService {
     return SyntheticListingRecord.fromJson(readData(response) as Map<String, dynamic>);
   }
 
+  /// Lists produce as the signed-in user.
   Future<SyntheticListingRecord> createListing({
-    required int sellerId,
     required String cropName,
     required String category,
     required double price,
@@ -54,7 +54,6 @@ class ListingService {
         Uri.parse('$_baseUrl/products'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'seller_id': sellerId,
           'crop_name': cropName,
           'category': category,
           'base_price': price,
@@ -70,7 +69,6 @@ class ListingService {
   /// Seller edits the listing's details. Only non-null fields are sent.
   Future<SyntheticListingRecord> updateListing({
     required int productId,
-    required int sellerId,
     String? cropName,
     String? category,
     double? price,
@@ -78,7 +76,6 @@ class ListingService {
     String? unit,
   }) {
     return _patch(productId, {
-      'seller_id': sellerId,
       if (cropName != null) 'crop_name': cropName,
       if (category != null) 'category': category,
       if (price != null) 'base_price': price,
@@ -90,24 +87,18 @@ class ListingService {
   /// Marks the listing sold out ([soldOut] true) or available again.
   Future<SyntheticListingRecord> setSoldOut({
     required int productId,
-    required int sellerId,
     required bool soldOut,
   }) {
     return _patch(productId, {
-      'seller_id': sellerId,
       'status': soldOut ? 'out of stock' : 'available',
     });
   }
 
   /// Removes the listing from every view. The backend delists rather than
   /// deletes so buyers' past offers on it still resolve.
-  Future<void> removeListing({required int productId, required int sellerId}) async {
+  Future<void> removeListing({required int productId}) async {
     final response = await sendRequest(
-      () => _client.delete(
-        Uri.parse('$_baseUrl/products/$productId'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'seller_id': sellerId}),
-      ),
+      () => _client.delete(Uri.parse('$_baseUrl/products/$productId')),
     );
     checkResponse(response);
   }

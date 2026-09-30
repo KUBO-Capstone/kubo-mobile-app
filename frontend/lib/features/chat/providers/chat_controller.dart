@@ -68,8 +68,8 @@ class ChatController extends ChangeNotifier {
     }
     try {
       final results = await Future.wait<Object>([
-        _messages.fetchConversation(conversationId: conversationId, userId: id),
-        _messages.fetchMessages(conversationId: conversationId, userId: id),
+        _messages.fetchConversation(conversationId: conversationId),
+        _messages.fetchMessages(conversationId: conversationId),
       ]);
       conversation = results[0] as ConversationRecord;
       final fetched = results[1] as List<MessageRecord>;
@@ -80,7 +80,7 @@ class ChatController extends ChangeNotifier {
       errorMessage = null;
       // Anything the other party sent is on screen now; clear the inbox dot.
       if (hasNew && fetched.any((m) => !m.isMine(id) && m.readAt == null)) {
-        unawaited(_messages.markRead(conversationId: conversationId, userId: id));
+        unawaited(_messages.markRead(conversationId: conversationId));
       }
     } catch (error) {
       // A failed background poll keeps the last good thread on screen.
@@ -104,7 +104,6 @@ class ChatController extends ChangeNotifier {
     try {
       final sent = await _messages.sendMessage(
         conversationId: conversationId,
-        senderId: id,
         content: content,
       );
       messages = [...messages, sent];
@@ -121,10 +120,8 @@ class ChatController extends ChangeNotifier {
   /// Buyer opens a new offer on the thread's listing.
   Future<String?> makeOffer({required double price, required double quantity}) {
     return _offerAction(() async {
-      final id = userId!;
       final thread = conversation!;
       await _negotiations.createOffer(
-        buyerId: id,
         productId: thread.productId,
         price: price,
         quantity: quantity,
@@ -135,11 +132,9 @@ class ChatController extends ChangeNotifier {
   /// Accept, decline, or counter the current offer.
   Future<String?> respond(NegotiationAction action, {double? price, double? quantity}) {
     return _offerAction(() async {
-      final id = userId!;
       final negotiationId = conversation!.negotiationId!;
       await _negotiations.respond(
         negotiationId: negotiationId,
-        userId: id,
         action: action,
         price: price,
         quantity: quantity,

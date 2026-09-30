@@ -65,14 +65,13 @@ class _ManageListingSheetState extends State<_ManageListingSheet> {
 
   // Runs one server call, closes the sheet with the outcome, and surfaces
   // the backend message if it refused.
-  Future<void> _run(Future<ManageListingOutcome?> Function(int sellerId) action) async {
-    final sellerId = AuthService.currentUserId;
-    if (sellerId == null || listing.productId == null) {
+  Future<void> _run(Future<ManageListingOutcome?> Function() action) async {
+    if (AuthService.currentUserId == null || listing.productId == null) {
       return;
     }
     setState(() => _busy = true);
     try {
-      final outcome = await action(sellerId);
+      final outcome = await action();
       if (!mounted) return;
       // Null means the user backed out of a confirm step.
       Navigator.of(context).pop(outcome);
@@ -98,10 +97,9 @@ class _ManageListingSheetState extends State<_ManageListingSheet> {
   }
 
   Future<void> _toggleSoldOut() {
-    return _run((sellerId) async {
+    return _run(() async {
       final updated = await _service.setSoldOut(
         productId: listing.productId!,
-        sellerId: sellerId,
         soldOut: !listing.isSoldOut,
       );
       return ManageListingOutcome.updated(updated);
@@ -109,7 +107,7 @@ class _ManageListingSheetState extends State<_ManageListingSheet> {
   }
 
   Future<void> _remove() {
-    return _run((sellerId) async {
+    return _run(() async {
       final confirmed = await showDialog<bool>(
         context: context,
         builder:
@@ -135,10 +133,7 @@ class _ManageListingSheetState extends State<_ManageListingSheet> {
       if (confirmed != true) {
         return null;
       }
-      await _service.removeListing(
-        productId: listing.productId!,
-        sellerId: sellerId,
-      );
+      await _service.removeListing(productId: listing.productId!);
       return const ManageListingOutcome.removed();
     });
   }

@@ -107,7 +107,7 @@ class _ListingPageState extends State<ListingPage> {
     }
     final service = MessageService();
     try {
-      final thread = await service.openConversation(buyerId: buyerId, productId: productId);
+      final thread = await service.openConversation(productId: productId);
       if (!context.mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => ChatPage(conversationId: thread.id)),

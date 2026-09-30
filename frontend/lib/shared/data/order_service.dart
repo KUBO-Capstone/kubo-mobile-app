@@ -172,23 +172,20 @@ class OrderRecord {
       (isBuyer(userId) || isSeller(userId)) && status == OrderStatus.pending;
 }
 
-/// HTTP client for the order endpoints.
-///
-/// KNOWN DEBT: `buyer_id` / `user_id` go in the body because there is no auth
-/// token yet; drop them here when Phase 2 lands.
+/// HTTP client for the order endpoints. The acting user is whoever the token
+/// says is signed in.
 class OrderService {
-  OrderService({http.Client? client}) : _client = client ?? http.Client();
+  OrderService({http.Client? client}) : _client = client ?? apiClient();
 
   String get _baseUrl => ApiConfig.baseUrl;
   final http.Client _client;
 
   Map<String, String> get _json => const {'Content-Type': 'application/json'};
 
-  /// Orders [userId] is a party to. `role` narrows to `buyer` (purchases)
-  /// or `seller` (sales).
-  Future<List<OrderRecord>> fetchOrders({required int userId, String? role}) async {
+  /// Orders the signed-in user is a party to. `role` narrows to `buyer`
+  /// (purchases) or `seller` (sales).
+  Future<List<OrderRecord>> fetchOrders({String? role}) async {
     final uri = Uri.parse('$_baseUrl/orders').replace(queryParameters: {
-      'user_id': '$userId',
       if (role != null) 'role': role,
     });
     final response = await sendRequest(() => _client.get(uri));
@@ -198,8 +195,8 @@ class OrderService {
         .toList(growable: false);
   }
 
-  Future<OrderRecord> fetchOrder({required int orderId, required int userId}) async {
-    final uri = Uri.parse('$_baseUrl/orders/$orderId').replace(queryParameters: {'user_id': '$userId'});
+  Future<OrderRecord> fetchOrder({required int orderId}) async {
+    final uri = Uri.parse('$_baseUrl/orders/$orderId');
     final response = await sendRequest(() => _client.get(uri));
     return OrderRecord.fromJson(readData(response) as Map<String, dynamic>);
   }
@@ -207,7 +204,6 @@ class OrderService {
   /// Turns an accepted negotiation into an order. `centerId` is required for
   /// [DeliveryMethod.meetup] and ignored for courier.
   Future<OrderRecord> placeOrder({
-    required int buyerId,
     required int negotiationId,
     required DeliveryMethod method,
     int? centerId,
@@ -217,7 +213,6 @@ class OrderService {
         Uri.parse('$_baseUrl/orders'),
         headers: _json,
         body: jsonEncode({
-          'buyer_id': buyerId,
           'negotiation_id': negotiationId,
           'delivery_method': method.name,
           if (centerId != null) 'drop_off_center_id': centerId,
@@ -231,7 +226,6 @@ class OrderService {
   /// a courier order.
   Future<OrderRecord> respond({
     required int orderId,
-    required int userId,
     required OrderAction action,
     String? courierName,
     String? trackingNumber,
@@ -241,7 +235,6 @@ class OrderService {
         Uri.parse('$_baseUrl/orders/$orderId'),
         headers: _json,
         body: jsonEncode({
-          'user_id': userId,
           'action': action.name,
           if (courierName != null) 'courier_name': courierName,
           if (trackingNumber != null) 'tracking_number': trackingNumber,

@@ -79,7 +79,6 @@ class _CreateListingPageState extends State<CreateListingPage> {
       if (existing != null) {
         saved = await _service.updateListing(
           productId: existing.productId!,
-          sellerId: sellerId,
           cropName: _nameController.text.trim(),
           category: _category,
           price: double.parse(_priceController.text),
@@ -88,7 +87,6 @@ class _CreateListingPageState extends State<CreateListingPage> {
         );
       } else {
         saved = await _service.createListing(
-          sellerId: sellerId,
           cropName: _nameController.text.trim(),
           category: _category,
           price: double.parse(_priceController.text),

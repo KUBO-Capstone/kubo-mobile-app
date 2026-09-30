@@ -167,7 +167,10 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   void _clearLocationFilter() {
     setState(() {
       _focusLocation = null;
-      _accountLocationLabel = ExplorePage.defaultLocationLabel;
+      _accountLocationLabel = 
+        widget.initialLocationLabel.trim().isEmpty
+                ? ExplorePage.defaultLocationLabel
+                : widget.initialLocationLabel;
     });
   }
 

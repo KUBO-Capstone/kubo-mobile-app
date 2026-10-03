@@ -9,6 +9,7 @@ import 'features/login/screens/login_page.dart';
 import 'features/market/screens/market_page.dart';
 import 'features/notification/screens/notification_page.dart';
 import 'features/profile/screens/profile_page.dart';
+import 'features/report/screens/report_page.dart';
 import 'features/saved/screens/saved_listings_page.dart';
 import 'features/search/screens/search_page.dart';
 
@@ -70,6 +71,7 @@ class KuboApp extends StatelessWidget {
         MessagesPage.routeName: (_) => const MessagesPage(),
         ProfilePage.routeName: (_) => const ProfilePage(),
         SavedListingsPage.routeName: (_) => const SavedListingsPage(),
+        ReportPage.routeName: (_) => const ReportPage(),
       },
       initialRoute: LoginPage.routeName,
     );

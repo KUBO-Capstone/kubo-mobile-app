@@ -22,6 +22,7 @@ import '../../market/screens/market_page.dart';
 import '../../listing/screens/create_listing_page.dart';
 import '../../notification/screens/notification_page.dart';
 import '../../profile/screens/profile_page.dart';
+import '../../report/screens/report_page.dart';
 import '../../saved/providers/saved_listings_controller.dart';
 import '../../saved/screens/saved_listings_page.dart';
 import '../../search/screens/search_page.dart';
@@ -603,7 +604,14 @@ class _ExploreDrawer extends StatelessWidget {
                 title: 'Help and Guide',
                 iconPath: AppIcons.helpGuide,
               ),
-              DrawerListTile(title: 'Report', iconPath: AppIcons.flagReport),
+              DrawerListTile(
+                title: 'Report',
+                iconPath: AppIcons.flagReport,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pushNamed(ReportPage.routeName);
+                },
+              ),
             ],
           ),
         ),

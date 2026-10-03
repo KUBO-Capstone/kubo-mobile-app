@@ -346,6 +346,18 @@ export function initDb(): void {
             FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE SET NULL
         );
 
+        CREATE TABLE IF NOT EXISTS reports (
+            report_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_id INTEGER,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'feedback' CHECK (category IN ('feedback', 'bug', 'other')),
+            message TEXT NOT NULL,
+            is_read BOOLEAN DEFAULT FALSE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY (sender_id) REFERENCES users(user_id) ON DELETE SET NULL
+        );
+
     `);
     migrateLegacySchema();
     console.log('Database tables created')

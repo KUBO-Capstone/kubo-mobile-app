@@ -17,7 +17,7 @@ class NotificationRecord {
     return NotificationRecord(
       title: json['title']?.toString() ?? 'Notification',
       message: json['message']?.toString() ?? '',
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
+      createdAt: DateTime.tryParse('${json['created_at']?.toString() ?? ''}Z')?.toLocal(),
       sender: json['sender'] is Map<String, dynamic>
           ? PersonDetails.fromJson(json['sender'] as Map<String, dynamic>)
           : null,

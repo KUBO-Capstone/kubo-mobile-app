@@ -205,7 +205,8 @@ export const ConversationModel = {
         const recipientId = conversation.buyer_id === input.sender_id ? conversation.seller_id : conversation.buyer_id;
         const title = input.message_type === 'offer' || input.message_type === 'counter'
             ? 'New Offer'
-            : input.message_type === 'order' && input.content.toLowerCase().includes('received')
+            : input.message_type === 'order'
+                && (input.content.startsWith('Received order #') || input.content.startsWith('Picked up order #'))
                 ? 'Delivered'
                 : 'New Message';
         NotificationModel.create({

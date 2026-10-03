@@ -14,10 +14,13 @@ class NotificationRecord {
   });
 
   factory NotificationRecord.fromJson(Map<String, dynamic> json) {
+    final createdAtText = json['created_at']?.toString() ?? '';
+    final hasTimeZone = RegExp(r'(?:[zZ]|[+-]\d{2}:?\d{2})$').hasMatch(createdAtText);
+    final createdAt = DateTime.tryParse(hasTimeZone ? createdAtText : '${createdAtText}Z');
     return NotificationRecord(
       title: json['title']?.toString() ?? 'Notification',
       message: json['message']?.toString() ?? '',
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
+      createdAt: createdAt?.toLocal(),
       sender: json['sender'] is Map<String, dynamic>
           ? PersonDetails.fromJson(json['sender'] as Map<String, dynamic>)
           : null,

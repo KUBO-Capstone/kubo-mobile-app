@@ -46,6 +46,10 @@ class AuthService {
     required String email,
     required String password,
     required String contactNumber,
+    required String region,
+    required String province,
+    required String cityMunicipality,
+    required String zipCode,
   }) async {
     final response = await _post('/auth/register', {
       'first_name': firstName,
@@ -53,6 +57,10 @@ class AuthService {
       'email': email,
       'password': password,
       'contact_number': contactNumber,
+      'region': region,
+      'province': province,
+      'city_municipality': cityMunicipality,
+      'zip_code': zipCode,
     });
 
     return _startSession(readData(response) as Map<String, dynamic>);

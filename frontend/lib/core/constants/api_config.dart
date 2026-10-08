@@ -18,12 +18,13 @@ abstract final class ApiConfig {
 
   /// Base URL every service should use when building request URIs.
   static String get baseUrl {
-    if (configuredBaseUrl.isNotEmpty) {
-      return configuredBaseUrl;
-    }
+    return _loopbackBaseUrl;
+    // if (configuredBaseUrl.isNotEmpty) {
+    //   return configuredBaseUrl;
+    // }
 
-    final isAndroidDevice =
-        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-    return isAndroidDevice ? _androidEmulatorBaseUrl : _loopbackBaseUrl;
+    // final isAndroidDevice =
+    //     !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    // return isAndroidDevice ? _androidEmulatorBaseUrl : _loopbackBaseUrl;
   }
 }

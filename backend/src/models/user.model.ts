@@ -94,6 +94,29 @@ export const UserModel = {
         };
     },
 
+    createWithAddress(
+        user: Omit<User, "user_id" | "created_at" | "is_verified" | "password_hash" | "role" | "profile_photo_url" | "bio"> & {
+            password: string;
+            role?: UserRole;
+        },
+        address: Pick<AddressInput, 'region' | 'province' | 'city_municipality' | 'zip_code'>,
+    ): User {
+        const createUserWithAddress = db.transaction(() => {
+            const createdUser = UserModel.create(user);
+            const addressInfo = db.prepare(`
+                INSERT INTO addresses (region, province, city_municipality, barangay, zip_code)
+                VALUES (@region, @province, @city_municipality, '', @zip_code)
+            `).run(address);
+
+            db.prepare('UPDATE users SET preferred_address_id = ? WHERE user_id = ?')
+                .run(addressInfo.lastInsertRowid, createdUser.user_id);
+
+            return createdUser;
+        });
+
+        return createUserWithAddress();
+    },
+
     // to delete a row
     delete: (id: number): boolean => {
         const query = 'DELETE FROM users WHERE user_id = ?';

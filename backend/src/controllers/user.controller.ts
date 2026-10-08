@@ -14,10 +14,15 @@ export const getUsers = (req: Request, res: Response): void => {
 };
 
 export const createUser = (req: Request, res: Response): void => {
-    const { first_name, last_name, email, password, contact_number, role } = req.body;
+    const { first_name, last_name, email, password, contact_number, role, region, province, city_municipality, zip_code } = req.body;
 
-    if (!first_name || !last_name || !email || !password || !contact_number) {
-        res.status(400).json({ success: false, message: "All user fields are required" });
+    if (!first_name || !last_name || !email || !password || !contact_number ||
+        !region || !city_municipality || !zip_code || (region !== 'NCR' && !province)) {
+        res.status(400).json({ success: false, message: "All account and address fields are required" });
+        return;
+    }
+    if (typeof zip_code !== 'string' || !/^\d{4}$/.test(zip_code.trim())) {
+        res.status(400).json({ success: false, message: "ZIP code must contain exactly 4 digits" });
         return;
     }
 
@@ -29,7 +34,22 @@ export const createUser = (req: Request, res: Response): void => {
 
     // Admins are never self-registered; anything but 'farmer' signs up as a consumer.
     const requestedRole = role === 'farmer' ? role : 'consumer';
-    const user = UserModel.create({ first_name, last_name, email: normalizedEmail, password, contact_number, role: requestedRole });
+    const user = UserModel.createWithAddress(
+        {
+            first_name: first_name.trim(),
+            last_name: last_name.trim(),
+            email: normalizedEmail,
+            password,
+            contact_number: contact_number.trim(),
+            role: requestedRole,
+        },
+        {
+            region: region.trim(),
+            province: (province ?? '').trim(),
+            city_municipality: city_municipality.trim(),
+            zip_code: zip_code.trim(),
+        },
+    );
     const { password_hash: _passwordHash, ...safeUser } = user;
     // Registering signs the user in, same as login.
     res.status(201).json({ success: true, data: { ...safeUser, token: signToken(user.user_id, user.role) } });

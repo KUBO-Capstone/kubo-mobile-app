@@ -100,7 +100,9 @@ class ProfilePageController extends ChangeNotifier {
     final region = address['region']?.toString() ?? '';
     final province = address['province']?.toString() ?? '';
     final location = city.isEmpty ? '' : '$city, ${region.toUpperCase() == 'NCR' ? region : province}'.trim();
-    final createdAt = DateTime.tryParse(_loadedProfile?['created_at']?.toString() ?? '');
+    final createdAtText = _loadedProfile?['created_at']?.toString() ?? '';
+    final hasTimeZone = RegExp(r'(?:[zZ]|[+-]\d{2}:?\d{2})$').hasMatch(createdAtText);
+    final createdAt = DateTime.tryParse(hasTimeZone ? createdAtText : '${createdAtText}Z')?.toLocal();
     return SyntheticProfileRecord(
       displayName: displayName.isEmpty ? syntheticProfileRecord.displayName : displayName,
       username: user['email']?.toString() ?? syntheticProfileRecord.username,

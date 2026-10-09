@@ -31,6 +31,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
   final ImagePicker _picker = ImagePicker();
   File? _photo;
   bool _saving = false;
+  bool _profileLoading = true;
+  bool _profileLoadFailed = false;
   List<Map<String, dynamic>> _addresses = [];
   int? _selectedAddressId;
   bool _newAddress = false;
@@ -67,8 +69,17 @@ class _EditProfilePageState extends State<EditProfilePage> {
         (address) => address['address_id'] == _selectedAddressId,
         orElse: () => <String, dynamic>{},
       ));
-      if (mounted) setState(() {});
-    } catch (_) {}
+      setState(() {
+        _profileLoading = false;
+        _profileLoadFailed = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _profileLoading = false;
+        _profileLoadFailed = true;
+      });
+    }
   }
 
   void _loadAddress(Map<String, dynamic> address) {
@@ -103,6 +114,19 @@ class _EditProfilePageState extends State<EditProfilePage> {
     if (_firstName.text.trim().isEmpty || _lastName.text.trim().isEmpty || _contactNumber.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name and contact number are required.')));
       return;
+    }
+    if (_newAddress || _selectedAddressId == null) {
+      final isNcr = _region.text.trim().toUpperCase() == 'NCR';
+      if (_region.text.trim().isEmpty ||
+          (!isNcr && _province.text.trim().isEmpty) ||
+          _city.text.trim().isEmpty ||
+          _barangay.text.trim().isEmpty ||
+          _zip.text.trim().isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Complete the required address fields before adding a new address.')));
+        return;
+      }
     }
     setState(() => _saving = true);
     try {
@@ -209,7 +233,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           TextField(controller: _landmark, decoration: const InputDecoration(labelText: 'Landmark (optional)')),
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: _saving ? null : _save,
+            onPressed: (_saving || _profileLoading || _profileLoadFailed) ? null : _save,
             icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_outlined),
             label: Text(_saving ? 'Saving...' : 'Save changes'),
           ),

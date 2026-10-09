@@ -57,7 +57,17 @@ export const UserModel = {
         if (!user) return undefined;
         const preferred = user.preferred_address_id;
         const addresses = db.prepare(`
-            SELECT DISTINCT a.*
+            SELECT DISTINCT
+                a.address_id,
+                a.region,
+                a.province,
+                a.city_municipality,
+                a.barangay,
+                a.zip_code,
+                NULL AS street_details,
+                NULL AS landmark,
+                NULL AS latitude,
+                NULL AS longitude
             FROM addresses a
             LEFT JOIN user_addresses ua ON ua.address_id = a.address_id
             WHERE ua.user_id = ? OR a.address_id = ?

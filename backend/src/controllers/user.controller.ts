@@ -4,6 +4,7 @@ import path from "path";
 import { UserModel } from "#models/user.model";
 import { signToken } from "#utils/token";
 import { authUserId } from "#middleware/auth.middleware";
+import { verifyPassword } from "#utils/password";
 
 export const getUsers = (req: Request, res: Response): void => {
     const users = UserModel.findAll();
@@ -55,7 +56,7 @@ export const createUser = (req: Request, res: Response): void => {
     res.status(201).json({ success: true, data: { ...safeUser, token: signToken(user.user_id, user.role) } });
 };
 
-const publicUser = (user: ReturnType<typeof UserModel.findById>) => {
+const publicUser = (user: ReturnType<typeof UserModel.findById> | ReturnType<typeof UserModel.findProfile>) => {
     if (!user) return undefined;
     const { password_hash: _passwordHash, ...safeUser } = user;
     return safeUser;
@@ -67,7 +68,7 @@ export const getProfile = (req: Request<{ id: string }>, res: Response): void =>
         res.status(400).json({ success: false, message: 'Invalid user ID format' });
         return;
     }
-    const user = UserModel.findById(userId);
+    const user = UserModel.findProfile(userId);
     if (!user) {
         res.status(404).json({ success: false, message: 'User not found' });
         return;
@@ -94,7 +95,28 @@ export const updateProfile = (req: Request<{ id: string }>, res: Response): void
         res.status(404).json({ success: false, message: 'User not found' });
         return;
     }
-    res.json({ success: true, data: publicUser(user) });
+    res.json({ success: true, data: publicUser(UserModel.findProfile(userId)) });
+};
+
+export const changePassword = (req: Request<{ id: string }>, res: Response): void => {
+    const userId = Number(req.params.id);
+    const currentPassword = typeof req.body.current_password === 'string' ? req.body.current_password : '';
+    const newPassword = typeof req.body.new_password === 'string' ? req.body.new_password : '';
+    const user = UserModel.findById(userId);
+    if (!Number.isInteger(userId) || userId <= 0 || !user) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+    }
+    if (!verifyPassword(currentPassword, user.password_hash)) {
+        res.status(401).json({ success: false, message: 'Current password is incorrect' });
+        return;
+    }
+    if (newPassword.length < 8) {
+        res.status(400).json({ success: false, message: 'New password must be at least 8 characters' });
+        return;
+    }
+    UserModel.updatePassword(userId, newPassword);
+    res.json({ success: true, data: { message: 'Password updated successfully' } });
 };
 
 export const uploadProfilePhoto = (req: Request<{ id: string }>, res: Response): void => {
@@ -174,18 +196,44 @@ export const addUserAddress = (req: Request<{ id: string }>, res: Response) => {
         if (isNaN(userId)) {
             return res.status(400).json({ error: "Invalid user ID format" });
         }
-        if (userId !== authUserId(res)) {
-            return res.status(403).json({ error: "You can only change your own address" });
-        }
-
         const addressId = UserModel.setPreferredAddress(userId, readAddressBody(req.body));
         
         res.status(201).json({ 
-            message: "Address updated successfully", 
-            addressId: addressId 
+            success: true,
+            data: UserModel.findProfile(userId),
+            message: "Address updated successfully",
+            addressId
         });
     } catch (error) {
         console.error("Error setting address:", error);
         res.status(500).json({ error: "Failed to update address" });
     }
+};
+
+export const updateUserAddress = (req: Request<{ id: string }>, res: Response) => {
+    const userId = Number(req.params.id);
+    const addressId = Number(req.body.address_id);
+    if (!Number.isInteger(userId) || !Number.isInteger(addressId)) {
+        res.status(400).json({ success: false, message: 'Invalid user or address ID' });
+        return;
+    }
+    if (!UserModel.updateAddress(userId, addressId, readAddressBody(req.body))) {
+        res.status(404).json({ success: false, message: 'Address not found' });
+        return;
+    }
+    res.json({ success: true, data: UserModel.findProfile(userId) });
+};
+
+export const choosePreferredAddress = (req: Request<{ id: string }>, res: Response) => {
+    const userId = Number(req.params.id);
+    const addressId = Number(req.body.address_id);
+    if (!Number.isInteger(userId) || !Number.isInteger(addressId)) {
+        res.status(400).json({ success: false, message: 'Invalid user or address ID' });
+        return;
+    }
+    if (!UserModel.choosePreferredAddress(userId, addressId)) {
+        res.status(404).json({ success: false, message: 'Address not found' });
+        return;
+    }
+    res.json({ success: true, data: UserModel.findProfile(userId) });
 };

@@ -200,7 +200,7 @@ export const addUserAddress = (req: Request<{ id: string }>, res: Response) => {
         
         res.status(201).json({ 
             success: true,
-            data: UserModel.findProfile(userId),
+            data: publicUser(UserModel.findProfile(userId)),
             message: "Address updated successfully",
             addressId
         });

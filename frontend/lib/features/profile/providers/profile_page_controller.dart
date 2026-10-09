@@ -90,12 +90,25 @@ class ProfilePageController extends ChangeNotifier {
     final firstName = user['first_name']?.toString().trim() ?? '';
     final lastName = user['last_name']?.toString().trim() ?? '';
     final displayName = '$firstName $lastName'.trim();
+    final addresses = (_loadedProfile?['addresses'] as List?)?.whereType<Map>().toList() ?? const <Map>[];
+    final preferredId = _loadedProfile?['preferred_address_id'];
+    final address = addresses.cast<Map<String, dynamic>>().firstWhere(
+      (item) => item['address_id'] == preferredId,
+      orElse: () => <String, dynamic>{},
+    );
+    final city = address['city_municipality']?.toString() ?? '';
+    final region = address['region']?.toString() ?? '';
+    final province = address['province']?.toString() ?? '';
+    final location = city.isEmpty ? '' : '$city, ${region.toUpperCase() == 'NCR' ? region : province}'.trim();
+    final createdAt = DateTime.tryParse(_loadedProfile?['created_at']?.toString() ?? '');
     return SyntheticProfileRecord(
       displayName: displayName.isEmpty ? syntheticProfileRecord.displayName : displayName,
       username: user['email']?.toString() ?? syntheticProfileRecord.username,
-      locationLabel: syntheticProfileRecord.locationLabel,
-      about: syntheticProfileRecord.about,
-      joinedLabel: syntheticProfileRecord.joinedLabel,
+      locationLabel: location,
+      about: _loadedProfile?['bio']?.toString() ?? '',
+      joinedLabel: createdAt == null
+          ? ''
+          : '${createdAt.month.toString().padLeft(2, '0')}/${createdAt.day.toString().padLeft(2, '0')}/${createdAt.year}',
       followingCount: syntheticProfileRecord.followingCount,
       followersCount: syntheticProfileRecord.followersCount,
       listingCount: _listings.length,

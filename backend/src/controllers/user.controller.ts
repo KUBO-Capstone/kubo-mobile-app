@@ -102,8 +102,16 @@ export const changePassword = (req: Request<{ id: string }>, res: Response): voi
     const userId = Number(req.params.id);
     const currentPassword = typeof req.body.current_password === 'string' ? req.body.current_password : '';
     const newPassword = typeof req.body.new_password === 'string' ? req.body.new_password : '';
+    if (!Number.isInteger(userId) || userId <= 0) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+    }
+    if (userId !== authUserId(res)) {
+        res.status(403).json({ success: false, message: "You can only change your own password" });
+        return;
+    }
     const user = UserModel.findById(userId);
-    if (!Number.isInteger(userId) || userId <= 0 || !user) {
+    if (!user) {
         res.status(404).json({ success: false, message: 'User not found' });
         return;
     }
@@ -218,6 +226,10 @@ export const updateUserAddress = (req: Request<{ id: string }>, res: Response) =
     const addressId = Number(req.body.address_id);
     if (!Number.isInteger(userId) || !Number.isInteger(addressId)) {
         res.status(400).json({ success: false, message: 'Invalid user or address ID' });
+        return;
+    }
+    if (userId !== authUserId(res)) {
+        res.status(403).json({ success: false, message: 'You can only change your own address' });
         return;
     }
     if (!UserModel.updateAddress(userId, addressId, readAddressBody(req.body))) {

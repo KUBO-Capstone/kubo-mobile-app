@@ -16,7 +16,7 @@ String resolveProfilePhotoUrl(String? photoPath) {
 }
 
 class ProfileService {
-  ProfileService({http.Client? client}) : _client = client ?? http.Client();
+  ProfileService({http.Client? client}) : _client = client ?? apiClient();
 
   final http.Client _client;
 

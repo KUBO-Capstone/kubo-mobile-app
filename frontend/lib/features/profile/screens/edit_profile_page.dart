@@ -125,7 +125,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (_newAddress || _selectedAddressId == null) {
         profile = await _service.addAddress(userId: _userId, address: address);
       } else {
-        profile = await _service.updateAddress(userId: _userId, addressId: _selectedAddressId!, address: address);
+        await _service.updateAddress(userId: _userId, addressId: _selectedAddressId!, address: address);
+        profile = await _service.choosePreferredAddress(userId: _userId, addressId: _selectedAddressId!);
       }
       if (_photo != null) profile = await _service.uploadPhoto(userId: _userId, file: _photo!);
       if (!mounted) return;

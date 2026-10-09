@@ -57,6 +57,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Future<void> _loadProfile() async {
     try {
       final profile = await _service.fetchProfile(_userId);
+      if (!mounted) return;
       final raw = profile['addresses'];
       if (raw is List) {
         _addresses = raw.map((item) => Map<String, dynamic>.from(item as Map)).toList();

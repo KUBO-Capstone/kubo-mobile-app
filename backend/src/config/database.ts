@@ -61,6 +61,7 @@ function migrateLegacySchema(): void {
                 FROM notifications_legacy;
                 DROP TABLE notifications_legacy;
             `);
+
         })();
     }
 
@@ -110,6 +111,14 @@ export function initDb(): void {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
             FOREIGN KEY (preferred_address_id) REFERENCES addresses(address_id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS user_addresses (
+            user_id INTEGER NOT NULL,
+            address_id INTEGER NOT NULL,
+            PRIMARY KEY (user_id, address_id),
+            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY (address_id) REFERENCES addresses(address_id) ON DELETE CASCADE
         );
 
         -- Farm location and vetting state for users whose role is 'farmer'.
@@ -363,6 +372,12 @@ export function initDb(): void {
     `);
     migrateLegacySchema();
     console.log('Database tables created')
+    db.exec(`
+        INSERT OR IGNORE INTO user_addresses (user_id, address_id)
+        SELECT user_id, preferred_address_id
+        FROM users
+        WHERE preferred_address_id IS NOT NULL;
+    `);
 }
 
 initDb();

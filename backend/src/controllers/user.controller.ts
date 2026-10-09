@@ -196,6 +196,9 @@ export const addUserAddress = (req: Request<{ id: string }>, res: Response) => {
         if (isNaN(userId)) {
             return res.status(400).json({ error: "Invalid user ID format" });
         }
+        if (userId !== authUserId(res)) {
+            return res.status(403).json({ success: false, message: "You can only change your own address" });
+        }
         const addressId = UserModel.setPreferredAddress(userId, readAddressBody(req.body));
         
         res.status(201).json({ 

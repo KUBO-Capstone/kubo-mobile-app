@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
-import { getUsers, createUser, addUserAddress, addFarmAddress, getProfile, updateProfile, uploadProfilePhoto, deleteProfilePhoto } from "#controllers/user.controller";
+import { getUsers, createUser, addUserAddress, addFarmAddress, getProfile, updateProfile, uploadProfilePhoto, deleteProfilePhoto, changePassword, updateUserAddress, choosePreferredAddress } from "#controllers/user.controller";
 
 const router = Router();
 const uploadDirectory = path.resolve(__dirname, '../../uploads/profile');
@@ -22,10 +22,13 @@ router.get('/', requireAuth, getUsers);
 router.post('/', createUser);
 router.get('/:id/profile', getProfile);
 router.patch('/:id/profile', updateProfile);
+router.patch('/:id/password', changePassword);
 router.post('/:id/profile/photo', profileUpload.single('photo'), uploadProfilePhoto);
 router.delete('/:id/profile/photo', deleteProfilePhoto);
 router.post('/:id/address', addUserAddress);
 router.put('/:id/address', addUserAddress);
+router.patch('/:id/address', updateUserAddress);
+router.patch('/:id/preferred-address', choosePreferredAddress);
 router.post('/:id/farm-address', addFarmAddress);
 router.put('/:id/farm-address', addFarmAddress);
 

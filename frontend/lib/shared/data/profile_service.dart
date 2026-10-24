@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../core/constants/api_config.dart';
 import 'api_request.dart';
+import '../../features/login/services/auth_service.dart';
 
 String resolveProfilePhotoUrl(String? photoPath) {
   if (photoPath == null || photoPath.isEmpty) return '';
@@ -18,9 +19,17 @@ class ProfileService {
 
   final http.Client _client;
 
+  Map<String, String> get _authHeaders => {
+        if (AuthService.accessToken != null)
+          'Authorization': 'Bearer ${AuthService.accessToken}',
+      };
+
   Future<Map<String, dynamic>> fetchProfile(int userId) async {
     final response = await sendRequest(
-      () => _client.get(Uri.parse('${ApiConfig.baseUrl}/users/$userId/profile')),
+      () => _client.get(
+        Uri.parse('${ApiConfig.baseUrl}/users/$userId/profile'),
+        headers: _authHeaders,
+      ),
     );
     return Map<String, dynamic>.from(readData(response) as Map);
   }
@@ -31,16 +40,29 @@ class ProfileService {
     required String lastName,
     required String contactNumber,
     required String bio,
+    required String location,
+    required String businessName,
+    required String businessType,
+    Map<String, bool>? profilePrivacy,
   }) async {
     final response = await sendRequest(
       () => _client.patch(
         Uri.parse('${ApiConfig.baseUrl}/users/$userId/profile'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', ..._authHeaders},
         body: jsonEncode({
           'first_name': firstName,
           'last_name': lastName,
           'contact_number': contactNumber,
           'bio': bio,
+          'location': location,
+          'business_name': businessName,
+          'business_type': businessType,
+          'profile_privacy': profilePrivacy ?? const {
+            'public_profile': true,
+            'show_bio': true,
+            'show_contact_number': true,
+            'show_location': true,
+          },
         }),
       ),
     );
@@ -54,14 +76,19 @@ class ProfileService {
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('${ApiConfig.baseUrl}/users/$userId/profile/photo'),
-    )..files.add(await http.MultipartFile.fromPath('photo', file.path));
+    )
+      ..headers.addAll(_authHeaders)
+      ..files.add(await http.MultipartFile.fromPath('photo', file.path));
     final response = await sendRequest(() async => http.Response.fromStream(await request.send()));
     return Map<String, dynamic>.from(readData(response) as Map);
   }
 
   Future<Map<String, dynamic>> deletePhoto(int userId) async {
     final response = await sendRequest(
-      () => _client.delete(Uri.parse('${ApiConfig.baseUrl}/users/$userId/profile/photo')),
+      () => _client.delete(
+        Uri.parse('${ApiConfig.baseUrl}/users/$userId/profile/photo'),
+        headers: _authHeaders,
+      ),
     );
     return Map<String, dynamic>.from(readData(response) as Map);
   }

@@ -15,6 +15,8 @@ class AuthService {
 
   static Map<String, dynamic>? currentUser;
 
+  static String? get accessToken => currentUser?['access_token']?.toString();
+
   /// Numeric id of the signed-in user, or null when nobody is logged in.
   static int? get currentUserId =>
       int.tryParse(currentUser?['user_id']?.toString() ?? '');

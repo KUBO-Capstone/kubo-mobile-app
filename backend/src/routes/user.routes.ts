@@ -4,6 +4,7 @@ import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 import { getUsers, createUser, addUserAddress, addFarmAddress, getProfile, updateProfile, uploadProfilePhoto, deleteProfilePhoto } from "#controllers/user.controller";
+import { attachAuth, requireAuth, requireOwner } from "#middleware/auth.middleware";
 
 const router = Router();
 const uploadDirectory = path.resolve(__dirname, '../../uploads/profile');
@@ -19,13 +20,13 @@ const profileUpload = multer({
 
 router.get('/', getUsers);
 router.post('/', createUser);
-router.get('/:id/profile', getProfile);
-router.patch('/:id/profile', updateProfile);
-router.post('/:id/profile/photo', profileUpload.single('photo'), uploadProfilePhoto);
-router.delete('/:id/profile/photo', deleteProfilePhoto);
-router.post('/:id/address', addUserAddress);
-router.put('/:id/address', addUserAddress);
-router.post('/:id/farm-address', addFarmAddress);
-router.put('/:id/farm-address', addFarmAddress);
+router.get('/:id/profile', attachAuth, getProfile);
+router.patch('/:id/profile', requireAuth, requireOwner, updateProfile);
+router.post('/:id/profile/photo', requireAuth, requireOwner, profileUpload.single('photo'), uploadProfilePhoto);
+router.delete('/:id/profile/photo', requireAuth, requireOwner, deleteProfilePhoto);
+router.post('/:id/address', requireAuth, requireOwner, addUserAddress);
+router.put('/:id/address', requireAuth, requireOwner, addUserAddress);
+router.post('/:id/farm-address', requireAuth, requireOwner, addFarmAddress);
+router.put('/:id/farm-address', requireAuth, requireOwner, addFarmAddress);
 
 export default router;

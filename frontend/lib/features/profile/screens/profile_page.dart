@@ -507,6 +507,21 @@ class _ProfilePageState extends State<ProfilePage> {
             value: _controller.profile.joinedLabel,
           ),
           const SizedBox(height: 14),
+          if (_controller.profile.businessName.isNotEmpty)
+            _DetailRow(
+              icon: Icons.storefront_outlined,
+              label: 'Business',
+              value: _controller.profile.businessName,
+            ),
+          if (_controller.profile.businessType.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _DetailRow(
+              icon: Icons.category_outlined,
+              label: 'Type',
+              value: _controller.profile.businessType,
+            ),
+          ],
+          const SizedBox(height: 14),
           _DetailRow(
             icon: Icons.location_on_outlined,
             value: _controller.profile.locationLabel,
@@ -515,6 +530,55 @@ class _ProfilePageState extends State<ProfilePage> {
           _DetailRow(
             icon: Icons.person_outline,
             value: _controller.profile.username,
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Profile analytics',
+            style: TextStyle(
+              color: AppColors.black,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _AnalyticsCard(
+                  label: 'Followers',
+                  value: _controller.profile.followersCount.toString(),
+                  accent: AppColors.green,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _AnalyticsCard(
+                  label: 'Listings',
+                  value: _controller.profile.listingCount.toString(),
+                  accent: AppColors.black,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _AnalyticsCard(
+                  label: 'Rating',
+                  value: _controller.profile.reviewScore.toStringAsFixed(1),
+                  accent: AppColors.green,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _AnalyticsCard(
+                  label: 'Reviews',
+                  value: _controller.profile.reviewCount.toString(),
+                  accent: AppColors.gray,
+                ),
+              ),
+            ],
           ),
           if (widget.isOwnProfile) ...[
             const SizedBox(height: 28),
@@ -662,6 +726,45 @@ class _PillButton extends StatelessWidget {
       child: Text(
         label, 
         style: TextStyle(fontSize: fontSize)),
+    );
+  }
+}
+
+class _AnalyticsCard extends StatelessWidget {
+  const _AnalyticsCard({
+    required this.label,
+    required this.value,
+    required this.accent,
+  });
+
+  final String label;
+  final String value;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: AppColors.gray, fontSize: 12)),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              color: accent,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

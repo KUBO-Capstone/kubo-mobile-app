@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import fs from "fs";
 import path from "path";
 import { UserModel } from "#models/user.model";
+import { createAuthToken } from "#middleware/auth.middleware";
 
 export const getUsers = (req: Request, res: Response): void => {
     const users = UserModel.findAll();
@@ -28,12 +29,34 @@ export const createUser = (req: Request, res: Response): void => {
     const requestedRole = role === 'farmer' || role === 'admin' ? role : 'consumer';
     const user = UserModel.create({ first_name, last_name, email: normalizedEmail, password, contact_number, role: requestedRole });
     const { password_hash: _passwordHash, ...safeUser } = user;
-    res.status(201).json({ success: true, data: safeUser });
+    res.status(201).json({ success: true, data: { ...safeUser, access_token: createAuthToken(user.user_id) } });
 };
 
-const publicUser = (user: ReturnType<typeof UserModel.findById>) => {
+const publicUser = (user: ReturnType<typeof UserModel.findById>, viewerId?: number) => {
     if (!user) return undefined;
     const { password_hash: _passwordHash, ...safeUser } = user;
+    if (viewerId !== user.user_id) {
+        const visibleUser: Record<string, unknown> = { ...safeUser };
+        let privacy: Record<string, boolean> = {};
+        try {
+            privacy = JSON.parse(user.profile_privacy || '{}') as Record<string, boolean>;
+        } catch (_) {
+            privacy = {};
+        }
+        if (privacy.public_profile === false) {
+            return {
+                user_id: user.user_id,
+                first_name: user.first_name,
+                last_name: user.last_name,
+                role: user.role,
+                is_verified: user.is_verified,
+            };
+        }
+        if (privacy.show_bio === false) delete visibleUser.bio;
+        if (privacy.show_contact_number === false) delete visibleUser.contact_number;
+        if (privacy.show_location === false) delete visibleUser.location;
+        return visibleUser;
+    }
     return safeUser;
 };
 
@@ -48,7 +71,7 @@ export const getProfile = (req: Request<{ id: string }>, res: Response): void =>
         res.status(404).json({ success: false, message: 'User not found' });
         return;
     }
-    res.json({ success: true, data: publicUser(user) });
+    res.json({ success: true, data: publicUser(user, req.authUserId) });
 };
 
 export const updateProfile = (req: Request<{ id: string }>, res: Response): void => {
@@ -57,15 +80,35 @@ export const updateProfile = (req: Request<{ id: string }>, res: Response): void
     const lastName = typeof req.body.last_name === 'string' ? req.body.last_name.trim() : '';
     const contactNumber = typeof req.body.contact_number === 'string' ? req.body.contact_number.trim() : '';
     const bio = typeof req.body.bio === 'string' ? req.body.bio.trim() : '';
+    const location = typeof req.body.location === 'string' ? req.body.location.trim() : '';
+    const businessName = typeof req.body.business_name === 'string' ? req.body.business_name.trim() : '';
+    const businessType = typeof req.body.business_type === 'string' ? req.body.business_type.trim() : '';
+    const profilePrivacy = typeof req.body.profile_privacy === 'object' && req.body.profile_privacy !== null
+        ? JSON.stringify({
+            public_profile: req.body.profile_privacy.public_profile !== false,
+            show_bio: req.body.profile_privacy.show_bio !== false,
+            show_contact_number: req.body.profile_privacy.show_contact_number !== false,
+            show_location: req.body.profile_privacy.show_location !== false,
+        })
+        : JSON.stringify({ public_profile: true, show_bio: true, show_contact_number: true, show_location: true });
     if (!Number.isInteger(userId) || userId <= 0 || !firstName || !lastName || !contactNumber) {
         res.status(400).json({ success: false, message: 'Name and contact number are required' });
         return;
     }
-    if (firstName.length > 50 || lastName.length > 50 || contactNumber.length > 20 || bio.length > 500) {
+    if (firstName.length > 50 || lastName.length > 50 || contactNumber.length > 20 || bio.length > 500 || location.length > 80 || businessName.length > 80 || businessType.length > 40) {
         res.status(400).json({ success: false, message: 'Profile fields exceed their allowed length' });
         return;
     }
-    const user = UserModel.updateProfile(userId, { first_name: firstName, last_name: lastName, contact_number: contactNumber, bio });
+    const user = UserModel.updateProfile(userId, {
+        first_name: firstName,
+        last_name: lastName,
+        contact_number: contactNumber,
+        bio,
+        location,
+        business_name: businessName,
+        business_type: businessType,
+        profile_privacy: profilePrivacy,
+    });
     if (!user) {
         res.status(404).json({ success: false, message: 'User not found' });
         return;

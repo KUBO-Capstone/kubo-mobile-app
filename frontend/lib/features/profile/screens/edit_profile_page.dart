@@ -1,13 +1,12 @@
-import 'dart:math';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:image/image.dart' as img;
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/profile_service.dart';
 import '../models/profile_validation.dart';
+import 'profile_photo_editor_page.dart';
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key, required this.user});
@@ -29,15 +28,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   final ProfileService _service = ProfileService();
   final ImagePicker _picker = ImagePicker();
   File? _photo;
-  double _photoRotation = 0;
   bool _saving = false;
-
-  Map<String, bool> _privacy = const {
-    'public_profile': true,
-    'show_bio': true,
-    'show_contact_number': true,
-    'show_location': true,
-  };
 
   int get _userId => int.parse(widget.user['user_id'].toString());
 
@@ -51,10 +42,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _location = TextEditingController(text: widget.user['location']?.toString() ?? '');
     _businessName = TextEditingController(text: widget.user['business_name']?.toString() ?? '');
     _businessType = TextEditingController(text: widget.user['business_type']?.toString() ?? '');
-    final privacy = widget.user['profile_privacy'];
-    if (privacy is Map) {
-      _privacy = Map<String, bool>.from(privacy.map((key, value) => MapEntry(key.toString(), value is bool ? value : false)));
-    }
   }
 
   @override
@@ -70,39 +57,39 @@ class _EditProfilePageState extends State<EditProfilePage> {
     super.dispose();
   }
 
-  Future<File> _prepareCroppedAvatar(File source, double rotationDegrees) async {
-    final raw = await source.readAsBytes();
-    final decoded = img.decodeImage(raw);
-    if (decoded == null) return source;
-
-    final rotated = img.copyRotate(decoded, angle: rotationDegrees.round());
-    final side = min(rotated.width, rotated.height);
-    final x = (rotated.width - side) ~/ 2;
-    final y = (rotated.height - side) ~/ 2;
-    final cropped = img.copyCrop(rotated, x: x, y: y, width: side, height: side);
-    final encoded = img.encodeJpg(cropped, quality: 90);
-    final output = File('${Directory.systemTemp.path}/kubo-avatar-${DateTime.now().microsecondsSinceEpoch}.jpg');
-    await output.writeAsBytes(encoded, flush: true);
-    return output;
+  Future<void> _pickPhoto(ImageSource source) async {
+    final picked = await _picker.pickImage(source: source, maxWidth: 2400, imageQuality: 92);
+    if (picked == null || !mounted) return;
+    final edited = await Navigator.of(context).push<File>(
+      MaterialPageRoute<File>(
+        fullscreenDialog: true,
+        builder: (_) => ProfilePhotoEditorPage(source: File(picked.path)),
+      ),
+    );
+    if (edited != null && mounted) setState(() => _photo = edited);
   }
 
-  Future<void> _pickPhoto() async {
-    final picked = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 1600, imageQuality: 85);
-    if (picked == null) return;
-
-    final processed = await _prepareCroppedAvatar(File(picked.path), _photoRotation);
-    if (!mounted) return;
-    setState(() {
-      _photo = processed;
-      _photoRotation = 0;
-    });
-  }
-
-  void _rotatePhoto(int direction) {
-    if (_photo == null) return;
-    setState(() {
-      _photoRotation = (_photoRotation + direction * 90) % 360;
-    });
+  Future<void> _choosePhotoSource() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source != null) await _pickPhoto(source);
   }
 
   Future<void> _save({bool confirmed = false}) async {
@@ -186,11 +173,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
         location: _location.text.trim(),
         businessName: _businessName.text.trim(),
         businessType: _businessType.text.trim(),
-        profilePrivacy: _privacy,
       );
       if (_photo != null) {
-        final rotatedPhoto = await _prepareCroppedAvatar(_photo!, _photoRotation);
-        profile = await _service.uploadPhoto(userId: _userId, file: rotatedPhoto);
+        profile = await _service.uploadPhoto(userId: _userId, file: _photo!);
       }
       if (!mounted) return;
       Navigator.of(context).pop(profile);
@@ -220,35 +205,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 if (_photo != null)
                   Positioned.fill(
                     child: ClipOval(
-                      child: Transform.rotate(
-                        angle: _photoRotation * pi / 180,
-                        child: Image.file(_photo!, fit: BoxFit.cover),
-                      ),
+                      child: Image.file(_photo!, fit: BoxFit.cover),
                     ),
                   ),
                 Positioned(
                   right: 0,
                   bottom: 0,
-                  child: IconButton.filled(onPressed: _pickPhoto, icon: const Icon(Icons.camera_alt_outlined)),
+                  child: IconButton.filled(onPressed: _choosePhotoSource, icon: const Icon(Icons.camera_alt_outlined)),
                 ),
-                if (_photo != null)
-                  Positioned(
-                    left: 0,
-                    bottom: 0,
-                    child: Row(
-                      children: [
-                        IconButton.filledTonal(
-                          onPressed: () => _rotatePhoto(-1),
-                          icon: const Icon(Icons.rotate_left),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton.filledTonal(
-                          onPressed: () => _rotatePhoto(1),
-                          icon: const Icon(Icons.rotate_right),
-                        ),
-                      ],
-                    ),
-                  ),
               ],
             ),
           ),
@@ -266,33 +230,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
           TextField(controller: _businessType, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Business type')),
           const SizedBox(height: 14),
           TextField(controller: _bio, maxLength: 500, maxLines: 4, decoration: const InputDecoration(labelText: 'Bio', alignLabelWithHint: true)),
-          const SizedBox(height: 12),
-          Text('Profile visibility', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          SwitchListTile(
-            value: _privacy['public_profile'] ?? true,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Public profile'),
-            onChanged: (value) => setState(() => _privacy['public_profile'] = value),
-          ),
-          SwitchListTile(
-            value: _privacy['show_bio'] ?? true,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Show bio'),
-            onChanged: (value) => setState(() => _privacy['show_bio'] = value),
-          ),
-          SwitchListTile(
-            value: _privacy['show_contact_number'] ?? true,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Show contact number'),
-            onChanged: (value) => setState(() => _privacy['show_contact_number'] = value),
-          ),
-          SwitchListTile(
-            value: _privacy['show_location'] ?? true,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Show location'),
-            onChanged: (value) => setState(() => _privacy['show_location'] = value),
-          ),
           const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: _saving ? null : _save,

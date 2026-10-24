@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../../core/constants/api_config.dart';
 import 'api_request.dart';
@@ -78,7 +79,11 @@ class ProfileService {
       Uri.parse('${ApiConfig.baseUrl}/users/$userId/profile/photo'),
     )
       ..headers.addAll(_authHeaders)
-      ..files.add(await http.MultipartFile.fromPath('photo', file.path));
+      ..files.add(await http.MultipartFile.fromPath(
+        'photo',
+        file.path,
+        contentType: MediaType('image', 'jpeg'),
+      ));
     final response = await sendRequest(() async => http.Response.fromStream(await request.send()));
     return Map<String, dynamic>.from(readData(response) as Map);
   }

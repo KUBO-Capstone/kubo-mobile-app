@@ -22,7 +22,13 @@ class AuthService {
       int.tryParse(currentUser?['user_id']?.toString() ?? '');
 
   static void updateCurrentUser(Map<String, dynamic> user) {
-    currentUser = user;
+    final existingToken = currentUser?['access_token'];
+    currentUser = {
+      ...?currentUser,
+      ...user,
+      if (user['access_token'] == null && existingToken != null)
+        'access_token': existingToken,
+    };
   }
 
   /// Ends the in-memory session. There is no server-side session to end

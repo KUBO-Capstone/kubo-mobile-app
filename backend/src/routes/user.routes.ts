@@ -15,7 +15,12 @@ const profileUpload = multer({
 		filename: (_req, file, callback) => callback(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
 	}),
 	limits: { fileSize: 5 * 1024 * 1024 },
-	fileFilter: (_req, file, callback) => callback(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)),
+	fileFilter: (_req, file, callback) => {
+		const extension = path.extname(file.originalname).toLowerCase();
+		const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+		const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/octet-stream'];
+		callback(null, allowedExtensions.includes(extension) && allowedMimeTypes.includes(file.mimetype));
+	},
 });
 
 router.get('/', getUsers);

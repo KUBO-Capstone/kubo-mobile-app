@@ -5,6 +5,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/profile_service.dart';
+import '../models/profile_validation.dart';
+import 'profile_photo_editor_page.dart';
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key, required this.user});
@@ -20,6 +22,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
   late final TextEditingController _lastName;
   late final TextEditingController _contactNumber;
   late final TextEditingController _bio;
+  late final TextEditingController _location;
+  late final TextEditingController _businessName;
+  late final TextEditingController _businessType;
   late final TextEditingController _region;
   late final TextEditingController _province;
   late final TextEditingController _city;
@@ -46,6 +51,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _lastName = TextEditingController(text: widget.user['last_name']?.toString());
     _contactNumber = TextEditingController(text: widget.user['contact_number']?.toString());
     _bio = TextEditingController(text: widget.user['bio']?.toString() ?? '');
+    _location = TextEditingController(text: widget.user['location']?.toString() ?? '');
+    _businessName = TextEditingController(text: widget.user['business_name']?.toString() ?? '');
+    _businessType = TextEditingController(text: widget.user['business_type']?.toString() ?? '');
     _region = TextEditingController();
     _province = TextEditingController();
     _city = TextEditingController();
@@ -98,6 +106,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _lastName.dispose();
     _contactNumber.dispose();
     _bio.dispose();
+    _location.dispose();
+    _businessName.dispose();
+    _businessType.dispose();
     for (final controller in [_region, _province, _city, _barangay, _zip, _street, _landmark]) {
       controller.dispose();
     }
@@ -105,15 +116,110 @@ class _EditProfilePageState extends State<EditProfilePage> {
     super.dispose();
   }
 
-  Future<void> _pickPhoto() async {
-    final picked = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 1600, imageQuality: 85);
-    if (picked != null) setState(() => _photo = File(picked.path));
+  Future<void> _pickPhoto(ImageSource source) async {
+    final picked = await _picker.pickImage(source: source, maxWidth: 2400, imageQuality: 92);
+    if (picked == null || !mounted) return;
+    final edited = await Navigator.of(context).push<File>(
+      MaterialPageRoute<File>(
+        fullscreenDialog: true,
+        builder: (_) => ProfilePhotoEditorPage(source: File(picked.path)),
+      ),
+    );
+    if (edited != null && mounted) setState(() => _photo = edited);
   }
 
-  Future<void> _save() async {
-    if (_firstName.text.trim().isEmpty || _lastName.text.trim().isEmpty || _contactNumber.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name and contact number are required.')));
+  Future<void> _choosePhotoSource() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source != null) await _pickPhoto(source);
+  }
+
+  Future<void> _save({bool confirmed = false}) async {
+    final validation = ProfileValidation.validate(
+      firstName: _firstName.text,
+      lastName: _lastName.text,
+      contactNumber: _contactNumber.text,
+      bio: _bio.text,
+      location: _location.text,
+      businessName: _businessName.text,
+      businessType: _businessType.text,
+    );
+    if (!validation.isValid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(validation.errors.first)),
+      );
       return;
+    }
+    if (!confirmed) {
+      final shouldSave = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Preview profile'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: CircleAvatar(
+                    radius: 38,
+                    backgroundColor: const Color(0xFFF3F3F3),
+                    backgroundImage: _photo == null ? null : FileImage(_photo!),
+                    child: _photo == null ? const Icon(Icons.person_outline, size: 40) : null,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text('${_firstName.text.trim()} ${_lastName.text.trim()}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                if (_businessName.text.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(_businessName.text.trim()),
+                ],
+                if (_businessType.text.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(_businessType.text.trim(), style: const TextStyle(color: AppColors.gray)),
+                ],
+                if (_location.text.trim().isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(_location.text.trim(), style: const TextStyle(color: AppColors.gray)),
+                ],
+                if (_bio.text.trim().isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Text(_bio.text.trim()),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Keep editing'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Save profile'),
+            ),
+          ],
+        ),
+      );
+      if (shouldSave != true || !mounted) return;
+      return _save(confirmed: true);
     }
     if (_newAddress || _selectedAddressId == null) {
       final isNcr = _region.text.trim().toUpperCase() == 'NCR';
@@ -136,6 +242,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
         lastName: _lastName.text.trim(),
         contactNumber: _contactNumber.text.trim(),
         bio: _bio.text.trim(),
+        location: _location.text.trim(),
+        businessName: _businessName.text.trim(),
+        businessType: _businessType.text.trim(),
       );
       final address = {
         'region': _region.text.trim(),
@@ -178,10 +287,16 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   backgroundImage: _photo != null ? FileImage(_photo!) : null,
                   child: _photo == null ? const Icon(Icons.person_outline, size: 58, color: AppColors.black) : null,
                 ),
+                if (_photo != null)
+                  Positioned.fill(
+                    child: ClipOval(
+                      child: Image.file(_photo!, fit: BoxFit.cover),
+                    ),
+                  ),
                 Positioned(
                   right: 0,
                   bottom: 0,
-                  child: IconButton.filled(onPressed: _pickPhoto, icon: const Icon(Icons.camera_alt_outlined)),
+                  child: IconButton.filled(onPressed: _choosePhotoSource, icon: const Icon(Icons.camera_alt_outlined)),
                 ),
               ],
             ),
@@ -193,13 +308,19 @@ class _EditProfilePageState extends State<EditProfilePage> {
           const SizedBox(height: 14),
           TextField(controller: _contactNumber, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Contact number')),
           const SizedBox(height: 14),
+          TextField(controller: _location, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Location / city')),
+          const SizedBox(height: 14),
+          TextField(controller: _businessName, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Business name')),
+          const SizedBox(height: 14),
+          TextField(controller: _businessType, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Business type')),
+          const SizedBox(height: 14),
           TextField(controller: _bio, maxLength: 500, maxLines: 4, decoration: const InputDecoration(labelText: 'Bio', alignLabelWithHint: true)),
           const SizedBox(height: 22),
           const Text('Preferred address', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           DropdownButtonFormField<int?>(
             key: ValueKey('${_selectedAddressId}_$_newAddress'),
-            initialValue: _newAddress ? null : _selectedAddressId,
+            value: _newAddress ? null : _selectedAddressId,
             decoration: const InputDecoration(labelText: 'Address'),
             items: [
               ..._addresses.map((address) => DropdownMenuItem<int>(

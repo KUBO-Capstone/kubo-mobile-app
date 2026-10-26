@@ -264,7 +264,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
                           label: 'Region',
                           child: DropdownButtonFormField<Region>(
                             key: ValueKey(_controller.selectedRegion?.id),
-                            initialValue: _controller.selectedRegion,
+                            value: _controller.selectedRegion,
                             items: _controller.regions
                                 .map(
                                   (region) => DropdownMenuItem<Region>(
@@ -288,7 +288,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
                             label: 'Province',
                             child: DropdownButtonFormField<Province>(
                               key: ValueKey(_controller.selectedProvince?.id),
-                              initialValue: _controller.selectedProvince,
+                              value: _controller.selectedProvince,
                               items: _controller.availableProvinces
                                   .map(
                                     (province) => DropdownMenuItem<Province>(
@@ -321,7 +321,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
                             key: ValueKey(
                               '${_controller.selectedRegion?.id}:${_controller.selectedProvince?.id}',
                             ),
-                            initialValue: _controller.selectedCity,
+                            value: _controller.selectedCity,
                             items: _controller.availableCities
                                 .map(
                                   (city) => DropdownMenuItem<Municipality>(

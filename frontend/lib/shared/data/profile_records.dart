@@ -7,6 +7,14 @@ class SyntheticProfileRecord {
     required this.username,
     required this.locationLabel,
     required this.about,
+    this.businessName = '',
+    this.businessType = '',
+    this.profilePrivacy = const <String, bool>{
+      'public_profile': true,
+      'show_bio': true,
+      'show_contact_number': true,
+      'show_location': true,
+    },
     required this.joinedLabel,
     required this.followingCount,
     required this.followersCount,
@@ -24,6 +32,15 @@ class SyntheticProfileRecord {
 
   /// City or region label shown in the about section.
   final String locationLabel;
+
+  /// Optional business identity shown in the profile details.
+  final String businessName;
+
+  /// Optional business category shown in the profile details.
+  final String businessType;
+
+  /// Privacy toggles for the profile visibility breakdown.
+  final Map<String, bool> profilePrivacy;
 
   /// Short about text displayed in the about tab.
   final String about;
@@ -88,6 +105,14 @@ const syntheticProfileRecord = SyntheticProfileRecord(
   displayName: 'Display Name',
   username: '@username',
   locationLabel: 'Caloocan',
+  businessName: 'Green Valley Farm',
+  businessType: 'Vegetable supplier',
+  profilePrivacy: <String, bool>{
+    'public_profile': true,
+    'show_bio': true,
+    'show_contact_number': true,
+    'show_location': true,
+  },
   about:
       'So don\'t call me baby, Unless you mean it, Don\'t tell me you need me, If you don\'t believe it, So let me know the truth, Before I dive right into you',
   joinedLabel: 'June 2025',

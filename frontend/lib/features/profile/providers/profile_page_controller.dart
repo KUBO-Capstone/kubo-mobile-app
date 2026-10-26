@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import '../../../shared/data/profile_records.dart';
@@ -50,6 +52,42 @@ class ProfilePageController extends ChangeNotifier {
   List<SyntheticListingRecord> _listings = const <SyntheticListingRecord>[];
   Map<String, dynamic>? _loadedProfile;
 
+  Map<String, bool> _normalizePrivacy(dynamic value) {
+    final defaults = <String, bool>{
+      'public_profile': true,
+      'show_bio': true,
+      'show_contact_number': true,
+      'show_location': true,
+    };
+
+    if (value == null) {
+      return defaults;
+    }
+
+    Map<String, dynamic> source;
+    if (value is String) {
+      try {
+        source = Map<String, dynamic>.from(jsonDecode(value));
+      } catch (_) {
+        return defaults;
+      }
+    } else if (value is Map) {
+      source = Map<String, dynamic>.from(value);
+    } else {
+      return defaults;
+    }
+
+    if (source.isNotEmpty) {
+      for (final entry in defaults.entries) {
+        if (source[entry.key] is bool) {
+          defaults[entry.key] = source[entry.key] as bool;
+        }
+      }
+    }
+
+    return defaults;
+  }
+
   /// Whose listings the Listings tab shows.
   int? get _subjectUserId =>
       isOwnProfile ? AuthService.currentUserId : subject?.userId;
@@ -64,14 +102,19 @@ class ProfilePageController extends ChangeNotifier {
     final visitor = subject;
     if (!isOwnProfile && visitor != null) {
       final loadedName = '${_loadedProfile?['first_name'] ?? ''} ${_loadedProfile?['last_name'] ?? ''}'.trim();
+      final location = (_loadedProfile?['location'] ?? visitor.locationLabel ?? syntheticProfileRecord.locationLabel).toString();
+      final businessName = _loadedProfile?['business_name']?.toString() ?? '';
+      final businessType = _loadedProfile?['business_type']?.toString() ?? '';
       return SyntheticProfileRecord(
         displayName: loadedName.isEmpty ? visitor.displayName : loadedName,
         username: _loadedProfile?['email']?.toString() ?? 'Kubo grower',
-        locationLabel:
-            visitor.locationLabel ?? syntheticProfileRecord.locationLabel,
+        locationLabel: location,
         about: _loadedProfile?['bio']?.toString().trim().isNotEmpty == true
             ? _loadedProfile!['bio'].toString()
             : visitor.about ?? 'Fresh local produce from a Kubo grower.',
+        businessName: businessName,
+        businessType: businessType,
+        profilePrivacy: _normalizePrivacy(_loadedProfile?['profile_privacy']),
         joinedLabel: syntheticProfileRecord.joinedLabel,
         followingCount: syntheticProfileRecord.followingCount,
         followersCount: syntheticProfileRecord.followersCount,
@@ -90,6 +133,10 @@ class ProfilePageController extends ChangeNotifier {
     final firstName = user['first_name']?.toString().trim() ?? '';
     final lastName = user['last_name']?.toString().trim() ?? '';
     final displayName = '$firstName $lastName'.trim();
+    final savedBio = (_loadedProfile?['bio'] ?? user['bio'])?.toString().trim() ?? '';
+    final savedLocation = (_loadedProfile?['location'] ?? user['location'])?.toString().trim() ?? syntheticProfileRecord.locationLabel;
+    final savedBusinessName = (_loadedProfile?['business_name'] ?? user['business_name'])?.toString().trim() ?? '';
+    final savedBusinessType = (_loadedProfile?['business_type'] ?? user['business_type'])?.toString().trim() ?? '';
     final addresses = (_loadedProfile?['addresses'] as List?)?.whereType<Map>().toList() ?? const <Map>[];
     final preferredId = _loadedProfile?['preferred_address_id'];
     final address = addresses.cast<Map<String, dynamic>>().firstWhere(
@@ -99,15 +146,18 @@ class ProfilePageController extends ChangeNotifier {
     final city = address['city_municipality']?.toString() ?? '';
     final region = address['region']?.toString() ?? '';
     final province = address['province']?.toString() ?? '';
-    final location = city.isEmpty ? '' : '$city, ${region.toUpperCase() == 'NCR' ? region : province}'.trim();
+    final addressLocation = city.isEmpty ? '' : '$city, ${region.toUpperCase() == 'NCR' ? region : province}'.trim();
     final createdAtText = _loadedProfile?['created_at']?.toString() ?? '';
     final hasTimeZone = RegExp(r'(?:[zZ]|[+-]\d{2}:?\d{2})$').hasMatch(createdAtText);
     final createdAt = DateTime.tryParse(hasTimeZone ? createdAtText : '${createdAtText}Z')?.toLocal();
     return SyntheticProfileRecord(
       displayName: displayName.isEmpty ? syntheticProfileRecord.displayName : displayName,
       username: user['email']?.toString() ?? syntheticProfileRecord.username,
-      locationLabel: location,
-      about: _loadedProfile?['bio']?.toString() ?? '',
+      locationLabel: addressLocation.isEmpty ? savedLocation : addressLocation,
+      about: savedBio.isEmpty ? syntheticProfileRecord.about : savedBio,
+      businessName: savedBusinessName,
+      businessType: savedBusinessType,
+      profilePrivacy: _normalizePrivacy(_loadedProfile?['profile_privacy'] ?? user['profile_privacy']),
       joinedLabel: createdAt == null
           ? ''
           : '${createdAt.month.toString().padLeft(2, '0')}/${createdAt.day.toString().padLeft(2, '0')}/${createdAt.year}',
@@ -116,7 +166,7 @@ class ProfilePageController extends ChangeNotifier {
       listingCount: _listings.length,
       reviewScore: syntheticProfileRecord.reviewScore,
       reviewCount: syntheticProfileRecord.reviewCount,
-      photoUrl: _loadedProfile?['profile_photo_url']?.toString() ?? '',
+      photoUrl: _loadedProfile?['profile_photo_url']?.toString() ?? user['profile_photo_url']?.toString() ?? '',
     );
   }
 

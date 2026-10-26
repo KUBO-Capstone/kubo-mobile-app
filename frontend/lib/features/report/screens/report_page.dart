@@ -100,7 +100,7 @@ class _ReportPageState extends State<ReportPage> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: _category,
+                value: _category,
                 decoration: const InputDecoration(
                   labelText: 'Category',
                   border: OutlineInputBorder(),

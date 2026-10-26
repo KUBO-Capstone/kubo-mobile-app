@@ -10,6 +10,10 @@ export interface User {
     email: string;
     password_hash: string;
     contact_number: string;
+    location: string | null;
+    business_name: string | null;
+    business_type: string | null;
+    profile_privacy: string;
     role: UserRole;
     preferred_address_id?: number | null;
     is_verified: boolean;
@@ -76,13 +80,17 @@ export const UserModel = {
         return { ...user, addresses };
     },
 
-    updateProfile: (userId: number, input: { first_name: string; last_name: string; contact_number: string; bio: string }): User | undefined => {
+    updateProfile: (userId: number, input: { first_name: string; last_name: string; contact_number: string; bio: string; location?: string; business_name?: string; business_type?: string; profile_privacy?: string }): User | undefined => {
         db.prepare(`
             UPDATE users
             SET first_name = @first_name,
                 last_name = @last_name,
                 contact_number = @contact_number,
-                bio = @bio
+                bio = @bio,
+                location = @location,
+                business_name = @business_name,
+                business_type = @business_type,
+                profile_privacy = @profile_privacy
             WHERE user_id = @user_id
         `).run({ ...input, user_id: userId });
         return UserModel.findById(userId);
@@ -95,7 +103,7 @@ export const UserModel = {
 
     // to insert a new user; the plaintext password is hashed before storage
     create(
-        user: Omit<User, "user_id" | "created_at" | "is_verified" | "password_hash" | "role" | "profile_photo_url" | "bio"> & {
+        user: Omit<User, "user_id" | "created_at" | "is_verified" | "password_hash" | "role" | "profile_photo_url" | "bio" | "location" | "business_name" | "business_type" | "profile_privacy"> & {
             password: string;
             role?: UserRole;
         },
@@ -103,11 +111,17 @@ export const UserModel = {
         const { first_name, last_name, email, password, contact_number } = user;
         const role: UserRole = user.role ?? 'consumer';
         const password_hash = hashPassword(password);
+        const defaultPrivacy = JSON.stringify({
+            public_profile: true,
+            show_bio: true,
+            show_contact_number: true,
+            show_location: true,
+        });
         const query = db.prepare(`
-            INSERT INTO users (first_name, last_name, email, password_hash, contact_number, role)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO users (first_name, last_name, email, password_hash, contact_number, role, location, business_name, business_type, profile_privacy)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `)
-        const info = query.run(first_name, last_name, email, password_hash, contact_number, role);
+        const info = query.run(first_name, last_name, email, password_hash, contact_number, role, '', '', '', defaultPrivacy);
         return {
             user_id: info.lastInsertRowid as number,
             first_name,
@@ -115,6 +129,10 @@ export const UserModel = {
             email,
             password_hash,
             contact_number,
+            location: '',
+            business_name: '',
+            business_type: '',
+            profile_privacy: defaultPrivacy,
             role,
             profile_photo_url: null,
             bio: '',
@@ -124,7 +142,7 @@ export const UserModel = {
     },
 
     createWithAddress(
-        user: Omit<User, "user_id" | "created_at" | "is_verified" | "password_hash" | "role" | "profile_photo_url" | "bio"> & {
+        user: Omit<User, "user_id" | "created_at" | "is_verified" | "password_hash" | "role" | "profile_photo_url" | "bio" | "location" | "business_name" | "business_type" | "profile_privacy"> & {
             password: string;
             role?: UserRole;
         },

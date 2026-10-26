@@ -137,14 +137,27 @@ class _ProfileAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final avatar = Container(
       width: 104,
-      height: 85,
+      height: 104,
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
         color: Color(0xFFF3F3F3),
       ),
       child: photoUrl.isEmpty
           ? const Center(child: AppSvgIcon(assetPath: AppIcons.circleUserProfile, size: 76, color: AppColors.black))
-          : ClipOval(child: Image.network(resolveProfilePhotoUrl(photoUrl), width: 104, height: 104, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const AppSvgIcon(assetPath: AppIcons.circleUserProfile, size: 76, color: AppColors.black))),
+          : ClipOval(
+              child: SizedBox.square(
+                dimension: 104,
+                child: Image.network(
+                  resolveProfilePhotoUrl(photoUrl),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const AppSvgIcon(
+                    assetPath: AppIcons.circleUserProfile,
+                    size: 76,
+                    color: AppColors.black,
+                  ),
+                ),
+              ),
+            ),
     );
     return onTap == null ? avatar : GestureDetector(onTap: onTap, child: avatar);
   }

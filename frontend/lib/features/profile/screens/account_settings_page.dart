@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../shared/data/profile_service.dart';
 import 'edit_profile_page.dart';
 import 'change_password_page.dart';
 
@@ -20,11 +21,44 @@ class AccountSettingsPage extends StatefulWidget {
 
 class _AccountSettingsPageState extends State<AccountSettingsPage> {
   late Map<String, dynamic> _user;
+  final ProfileService _service = ProfileService();
+  late Map<String, bool> _privacy;
 
   @override
   void initState() {
     super.initState();
     _user = Map<String, dynamic>.from(widget.user);
+    _privacy = _parsePrivacy(_user['profile_privacy'] ?? const {
+      'public_profile': true,
+      'show_bio': true,
+      'show_contact_number': true,
+      'show_location': true,
+    });
+  }
+
+  @override
+  void dispose() {
+    _service.dispose();
+    super.dispose();
+  }
+
+  Map<String, bool> _parsePrivacy(dynamic value) {
+    final defaults = <String, bool>{
+      'public_profile': true,
+      'show_bio': true,
+      'show_contact_number': true,
+      'show_location': true,
+    };
+    if (value is Map) {
+      final source = Map<String, dynamic>.from(value);
+      for (final entry in defaults.entries) {
+        if (source[entry.key] is bool) {
+          defaults[entry.key] = source[entry.key] as bool;
+        }
+      }
+      return defaults;
+    }
+    return defaults;
   }
 
   Future<void> _editProfile() async {
@@ -34,6 +68,33 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       ),
     );
     if (updated != null && mounted) setState(() => _user = updated);
+  }
+
+  Future<void> _savePrivacy() async {
+    try {
+      final updated = await _service.updateProfile(
+        userId: int.parse(_user['user_id'].toString()),
+        firstName: (_user['first_name'] ?? '').toString().trim(),
+        lastName: (_user['last_name'] ?? '').toString().trim(),
+        contactNumber: (_user['contact_number'] ?? '').toString().trim(),
+        bio: (_user['bio'] ?? '').toString().trim(),
+        location: (_user['location'] ?? '').toString().trim(),
+        businessName: (_user['business_name'] ?? '').toString().trim(),
+        businessType: (_user['business_type'] ?? '').toString().trim(),
+        profilePrivacy: _privacy,
+      );
+      if (!mounted) return;
+      setState(() => _user = updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile privacy updated.')),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    }
   }
 
   @override
@@ -64,6 +125,43 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
             icon: Icons.email_outlined,
             title: email,
             subtitle: 'Email address',
+          ),
+          const SizedBox(height: 24),
+          const Text('Privacy', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.black)),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            value: _privacy['public_profile'] ?? true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            title: const Text('Public profile'),
+            subtitle: const Text('Allow other growers and shoppers to view your profile.'),
+            onChanged: (value) => setState(() => _privacy['public_profile'] = value),
+          ),
+          SwitchListTile(
+            value: _privacy['show_bio'] ?? true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            title: const Text('Show bio'),
+            subtitle: const Text('Display your bio on the About section.'),
+            onChanged: (value) => setState(() => _privacy['show_bio'] = value),
+          ),
+          SwitchListTile(
+            value: _privacy['show_contact_number'] ?? true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            title: const Text('Show contact number'),
+            subtitle: const Text('Make direct contact details visible to profile viewers.'),
+            onChanged: (value) => setState(() => _privacy['show_contact_number'] = value),
+          ),
+          SwitchListTile(
+            value: _privacy['show_location'] ?? true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            title: const Text('Show location'),
+            subtitle: const Text('Share your city and business location on your profile.'),
+            onChanged: (value) => setState(() => _privacy['show_location'] = value),
+          ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: _savePrivacy,
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('Save privacy'),
           ),
           const SizedBox(height: 24),
           const Text('Security', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.black)),

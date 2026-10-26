@@ -103,6 +103,10 @@ export function initDb(): void {
             email VARCHAR(100) UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             contact_number VARCHAR(15) NOT NULL,
+            location VARCHAR(80),
+            business_name VARCHAR(80),
+            business_type VARCHAR(40),
+            profile_privacy TEXT NOT NULL DEFAULT '{"public_profile":true,"show_bio":true,"show_contact_number":true,"show_location":true}',
             role VARCHAR(20) NOT NULL DEFAULT 'consumer' CHECK (role IN ('farmer', 'consumer', 'admin')),
             preferred_address_id INTEGER,
             is_verified BOOLEAN DEFAULT FALSE,
@@ -371,6 +375,22 @@ export function initDb(): void {
 
     `);
     migrateLegacySchema();
+    for (const statement of [
+        'ALTER TABLE users ADD COLUMN profile_photo_url TEXT',
+        "ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN location VARCHAR(80)",
+        "ALTER TABLE users ADD COLUMN business_name VARCHAR(80)",
+        "ALTER TABLE users ADD COLUMN business_type VARCHAR(40)",
+        "ALTER TABLE users ADD COLUMN profile_privacy TEXT NOT NULL DEFAULT '{\"public_profile\":true,\"show_bio\":true,\"show_contact_number\":true,\"show_location\":true}'",
+    ]) {
+        try {
+            db.exec(statement);
+        } catch (error) {
+            if (!(error instanceof Error) || !error.message.includes('duplicate column name')) {
+                throw error;
+            }
+        }
+    }
     console.log('Database tables created')
     db.exec(`
         INSERT OR IGNORE INTO user_addresses (user_id, address_id)

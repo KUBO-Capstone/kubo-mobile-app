@@ -15,12 +15,17 @@ class AuthService {
 
   static Map<String, dynamic>? currentUser;
 
+  static String? get accessToken => ApiSession.token;
+
   /// Numeric id of the signed-in user, or null when nobody is logged in.
   static int? get currentUserId =>
       int.tryParse(currentUser?['user_id']?.toString() ?? '');
 
   static void updateCurrentUser(Map<String, dynamic> user) {
-    currentUser = user;
+    currentUser = {
+      ...?currentUser,
+      ...user,
+    };
   }
 
   /// Ends the in-memory session. There is no server-side session to end

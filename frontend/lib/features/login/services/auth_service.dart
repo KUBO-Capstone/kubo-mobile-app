@@ -7,7 +7,7 @@ import '../../../shared/data/api_request.dart';
 
 /// HTTP client for the backend account and login endpoints.
 class AuthService {
-  AuthService({http.Client? client}) : _client = client ?? http.Client();
+  AuthService({http.Client? client}) : _client = client ?? apiClient();
 
   String get _baseUrl => ApiConfig.baseUrl;
 
@@ -15,19 +15,16 @@ class AuthService {
 
   static Map<String, dynamic>? currentUser;
 
-  static String? get accessToken => currentUser?['access_token']?.toString();
+  static String? get accessToken => ApiSession.token;
 
   /// Numeric id of the signed-in user, or null when nobody is logged in.
   static int? get currentUserId =>
       int.tryParse(currentUser?['user_id']?.toString() ?? '');
 
   static void updateCurrentUser(Map<String, dynamic> user) {
-    final existingToken = currentUser?['access_token'];
     currentUser = {
       ...?currentUser,
       ...user,
-      if (user['access_token'] == null && existingToken != null)
-        'access_token': existingToken,
     };
   }
 
@@ -36,6 +33,16 @@ class AuthService {
   /// rebuild the navigator so nothing from the old account stays mounted.
   static void logout() {
     currentUser = null;
+    ApiSession.token = null;
+  }
+
+  /// Login and register both answer with the user row plus a `token`; the
+  /// token goes to [ApiSession] and the rest becomes [currentUser].
+  static Map<String, dynamic> _startSession(Map<String, dynamic> data) {
+    final user = Map<String, dynamic>.of(data);
+    ApiSession.token = user.remove('token') as String?;
+    currentUser = user;
+    return user;
   }
 
   Future<Map<String, dynamic>> register({
@@ -44,6 +51,10 @@ class AuthService {
     required String email,
     required String password,
     required String contactNumber,
+    required String region,
+    required String province,
+    required String cityMunicipality,
+    required String zipCode,
   }) async {
     final response = await _post('/auth/register', {
       'first_name': firstName,
@@ -51,11 +62,13 @@ class AuthService {
       'email': email,
       'password': password,
       'contact_number': contactNumber,
+      'region': region,
+      'province': province,
+      'city_municipality': cityMunicipality,
+      'zip_code': zipCode,
     });
 
-    final user = readData(response) as Map<String, dynamic>;
-    currentUser = user;
-    return user;
+    return _startSession(readData(response) as Map<String, dynamic>);
   }
 
   Future<Map<String, dynamic>> login({
@@ -67,9 +80,7 @@ class AuthService {
       'password': password,
     });
 
-    final user = readData(response) as Map<String, dynamic>;
-    currentUser = user;
-    return user;
+    return _startSession(readData(response) as Map<String, dynamic>);
   }
 
   Future<http.Response> _post(String path, Map<String, String> body) {

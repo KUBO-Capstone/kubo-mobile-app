@@ -46,7 +46,7 @@ class SavedListingsController extends ChangeNotifier {
     }
     if (id != _loadedForUserId) _reset();
     try {
-      _savedIds = await _service.fetchSavedIds(userId: id);
+      _savedIds = await _service.fetchSavedIds();
       _loadedForUserId = id;
     } catch (error) {
       // A grid without hearts is fine; the Saved page reports errors.
@@ -69,7 +69,7 @@ class SavedListingsController extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
-      listings = await _service.fetchSaved(userId: id);
+      listings = await _service.fetchSaved();
       _savedIds = listings.map((l) => l.productId).whereType<int>().toSet();
       _loadedForUserId = id;
     } catch (error) {
@@ -91,9 +91,9 @@ class SavedListingsController extends ChangeNotifier {
     _apply(listing, saved: nowSaved);
     try {
       if (nowSaved) {
-        await _service.save(userId: id, productId: productId);
+        await _service.save(productId: productId);
       } else {
-        await _service.unsave(userId: id, productId: productId);
+        await _service.unsave(productId: productId);
       }
       return nowSaved;
     } catch (error) {

@@ -25,10 +25,22 @@ class _EditProfilePageState extends State<EditProfilePage> {
   late final TextEditingController _location;
   late final TextEditingController _businessName;
   late final TextEditingController _businessType;
+  late final TextEditingController _region;
+  late final TextEditingController _province;
+  late final TextEditingController _city;
+  late final TextEditingController _barangay;
+  late final TextEditingController _zip;
+  late final TextEditingController _street;
+  late final TextEditingController _landmark;
   final ProfileService _service = ProfileService();
   final ImagePicker _picker = ImagePicker();
   File? _photo;
   bool _saving = false;
+  bool _profileLoading = true;
+  bool _profileLoadFailed = false;
+  List<Map<String, dynamic>> _addresses = [];
+  int? _selectedAddressId;
+  bool _newAddress = false;
 
   int get _userId => int.parse(widget.user['user_id'].toString());
 
@@ -42,6 +54,50 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _location = TextEditingController(text: widget.user['location']?.toString() ?? '');
     _businessName = TextEditingController(text: widget.user['business_name']?.toString() ?? '');
     _businessType = TextEditingController(text: widget.user['business_type']?.toString() ?? '');
+    _region = TextEditingController();
+    _province = TextEditingController();
+    _city = TextEditingController();
+    _barangay = TextEditingController();
+    _zip = TextEditingController();
+    _street = TextEditingController();
+    _landmark = TextEditingController();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final profile = await _service.fetchProfile(_userId);
+      if (!mounted) return;
+      final raw = profile['addresses'];
+      if (raw is List) {
+        _addresses = raw.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+      }
+      _selectedAddressId = profile['preferred_address_id'] as int?;
+      _loadAddress(_addresses.cast<Map<String, dynamic>>().firstWhere(
+        (address) => address['address_id'] == _selectedAddressId,
+        orElse: () => <String, dynamic>{},
+      ));
+      setState(() {
+        _profileLoading = false;
+        _profileLoadFailed = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _profileLoading = false;
+        _profileLoadFailed = true;
+      });
+    }
+  }
+
+  void _loadAddress(Map<String, dynamic> address) {
+    _region.text = address['region']?.toString() ?? '';
+    _province.text = address['province']?.toString() ?? '';
+    _city.text = address['city_municipality']?.toString() ?? '';
+    _barangay.text = address['barangay']?.toString() ?? '';
+    _zip.text = address['zip_code']?.toString() ?? '';
+    _street.text = address['street_details']?.toString() ?? '';
+    _landmark.text = address['landmark']?.toString() ?? '';
   }
 
   @override
@@ -53,6 +109,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _location.dispose();
     _businessName.dispose();
     _businessType.dispose();
+    for (final controller in [_region, _province, _city, _barangay, _zip, _street, _landmark]) {
+      controller.dispose();
+    }
     _service.dispose();
     super.dispose();
   }
@@ -162,6 +221,19 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (shouldSave != true || !mounted) return;
       return _save(confirmed: true);
     }
+    if (_newAddress || _selectedAddressId == null) {
+      final isNcr = _region.text.trim().toUpperCase() == 'NCR';
+      if (_region.text.trim().isEmpty ||
+          (!isNcr && _province.text.trim().isEmpty) ||
+          _city.text.trim().isEmpty ||
+          _barangay.text.trim().isEmpty ||
+          _zip.text.trim().isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Complete the required address fields before adding a new address.')));
+        return;
+      }
+    }
     setState(() => _saving = true);
     try {
       var profile = await _service.updateProfile(
@@ -174,9 +246,22 @@ class _EditProfilePageState extends State<EditProfilePage> {
         businessName: _businessName.text.trim(),
         businessType: _businessType.text.trim(),
       );
-      if (_photo != null) {
-        profile = await _service.uploadPhoto(userId: _userId, file: _photo!);
+      final address = {
+        'region': _region.text.trim(),
+        'province': _region.text.trim().toUpperCase() == 'NCR' ? '' : _province.text.trim(),
+        'city_municipality': _city.text.trim(),
+        'barangay': _barangay.text.trim(),
+        'zip_code': _zip.text.trim(),
+        'street_details': _street.text.trim().isEmpty ? null : _street.text.trim(),
+        'landmark': _landmark.text.trim().isEmpty ? null : _landmark.text.trim(),
+      };
+      if (_newAddress || _selectedAddressId == null) {
+        profile = await _service.addAddress(userId: _userId, address: address);
+      } else {
+        await _service.updateAddress(userId: _userId, addressId: _selectedAddressId!, address: address);
+        profile = await _service.choosePreferredAddress(userId: _userId, addressId: _selectedAddressId!);
       }
+      if (_photo != null) profile = await _service.uploadPhoto(userId: _userId, file: _photo!);
       if (!mounted) return;
       Navigator.of(context).pop(profile);
     } catch (error) {
@@ -230,9 +315,46 @@ class _EditProfilePageState extends State<EditProfilePage> {
           TextField(controller: _businessType, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Business type')),
           const SizedBox(height: 14),
           TextField(controller: _bio, maxLength: 500, maxLines: 4, decoration: const InputDecoration(labelText: 'Bio', alignLabelWithHint: true)),
+          const SizedBox(height: 22),
+          const Text('Preferred address', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<int?>(
+            key: ValueKey('${_selectedAddressId}_$_newAddress'),
+            value: _newAddress ? null : _selectedAddressId,
+            decoration: const InputDecoration(labelText: 'Address'),
+            items: [
+              ..._addresses.map((address) => DropdownMenuItem<int>(
+                value: address['address_id'] as int,
+                child: Text('${address['city_municipality']}, ${address['province']?.toString().isEmpty == true ? address['region'] : address['province']}'),
+              )),
+              const DropdownMenuItem<int?>(value: null, child: Text('Add another address')),
+            ],
+            onChanged: (value) {
+              setState(() {
+                _newAddress = value == null;
+                _selectedAddressId = value;
+                _loadAddress(value == null ? <String, dynamic>{} : _addresses.firstWhere((item) => item['address_id'] == value));
+              });
+            },
+          ),
+          const SizedBox(height: 14),
+          TextField(controller: _region, onChanged: (_) => setState(() {}), decoration: const InputDecoration(labelText: 'Region')),
+          const SizedBox(height: 14),
+          if (_region.text.trim().toUpperCase() != 'NCR')
+            TextField(controller: _province, decoration: const InputDecoration(labelText: 'Province')),
+          const SizedBox(height: 14),
+          TextField(controller: _city, decoration: const InputDecoration(labelText: 'City / municipality')),
+          const SizedBox(height: 14),
+          TextField(controller: _barangay, decoration: const InputDecoration(labelText: 'Barangay')),
+          const SizedBox(height: 14),
+          TextField(controller: _zip, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'ZIP code')),
+          const SizedBox(height: 14),
+          TextField(controller: _street, decoration: const InputDecoration(labelText: 'Street details (optional)')),
+          const SizedBox(height: 14),
+          TextField(controller: _landmark, decoration: const InputDecoration(labelText: 'Landmark (optional)')),
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: _saving ? null : _save,
+            onPressed: (_saving || _profileLoading || _profileLoadFailed) ? null : _save,
             icon: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_outlined),
             label: Text(_saving ? 'Saving...' : 'Save changes'),
           ),

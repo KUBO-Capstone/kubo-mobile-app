@@ -9,16 +9,20 @@ Widget buildNotificationCard({
   required String date,
   required String time,
   required String image,
+  VoidCallback? onTap,
 }) {
-  return Container(
-    height: 90,
-    decoration: BoxDecoration(
-      color: AppColors.white,
-      border: Border.all(color: AppColors.border),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    padding: const EdgeInsets.fromLTRB(10, 9, 8, 9),
-    child: Row(
+  return InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(8),
+    child: Container(
+      height: 90,
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      padding: const EdgeInsets.fromLTRB(10, 9, 8, 9),
+      child: Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
@@ -84,6 +88,7 @@ Widget buildNotificationCard({
           ),
         ),
       ],
+      ),
     ),
   );
 }

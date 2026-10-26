@@ -2,7 +2,9 @@ import { Request, Response } from "express";
 import fs from "fs";
 import path from "path";
 import { UserModel } from "#models/user.model";
-import { createAuthToken } from "#middleware/auth.middleware";
+import { signToken } from "#utils/token";
+import { authUserId } from "#middleware/auth.middleware";
+import { verifyPassword } from "#utils/password";
 
 export const getUsers = (req: Request, res: Response): void => {
     const users = UserModel.findAll();
@@ -13,10 +15,15 @@ export const getUsers = (req: Request, res: Response): void => {
 };
 
 export const createUser = (req: Request, res: Response): void => {
-    const { first_name, last_name, email, password, contact_number, role } = req.body;
+    const { first_name, last_name, email, password, contact_number, role, region, province, city_municipality, zip_code } = req.body;
 
-    if (!first_name || !last_name || !email || !password || !contact_number) {
-        res.status(400).json({ success: false, message: "All user fields are required" });
+    if (!first_name || !last_name || !email || !password || !contact_number ||
+        !region || !city_municipality || !zip_code || (region !== 'NCR' && !province)) {
+        res.status(400).json({ success: false, message: "All account and address fields are required" });
+        return;
+    }
+    if (typeof zip_code !== 'string' || !/^\d{4}$/.test(zip_code.trim())) {
+        res.status(400).json({ success: false, message: "ZIP code must contain exactly 4 digits" });
         return;
     }
 
@@ -26,13 +33,33 @@ export const createUser = (req: Request, res: Response): void => {
         return;
     }
 
-    const requestedRole = role === 'farmer' || role === 'admin' ? role : 'consumer';
-    const user = UserModel.create({ first_name, last_name, email: normalizedEmail, password, contact_number, role: requestedRole });
+    // Admins are never self-registered; anything but 'farmer' signs up as a consumer.
+    const requestedRole = role === 'farmer' ? role : 'consumer';
+    const user = UserModel.createWithAddress(
+        {
+            first_name: first_name.trim(),
+            last_name: last_name.trim(),
+            email: normalizedEmail,
+            password,
+            contact_number: contact_number.trim(),
+            role: requestedRole,
+        },
+        {
+            region: region.trim(),
+            province: (province ?? '').trim(),
+            city_municipality: city_municipality.trim(),
+            zip_code: zip_code.trim(),
+        },
+    );
     const { password_hash: _passwordHash, ...safeUser } = user;
-    res.status(201).json({ success: true, data: { ...safeUser, access_token: createAuthToken(user.user_id) } });
+    // Registering signs the user in, same as login.
+    res.status(201).json({ success: true, data: { ...safeUser, token: signToken(user.user_id, user.role) } });
 };
 
-const publicUser = (user: ReturnType<typeof UserModel.findById>, viewerId?: number) => {
+const publicUser = (
+    user: ReturnType<typeof UserModel.findById> | ReturnType<typeof UserModel.findProfile>,
+    viewerId?: number,
+) => {
     if (!user) return undefined;
     const { password_hash: _passwordHash, ...safeUser } = user;
     if (viewerId !== user.user_id) {
@@ -66,7 +93,7 @@ export const getProfile = (req: Request<{ id: string }>, res: Response): void =>
         res.status(400).json({ success: false, message: 'Invalid user ID format' });
         return;
     }
-    const user = UserModel.findById(userId);
+    const user = UserModel.findProfile(userId);
     if (!user) {
         res.status(404).json({ success: false, message: 'User not found' });
         return;
@@ -113,7 +140,36 @@ export const updateProfile = (req: Request<{ id: string }>, res: Response): void
         res.status(404).json({ success: false, message: 'User not found' });
         return;
     }
-    res.json({ success: true, data: publicUser(user) });
+    res.json({ success: true, data: publicUser(UserModel.findProfile(userId)) });
+};
+
+export const changePassword = (req: Request<{ id: string }>, res: Response): void => {
+    const userId = Number(req.params.id);
+    const currentPassword = typeof req.body.current_password === 'string' ? req.body.current_password : '';
+    const newPassword = typeof req.body.new_password === 'string' ? req.body.new_password : '';
+    if (!Number.isInteger(userId) || userId <= 0) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+    }
+    if (userId !== authUserId(res)) {
+        res.status(403).json({ success: false, message: "You can only change your own password" });
+        return;
+    }
+    const user = UserModel.findById(userId);
+    if (!user) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+    }
+    if (!verifyPassword(currentPassword, user.password_hash)) {
+        res.status(401).json({ success: false, message: 'Current password is incorrect' });
+        return;
+    }
+    if (newPassword.length < 8) {
+        res.status(400).json({ success: false, message: 'New password must be at least 8 characters' });
+        return;
+    }
+    UserModel.updatePassword(userId, newPassword);
+    res.json({ success: true, data: { message: 'Password updated successfully' } });
 };
 
 export const uploadProfilePhoto = (req: Request<{ id: string }>, res: Response): void => {
@@ -171,6 +227,9 @@ export const addFarmAddress = (req: Request<{ id: string }>, res: Response) => {
         if (isNaN(userId)) {
             return res.status(400).json({ success: false, message: "Invalid user ID format" });
         }
+        if (userId !== authUserId(res)) {
+            return res.status(403).json({ success: false, message: "You can only change your own farm address" });
+        }
         if (!UserModel.findById(userId)) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
@@ -190,15 +249,51 @@ export const addUserAddress = (req: Request<{ id: string }>, res: Response) => {
         if (isNaN(userId)) {
             return res.status(400).json({ error: "Invalid user ID format" });
         }
-
+        if (userId !== authUserId(res)) {
+            return res.status(403).json({ success: false, message: "You can only change your own address" });
+        }
         const addressId = UserModel.setPreferredAddress(userId, readAddressBody(req.body));
         
         res.status(201).json({ 
-            message: "Address updated successfully", 
-            addressId: addressId 
+            success: true,
+            data: publicUser(UserModel.findProfile(userId)),
+            message: "Address updated successfully",
+            addressId
         });
     } catch (error) {
         console.error("Error setting address:", error);
         res.status(500).json({ error: "Failed to update address" });
     }
+};
+
+export const updateUserAddress = (req: Request<{ id: string }>, res: Response) => {
+    const userId = Number(req.params.id);
+    const addressId = Number(req.body.address_id);
+    if (!Number.isInteger(userId) || !Number.isInteger(addressId)) {
+        res.status(400).json({ success: false, message: 'Invalid user or address ID' });
+        return;
+    }
+    if (userId !== authUserId(res)) {
+        res.status(403).json({ success: false, message: 'You can only change your own address' });
+        return;
+    }
+    if (!UserModel.updateAddress(userId, addressId, readAddressBody(req.body))) {
+        res.status(404).json({ success: false, message: 'Address not found' });
+        return;
+    }
+    res.json({ success: true, data: UserModel.findProfile(userId) });
+};
+
+export const choosePreferredAddress = (req: Request<{ id: string }>, res: Response) => {
+    const userId = Number(req.params.id);
+    const addressId = Number(req.body.address_id);
+    if (!Number.isInteger(userId) || !Number.isInteger(addressId)) {
+        res.status(400).json({ success: false, message: 'Invalid user or address ID' });
+        return;
+    }
+    if (!UserModel.choosePreferredAddress(userId, addressId)) {
+        res.status(404).json({ success: false, message: 'Address not found' });
+        return;
+    }
+    res.json({ success: true, data: UserModel.findProfile(userId) });
 };

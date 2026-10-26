@@ -1,4 +1,5 @@
 import { db } from "#config/database";
+import { NotificationModel } from "#models/notification.model";
 
 // Mirrors the CHECK constraint on messages.message_type in config/database.ts.
 // 'text' is a chat line; the rest are offer events written by the negotiation
@@ -196,6 +197,25 @@ export const ConversationModel = {
             offer_quantity: input.offer_quantity ?? null,
         });
         const row = db.prepare(`${messageQuery} WHERE m.message_id = ?`).get(result.lastInsertRowid) as Record<string, unknown>;
+        const conversation = db.prepare(`
+            SELECT buyer_id, seller_id, product_id
+            FROM conversations
+            WHERE conversation_id = ?
+        `).get(input.conversation_id) as { buyer_id: number; seller_id: number; product_id: number | null };
+        const recipientId = conversation.buyer_id === input.sender_id ? conversation.seller_id : conversation.buyer_id;
+        const title = input.message_type === 'offer' || input.message_type === 'counter'
+            ? 'New Offer'
+            : input.message_type === 'order'
+                && (input.content.startsWith('Received order #') || input.content.startsWith('Picked up order #'))
+                ? 'Delivered'
+                : 'New Message';
+        NotificationModel.create({
+            recipientId,
+            senderId: input.sender_id,
+            productId: conversation.product_id,
+            title,
+            message: input.content,
+        });
         return mapMessage(row);
     },
 

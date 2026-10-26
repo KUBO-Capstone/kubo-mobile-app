@@ -14,6 +14,33 @@ import '../../core/constants/api_config.dart';
 /// `ClientException with SocketException…` string.
 const Duration apiTimeout = Duration(seconds: 15);
 
+/// The signed-in user's bearer token. `AuthService` sets it on login/register
+/// and clears it on logout; [apiClient] reads it on every request.
+abstract final class ApiSession {
+  static String? token;
+}
+
+/// The default client for every API service: stamps `Authorization: Bearer`
+/// on each request while someone is signed in, so no service ever passes the
+/// user's id itself - the server reads identity from the token.
+http.Client apiClient() => _AuthorizedClient(http.Client());
+
+class _AuthorizedClient extends http.BaseClient {
+  _AuthorizedClient(this._inner);
+
+  final http.Client _inner;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    final token = ApiSession.token;
+    if (token != null) request.headers['Authorization'] = 'Bearer $token';
+    return _inner.send(request);
+  }
+
+  @override
+  void close() => _inner.close();
+}
+
 String get unreachableServerMessage =>
     'Cannot reach the Kubo server at ${ApiConfig.baseUrl}. Check that the '
     'backend is running (`npm run dev` in backend/) and, on a physical phone, '

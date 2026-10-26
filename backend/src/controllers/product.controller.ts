@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { ProductChanges, ProductListing, ProductModel, ProductStatus } from "#models/product.model";
+import { authUserId } from "#middleware/auth.middleware";
 
 const categories = new Set(['vegetable', 'fruit', 'grain', 'legume', 'herb', 'spice']);
 const units = new Set(['kg', 'g', 'lb', 'oz', 'liter', 'ml', 'piece']);
@@ -29,9 +30,11 @@ export const getProduct = (req: Request, res: Response): void => {
 };
 
 export const createProduct = (req: Request, res: Response): void => {
-    const { seller_id, crop_name, category, base_price, available_quantity, unit_measurement, images } = req.body;
-    if (!Number.isInteger(seller_id) || !crop_name || !categories.has(category) || !units.has(unit_measurement) || !Number.isFinite(Number(base_price)) || !Number.isFinite(Number(available_quantity)) || Number(base_price) <= 0 || Number(available_quantity) <= 0) {
-        res.status(400).json({ success: false, message: 'seller_id, crop_name, category, price, quantity, and unit_measurement are required' });
+    // The seller is whoever is signed in; a seller_id in the body is ignored.
+    const seller_id = authUserId(res);
+    const { crop_name, category, base_price, available_quantity, unit_measurement, images } = req.body;
+    if (!crop_name || !categories.has(category) || !units.has(unit_measurement) || !Number.isFinite(Number(base_price)) || !Number.isFinite(Number(available_quantity)) || Number(base_price) <= 0 || Number(available_quantity) <= 0) {
+        res.status(400).json({ success: false, message: 'crop_name, category, price, quantity, and unit_measurement are required' });
         return;
     }
     const imageUrls = Array.isArray(images) ? images.filter((image): image is string => typeof image === 'string' && image.startsWith('http')) : [];
@@ -43,14 +46,12 @@ export const createProduct = (req: Request, res: Response): void => {
     }
 };
 
-// KNOWN DEBT: same stopgap as negotiations - the acting seller is `seller_id`
-// in the request and is trusted. PLAN.md Phase 2 replaces it with a token;
-// only this helper should have to change when it does.
+// Loads the listing and checks the signed-in user is its seller.
 const loadOwnedProduct = (req: Request, res: Response): ProductListing | undefined => {
     const productId = readId(req.params.id);
-    const sellerId = readId(req.body?.seller_id ?? req.query.seller_id);
-    if (!productId || !sellerId) {
-        res.status(400).json({ success: false, message: 'seller_id is required' });
+    const sellerId = authUserId(res);
+    if (!productId) {
+        res.status(400).json({ success: false, message: 'Invalid listing id' });
         return undefined;
     }
     const product = ProductModel.findById(productId);

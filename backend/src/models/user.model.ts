@@ -15,6 +15,7 @@ export interface User {
     business_type: string | null;
     profile_privacy: string;
     role: UserRole;
+    preferred_address_id?: number | null;
     is_verified: boolean;
     profile_photo_url: string | null;
     bio: string;
@@ -33,6 +34,10 @@ export interface AddressInput {
     longitude: number | null;
 }
 
+export interface Address extends AddressInput {
+    address_id: number;
+}
+
 export const UserModel = {
     // to select multiple row
     findAll: (): User[] => {
@@ -49,6 +54,30 @@ export const UserModel = {
     findByEmail: (email: string): User | undefined => {
         const query = 'SELECT * FROM users WHERE email = ?';
         return db.prepare(query).get(email) as User | undefined;
+    },
+
+    findProfile: (userId: number) => {
+        const user = UserModel.findById(userId);
+        if (!user) return undefined;
+        const preferred = user.preferred_address_id;
+        const addresses = db.prepare(`
+            SELECT DISTINCT
+                a.address_id,
+                a.region,
+                a.province,
+                a.city_municipality,
+                a.barangay,
+                a.zip_code,
+                NULL AS street_details,
+                NULL AS landmark,
+                NULL AS latitude,
+                NULL AS longitude
+            FROM addresses a
+            LEFT JOIN user_addresses ua ON ua.address_id = a.address_id
+            WHERE ua.user_id = ? OR a.address_id = ?
+            ORDER BY a.address_id
+        `).all(userId, preferred ?? -1) as Address[];
+        return { ...user, addresses };
     },
 
     updateProfile: (userId: number, input: { first_name: string; last_name: string; contact_number: string; bio: string; location?: string; business_name?: string; business_type?: string; profile_privacy?: string }): User | undefined => {
@@ -112,6 +141,31 @@ export const UserModel = {
         };
     },
 
+    createWithAddress(
+        user: Omit<User, "user_id" | "created_at" | "is_verified" | "password_hash" | "role" | "profile_photo_url" | "bio" | "location" | "business_name" | "business_type" | "profile_privacy"> & {
+            password: string;
+            role?: UserRole;
+        },
+        address: Pick<AddressInput, 'region' | 'province' | 'city_municipality' | 'zip_code'>,
+    ): User {
+        const createUserWithAddress = db.transaction(() => {
+            const createdUser = UserModel.create(user);
+            const addressInfo = db.prepare(`
+                INSERT INTO addresses (region, province, city_municipality, barangay, zip_code)
+                VALUES (@region, @province, @city_municipality, '', @zip_code)
+            `).run(address);
+
+            db.prepare('UPDATE users SET preferred_address_id = ? WHERE user_id = ?')
+                .run(addressInfo.lastInsertRowid, createdUser.user_id);
+            db.prepare('INSERT OR IGNORE INTO user_addresses (user_id, address_id) VALUES (?, ?)')
+                .run(createdUser.user_id, addressInfo.lastInsertRowid);
+
+            return createdUser;
+        });
+
+        return createUserWithAddress();
+    },
+
     // to delete a row
     delete: (id: number): boolean => {
         const query = 'DELETE FROM users WHERE user_id = ?';
@@ -127,12 +181,44 @@ export const UserModel = {
             INSERT INTO addresses (region, province, city_municipality, barangay, zip_code, street_details, landmark, latitude, longitude)
             VALUES (@region, @province, @city_municipality, @barangay, @zip_code, @street_details, @landmark, @latitude, @longitude)
         `);
-        const info = insertQuery.run(addressData);
+        const add = db.transaction(() => {
+            const info = insertQuery.run(addressData);
+            db.prepare('INSERT OR IGNORE INTO user_addresses (user_id, address_id) VALUES (?, ?)')
+                .run(userId, info.lastInsertRowid);
+            db.prepare('UPDATE users SET preferred_address_id = ? WHERE user_id = ?')
+                .run(info.lastInsertRowid, userId);
+            return Number(info.lastInsertRowid);
+        });
+        return add();
+    },
 
-        const updateUserQuery = db.prepare(`UPDATE users SET preferred_address_id = ? WHERE user_id = ?`);
-        updateUserQuery.run(info.lastInsertRowid, userId);
+    updateAddress: (userId: number, addressId: number, addressData: AddressInput): boolean => {
+        const result = db.prepare(`
+            UPDATE addresses
+            SET region = @region, province = @province, city_municipality = @city_municipality,
+                barangay = @barangay, zip_code = @zip_code, street_details = @street_details,
+                landmark = @landmark, latitude = @latitude, longitude = @longitude
+            WHERE address_id = @address_id
+              AND EXISTS (
+                SELECT 1 FROM user_addresses
+                WHERE user_id = @user_id AND address_id = @address_id
+              )
+        `).run({ ...addressData, address_id: addressId, user_id: userId });
+        return result.changes > 0;
+    },
 
-        return info.lastInsertRowid;
+    choosePreferredAddress: (userId: number, addressId: number): boolean => {
+        const owned = db.prepare(
+            'SELECT 1 FROM user_addresses WHERE user_id = ? AND address_id = ?',
+        ).get(userId, addressId);
+        if (!owned) return false;
+        return db.prepare('UPDATE users SET preferred_address_id = ? WHERE user_id = ?')
+            .run(addressId, userId).changes > 0;
+    },
+
+    updatePassword: (userId: number, password: string): boolean => {
+        return db.prepare('UPDATE users SET password_hash = ? WHERE user_id = ?')
+            .run(hashPassword(password), userId).changes > 0;
     },
 
     // Creates or moves a farmer's farm location and promotes them to the

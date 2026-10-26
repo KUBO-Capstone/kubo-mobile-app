@@ -4,10 +4,9 @@ import { NegotiationModel } from "#models/negotiation.model";
 import { ProductModel } from "#models/product.model";
 import { BagsakanModel } from "#models/bagsakan.model";
 import { ConversationModel } from "#models/conversation.model";
+import { authUserId } from "#middleware/auth.middleware";
 
-// KNOWN DEBT: same identity stopgap as negotiations - the acting user is
-// `buyer_id` on create and `user_id` on update, trusted from the body until
-// PLAN.md Phase 2 puts a token in front of these routes.
+// Mounted behind requireAuth: the acting user is always authUserId(res).
 
 const statuses = new Set<string>(['pending', 'in transit', 'delivered', 'cancelled']);
 const methods = new Set<string>(['courier', 'meetup']);
@@ -42,11 +41,7 @@ const describeHandover = (order: Order): string =>
         : 'courier delivery';
 
 export const getOrders = (req: Request, res: Response): void => {
-    const userId = readId(req.query.user_id);
-    if (!userId) {
-        res.status(400).json({ success: false, message: 'user_id is required' });
-        return;
-    }
+    const userId = authUserId(res);
     const role = req.query.role === 'buyer' || req.query.role === 'seller' ? req.query.role : undefined;
     const status = typeof req.query.status === 'string' && statuses.has(req.query.status)
         ? (req.query.status as OrderStatus)
@@ -55,11 +50,7 @@ export const getOrders = (req: Request, res: Response): void => {
 };
 
 export const getOrder = (req: Request, res: Response): void => {
-    const userId = readId(req.query.user_id);
-    if (!userId) {
-        res.status(400).json({ success: false, message: 'user_id is required' });
-        return;
-    }
+    const userId = authUserId(res);
     const order = OrderModel.findById(Number(req.params.id));
     if (!order) {
         res.status(404).json({ success: false, message: 'Order not found' });
@@ -75,11 +66,11 @@ export const getOrder = (req: Request, res: Response): void => {
 // Buyer turns an accepted offer into an order by choosing how to get the
 // produce: collect it at a bagsakan center or have it couriered.
 export const createOrder = (req: Request, res: Response): void => {
-    const buyerId = readId(req.body.buyer_id);
+    const buyerId = authUserId(res);
     const negotiationId = readId(req.body.negotiation_id);
     const method = readText(req.body.delivery_method);
-    if (!buyerId || !negotiationId || !methods.has(method)) {
-        res.status(400).json({ success: false, message: 'buyer_id, negotiation_id and a delivery_method of meetup or courier are required' });
+    if (!negotiationId || !methods.has(method)) {
+        res.status(400).json({ success: false, message: 'negotiation_id and a delivery_method of meetup or courier are required' });
         return;
     }
 
@@ -145,10 +136,10 @@ export const createOrder = (req: Request, res: Response): void => {
 // Seller moves it out the door, buyer confirms it arrived, either side can
 // cancel while nothing has moved yet.
 export const updateOrder = (req: Request, res: Response): void => {
-    const userId = readId(req.body.user_id);
+    const userId = authUserId(res);
     const action = readText(req.body.action);
-    if (!userId || !actions.has(action)) {
-        res.status(400).json({ success: false, message: 'user_id and an action of ship, deliver, or cancel are required' });
+    if (!actions.has(action)) {
+        res.status(400).json({ success: false, message: 'An action of ship, deliver, or cancel are required' });
         return;
     }
 

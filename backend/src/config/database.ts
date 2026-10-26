@@ -9,6 +9,76 @@ export const db = new Database(dbPath, { verbose: console.log });
 // enable foreign key constraints (off by default)
 db.pragma('foreign_keys = ON');
 
+function migrateLegacySchema(): void {
+    const messageColumns = new Set(
+        (db.pragma('table_info(messages)') as { name: string }[]).map((column) => column.name),
+    );
+    const messageAlterations = [
+        !messageColumns.has('message_type')
+            ? "ALTER TABLE messages ADD COLUMN message_type VARCHAR(20) NOT NULL DEFAULT 'text'"
+            : null,
+        !messageColumns.has('negotiation_id')
+            ? 'ALTER TABLE messages ADD COLUMN negotiation_id INTEGER'
+            : null,
+        !messageColumns.has('order_id')
+            ? 'ALTER TABLE messages ADD COLUMN order_id INTEGER'
+            : null,
+        !messageColumns.has('offer_price')
+            ? 'ALTER TABLE messages ADD COLUMN offer_price REAL'
+            : null,
+        !messageColumns.has('offer_quantity')
+            ? 'ALTER TABLE messages ADD COLUMN offer_quantity REAL'
+            : null,
+        !messageColumns.has('read_at')
+            ? 'ALTER TABLE messages ADD COLUMN read_at DATETIME'
+            : null,
+    ];
+    for (const statement of messageAlterations) {
+        if (statement) db.exec(statement);
+    }
+
+    const notificationColumns = db.pragma('table_info(notifications)') as { name: string; notnull: number }[];
+    const senderColumn = notificationColumns.find((column) => column.name === 'sender_id');
+    if (senderColumn?.notnull) {
+        db.transaction(() => {
+            db.exec(`
+                ALTER TABLE notifications RENAME TO notifications_legacy;
+                CREATE TABLE notifications (
+                    notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    recipient_id INTEGER NOT NULL,
+                    sender_id INTEGER,
+                    product_id INTEGER,
+                    title TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    is_read BOOLEAN DEFAULT FALSE,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (recipient_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                    FOREIGN KEY (sender_id) REFERENCES users(user_id) ON DELETE SET NULL,
+                    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE SET NULL
+                );
+                INSERT INTO notifications (notification_id, recipient_id, sender_id, product_id, title, message, is_read, created_at)
+                SELECT notification_id, recipient_id, sender_id, product_id, title, message, is_read, created_at
+                FROM notifications_legacy;
+                DROP TABLE notifications_legacy;
+            `);
+
+        })();
+    }
+
+    for (const statement of [
+        'ALTER TABLE users ADD COLUMN profile_photo_url TEXT',
+        "ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''",
+    ]) {
+        try {
+            db.exec(statement);
+        } catch (error) {
+            if (!(error instanceof Error) || !error.message.includes('duplicate column name')) {
+                throw error;
+            }
+        }
+    }
+}
+
 export function initDb(): void {
 
     db.exec(`
@@ -45,6 +115,14 @@ export function initDb(): void {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
             FOREIGN KEY (preferred_address_id) REFERENCES addresses(address_id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS user_addresses (
+            user_id INTEGER NOT NULL,
+            address_id INTEGER NOT NULL,
+            PRIMARY KEY (user_id, address_id),
+            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY (address_id) REFERENCES addresses(address_id) ON DELETE CASCADE
         );
 
         -- Farm location and vetting state for users whose role is 'farmer'.
@@ -263,7 +341,40 @@ export function initDb(): void {
             UNIQUE (user_id, product_id)
         );
 
+        CREATE TABLE IF NOT EXISTS notifications (
+            notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            -- the recipient: owner of the notification feed
+            recipient_id INTEGER NOT NULL,
+            
+            -- the sender: user who triggered the notification
+            sender_id INTEGER,
+
+            product_id INTEGER,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            is_read BOOLEAN DEFAULT FALSE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY (recipient_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY (sender_id) REFERENCES users(user_id) ON DELETE SET NULL,
+            FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS reports (
+            report_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_id INTEGER,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'feedback' CHECK (category IN ('feedback', 'bug', 'other')),
+            message TEXT NOT NULL,
+            is_read BOOLEAN DEFAULT FALSE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY (sender_id) REFERENCES users(user_id) ON DELETE SET NULL
+        );
+
     `);
+    migrateLegacySchema();
     for (const statement of [
         'ALTER TABLE users ADD COLUMN profile_photo_url TEXT',
         "ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''",
@@ -281,6 +392,12 @@ export function initDb(): void {
         }
     }
     console.log('Database tables created')
+    db.exec(`
+        INSERT OR IGNORE INTO user_addresses (user_id, address_id)
+        SELECT user_id, preferred_address_id
+        FROM users
+        WHERE preferred_address_id IS NOT NULL;
+    `);
 }
 
 initDb();

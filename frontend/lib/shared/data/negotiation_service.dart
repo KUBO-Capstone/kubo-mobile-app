@@ -105,26 +105,21 @@ class NegotiationRecord {
 /// Actions accepted by `PATCH /api/negotiations/:id`.
 enum NegotiationAction { accept, decline, counter }
 
-/// HTTP client for the negotiation endpoints.
-///
-/// KNOWN DEBT: the acting user is sent in the body (`buyer_id` / `user_id`)
-/// because there is no auth token yet. When PLAN.md Phase 2 lands, drop those
-/// fields here and nothing else in the app should have to change.
+/// HTTP client for the negotiation endpoints. The acting user is whoever the
+/// token says is signed in.
 class NegotiationService {
-  NegotiationService({http.Client? client}) : _client = client ?? http.Client();
+  NegotiationService({http.Client? client}) : _client = client ?? apiClient();
 
   String get _baseUrl => ApiConfig.baseUrl;
   final http.Client _client;
 
-  /// Negotiations [userId] is a party to. `role` narrows to `buyer` (sent) or
-  /// `seller` (received).
+  /// Negotiations the signed-in user is a party to. `role` narrows to `buyer`
+  /// (sent) or `seller` (received).
   Future<List<NegotiationRecord>> fetchNegotiations({
-    required int userId,
     String? role,
     NegotiationStatus? status,
   }) async {
     final uri = Uri.parse('$_baseUrl/negotiations').replace(queryParameters: {
-      'user_id': '$userId',
       if (role != null) 'role': role,
       if (status != null) 'status': status.name,
     });
@@ -136,7 +131,6 @@ class NegotiationService {
   }
 
   Future<NegotiationRecord> createOffer({
-    required int buyerId,
     required int productId,
     required double price,
     required double quantity,
@@ -146,7 +140,6 @@ class NegotiationService {
         Uri.parse('$_baseUrl/negotiations'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'buyer_id': buyerId,
           'product_id': productId,
           'offered_price': price,
           'offered_quantity': quantity,
@@ -159,7 +152,6 @@ class NegotiationService {
   /// Accept, decline, or counter. `price`/`quantity` are only read for a counter.
   Future<NegotiationRecord> respond({
     required int negotiationId,
-    required int userId,
     required NegotiationAction action,
     double? price,
     double? quantity,
@@ -169,7 +161,6 @@ class NegotiationService {
         Uri.parse('$_baseUrl/negotiations/$negotiationId'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'user_id': userId,
           'action': action.name,
           if (price != null) 'offered_price': price,
           if (quantity != null) 'offered_quantity': quantity,

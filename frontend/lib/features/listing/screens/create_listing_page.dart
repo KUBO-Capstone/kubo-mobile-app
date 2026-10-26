@@ -79,7 +79,6 @@ class _CreateListingPageState extends State<CreateListingPage> {
       if (existing != null) {
         saved = await _service.updateListing(
           productId: existing.productId!,
-          sellerId: sellerId,
           cropName: _nameController.text.trim(),
           category: _category,
           price: double.parse(_priceController.text),
@@ -88,7 +87,6 @@ class _CreateListingPageState extends State<CreateListingPage> {
         );
       } else {
         saved = await _service.createListing(
-          sellerId: sellerId,
           cropName: _nameController.text.trim(),
           category: _category,
           price: double.parse(_priceController.text),
@@ -118,7 +116,19 @@ class _CreateListingPageState extends State<CreateListingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_isEditing ? 'Edit Listing' : 'Create Listing'), backgroundColor: AppColors.white),
+      appBar: AppBar(
+        centerTitle: true,
+        title: Text(
+          _isEditing ? 'EDIT LISTING' : 'CREATE LISTING',
+          style: TextStyle(
+            color: AppColors.black,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+          ),
+        ), 
+        backgroundColor: AppColors.white
+      ),
       backgroundColor: AppColors.white,
       body: Form(
         key: _formKey,

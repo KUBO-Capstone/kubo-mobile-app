@@ -137,15 +137,30 @@ class ProfilePageController extends ChangeNotifier {
     final savedLocation = (_loadedProfile?['location'] ?? user['location'])?.toString().trim() ?? syntheticProfileRecord.locationLabel;
     final savedBusinessName = (_loadedProfile?['business_name'] ?? user['business_name'])?.toString().trim() ?? '';
     final savedBusinessType = (_loadedProfile?['business_type'] ?? user['business_type'])?.toString().trim() ?? '';
+    final addresses = (_loadedProfile?['addresses'] as List?)?.whereType<Map>().toList() ?? const <Map>[];
+    final preferredId = _loadedProfile?['preferred_address_id'];
+    final address = addresses.cast<Map<String, dynamic>>().firstWhere(
+      (item) => item['address_id'] == preferredId,
+      orElse: () => <String, dynamic>{},
+    );
+    final city = address['city_municipality']?.toString() ?? '';
+    final region = address['region']?.toString() ?? '';
+    final province = address['province']?.toString() ?? '';
+    final addressLocation = city.isEmpty ? '' : '$city, ${region.toUpperCase() == 'NCR' ? region : province}'.trim();
+    final createdAtText = _loadedProfile?['created_at']?.toString() ?? '';
+    final hasTimeZone = RegExp(r'(?:[zZ]|[+-]\d{2}:?\d{2})$').hasMatch(createdAtText);
+    final createdAt = DateTime.tryParse(hasTimeZone ? createdAtText : '${createdAtText}Z')?.toLocal();
     return SyntheticProfileRecord(
       displayName: displayName.isEmpty ? syntheticProfileRecord.displayName : displayName,
       username: user['email']?.toString() ?? syntheticProfileRecord.username,
-      locationLabel: savedLocation,
+      locationLabel: addressLocation.isEmpty ? savedLocation : addressLocation,
       about: savedBio.isEmpty ? syntheticProfileRecord.about : savedBio,
       businessName: savedBusinessName,
       businessType: savedBusinessType,
       profilePrivacy: _normalizePrivacy(_loadedProfile?['profile_privacy'] ?? user['profile_privacy']),
-      joinedLabel: syntheticProfileRecord.joinedLabel,
+      joinedLabel: createdAt == null
+          ? ''
+          : '${createdAt.month.toString().padLeft(2, '0')}/${createdAt.day.toString().padLeft(2, '0')}/${createdAt.year}',
       followingCount: syntheticProfileRecord.followingCount,
       followersCount: syntheticProfileRecord.followersCount,
       listingCount: _listings.length,

@@ -8,6 +8,8 @@ import conversationRoutes from "./conversation.routes";
 import marketRoutes from "./market.routes";
 import savedListingRoutes from "./saved-listing.routes";
 import orderRoutes from "./order.routes";
+import notificationRoutes from "./notification.routes";
+import reportRoutes from "./report.routes";
 
 const router = Router();
 
@@ -20,5 +22,7 @@ router.use('/conversations', conversationRoutes);
 router.use('/market', marketRoutes);
 router.use('/saved-listings', savedListingRoutes);
 router.use('/orders', orderRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/reports', reportRoutes);
 
 export default router;

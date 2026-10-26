@@ -1,24 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:philippines_rpcmb/philippines_rpcmb.dart';
+import 'package:flutter/foundation.dart';
 
-/// Gender choices shown in the onboarding form.
-enum Gender { female, male, preferNotToSay }
-
-/// Human-readable labels for each gender choice.
-extension GenderLabel on Gender {
-  String get label {
-    switch (this) {
-      case Gender.female:
-        return 'Female';
-      case Gender.male:
-        return 'Male';
-      case Gender.preferNotToSay:
-        return 'Prefer not to say';
-    }
-  }
-}
-
-/// Change-notifier controller that stores the onboarding selections and filters.
+/// Change-notifier controller that stores the registration location selections.
 class GetStartedFormController extends ChangeNotifier {
   /// Loads the full list of Philippine regions once and exposes it to the form.
   GetStartedFormController()
@@ -27,22 +10,31 @@ class GetStartedFormController extends ChangeNotifier {
   /// Immutable list of regions used to populate the region dropdown.
   final List<Region> regions;
 
-  /// Text value entered by the user for their username.
+  /// Text value entered by the user for their first name.
   String username = '';
-  /// Selected gender option from the pill group.
-  Gender? selectedGender;
-  /// Selected birthday from the date picker.
-  DateTime? selectedBirthday;
   /// Selected region that drives the available-city dropdown.
   Region? selectedRegion;
+  /// Selected province, except for NCR where the province field is hidden.
+  Province? selectedProvince;
   /// Selected municipality within the chosen region.
   Municipality? selectedCity;
 
-  // Flattens the selected region into a deduplicated, alphabetized municipality list.
+  bool get isNcr => selectedRegion?.id == 'NCR';
+
+  List<Province> get availableProvinces {
+    if (selectedRegion == null || isNcr) return const [];
+    return selectedRegion!.provinces;
+  }
+
+  // Uses the selected province for ordinary regions and all NCR cities directly.
   List<Municipality> get availableCities {
     final region = selectedRegion;
     if (region == null) {
       return const [];
+    }
+
+    if (!isNcr && selectedProvince != null) {
+      return selectedProvince!.municipalities;
     }
 
     final municipalitiesById = <String, Municipality>{};
@@ -66,31 +58,21 @@ class GetStartedFormController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Stores the selected gender and notifies listeners when it changes.
-  void setGender(Gender? value) {
-    if (selectedGender == value) {
-      return;
-    }
-    selectedGender = value;
-    notifyListeners();
-  }
-
-  // Stores the selected birthday and notifies listeners when it changes.
-  void setBirthday(DateTime? value) {
-    if (selectedBirthday == value) {
-      return;
-    }
-    selectedBirthday = value;
-    notifyListeners();
-  }
-
-  // Stores a new region and clears the dependent city selection.
+  // Stores a new region and clears dependent selections.
   void setRegion(Region? value) {
     if (selectedRegion == value) {
       return;
     }
 
     selectedRegion = value;
+    selectedProvince = null;
+    selectedCity = null;
+    notifyListeners();
+  }
+
+  void setProvince(Province? value) {
+    if (selectedProvince == value) return;
+    selectedProvince = value;
     selectedCity = null;
     notifyListeners();
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/profile_service.dart';
 import 'edit_profile_page.dart';
+import 'change_password_page.dart';
 
 class AccountSettingsPage extends StatefulWidget {
   const AccountSettingsPage({
@@ -161,6 +162,19 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
             onPressed: _savePrivacy,
             icon: const Icon(Icons.save_outlined),
             label: const Text('Save privacy'),
+          ),
+          const SizedBox(height: 24),
+          const Text('Security', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.black)),
+          const SizedBox(height: 8),
+          _SettingsTile(
+            icon: Icons.lock_outline,
+            title: 'Change password',
+            subtitle: 'Update your sign-in password',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ChangePasswordPage(userId: int.parse(_user['user_id'].toString())),
+              ),
+            ),
           ),
           const SizedBox(height: 24),
           const Text('Session', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.black)),

@@ -1,12 +1,9 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
+import { requireEnv } from './env';
 
-export function requireEnv(name: string): string {
-    const value = process.env[name];
-    if (!value) throw new Error(`Missing required environment variable: ${name}`);
-    return value;
-}
+export { requireEnv };
 
 const region = requireEnv('AWS_REGION');
 

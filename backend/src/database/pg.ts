@@ -1,5 +1,10 @@
+import fs from 'fs';
+import path from 'path';
 import { Pool } from 'pg';
-import { requireEnv } from '../config/aws';
+import { requireEnv } from '../config/env';
+
+// AWS RDS CA bundle: https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+const caPath = process.env.PGSSLROOTCERT ?? path.resolve(__dirname, '../../certs/global-bundle.pem');
 
 export const pool = new Pool({
     host: requireEnv('PGHOST'),
@@ -8,10 +13,10 @@ export const pool = new Pool({
     user: requireEnv('PGUSER'),
     password: requireEnv('PGPASSWORD'),
     max: 10,
-    // RDS requires an encrypted connection. This encrypts but does not verify the
-    // server certificate. Before production, download the AWS RDS CA bundle and use
-    // { ca: fs.readFileSync('global-bundle.pem'), rejectUnauthorized: true }.
-    ssl: { rejectUnauthorized: false },
+    // Fail fast instead of hanging forever when RDS is unreachable
+    connectionTimeoutMillis: 10_000,
+    // RDS requires an encrypted connection; verify the server against the RDS CA.
+    ssl: { ca: fs.readFileSync(caPath, 'utf8'), rejectUnauthorized: true },
 });
 
 pool.on('error', (err) => {

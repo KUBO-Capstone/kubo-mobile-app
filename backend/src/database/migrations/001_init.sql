@@ -452,11 +452,30 @@ CREATE TRIGGER trg_orders_updated_at
 --   * decide what to do with the user's DynamoDB messages
 --     (usual choice: keep them, since the other participant's chat history
 --      references them; the sender displays as "Deleted User")
+--
+-- Intentionally retained (shared with the other party, not scrubbed here):
+--   * conversations.last_message_preview - mirrors a DynamoDB message the
+--     other participant still sees, so it follows the messages decision above
+--   * reviews.comment - part of the reviewee's public rating history
+--
+-- The user's addresses are deleted once nothing else (another user,
+-- a farmer profile or a bagsakan center) still references them.
 -- Usage:  SELECT anonymize_user(42);
 -- ---------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION anonymize_user(p_user_id integer)
 RETURNS void AS $$
+DECLARE
+    v_address_ids integer[];
 BEGIN
+    -- Capture before the UPDATE below clears preferred_address_id
+    SELECT array_agg(DISTINCT a.address_id) INTO v_address_ids
+    FROM (
+        SELECT preferred_address_id AS address_id FROM users WHERE user_id = p_user_id
+        UNION SELECT address_id FROM user_addresses  WHERE user_id = p_user_id
+        UNION SELECT address_id FROM farmer_profiles WHERE farmer_id = p_user_id
+    ) a
+    WHERE a.address_id IS NOT NULL;
+
     UPDATE users
     SET first_name           = 'Deleted',
         last_name            = 'User',
@@ -480,6 +499,14 @@ BEGIN
     DELETE FROM farmer_profiles WHERE farmer_id = p_user_id;
     DELETE FROM saved_listings  WHERE user_id = p_user_id;
     DELETE FROM notifications   WHERE recipient_id = p_user_id;
+
+    -- Drop the now-unlinked addresses unless something else still uses them
+    DELETE FROM addresses ad
+    WHERE ad.address_id = ANY (v_address_ids)
+      AND NOT EXISTS (SELECT 1 FROM users            u WHERE u.preferred_address_id = ad.address_id)
+      AND NOT EXISTS (SELECT 1 FROM user_addresses  ua WHERE ua.address_id = ad.address_id)
+      AND NOT EXISTS (SELECT 1 FROM farmer_profiles fp WHERE fp.address_id = ad.address_id)
+      AND NOT EXISTS (SELECT 1 FROM bagsakan_centers bc WHERE bc.address_id = ad.address_id);
 
     -- Stop selling; existing orders are unaffected
     UPDATE products SET status = 'delisted'

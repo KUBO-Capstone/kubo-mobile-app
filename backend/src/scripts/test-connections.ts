@@ -31,6 +31,8 @@ async function main(): Promise<void> {
         }),
         await check('S3', async () => {
             const bucket = requireEnv('S3_BUCKET');
+            // HeadBucket needs s3:ListBucket on the bucket. The app role only needs
+            // object-level access, so a 403 here can mean "no ListBucket", not "unreachable".
             await s3.send(new HeadBucketCommand({ Bucket: bucket }));
             return `bucket "${bucket}" is reachable`;
         }),

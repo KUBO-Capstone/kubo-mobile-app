@@ -228,13 +228,25 @@ export function initDb(): void {
             buyer_id INTEGER NOT NULL,
             seller_id INTEGER NOT NULL,
             product_id INTEGER,
+            -- Inbox data and read cursors, same columns as conversations in
+            -- the RDS schema. Messages themselves are in DynamoDB. All four
+            -- timestamps are ISO strings written by the app.
+            last_message_at TEXT,
+            last_message_sender_id INTEGER,
+            last_message_preview VARCHAR(200),
+            buyer_last_read_at TEXT,
+            seller_last_read_at TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
             FOREIGN KEY (buyer_id) REFERENCES users(user_id) ON DELETE CASCADE,
             FOREIGN KEY (seller_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY (last_message_sender_id) REFERENCES users(user_id) ON DELETE SET NULL,
             FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE
         );
 
+        -- LEGACY: messages moved to DynamoDB (models/message.model.ts). Nothing
+        -- writes here any more; scripts/migrate-messages-to-dynamo.ts copies
+        -- old rows across. Drop it once every environment has been migrated.
         CREATE TABLE IF NOT EXISTS messages (
             message_id INTEGER PRIMARY KEY AUTOINCREMENT,
             conversation_id INTEGER NOT NULL,
@@ -382,6 +394,14 @@ export function initDb(): void {
         "ALTER TABLE users ADD COLUMN business_name VARCHAR(80)",
         "ALTER TABLE users ADD COLUMN business_type VARCHAR(40)",
         "ALTER TABLE users ADD COLUMN profile_privacy TEXT NOT NULL DEFAULT '{\"public_profile\":true,\"show_bio\":true,\"show_contact_number\":true,\"show_location\":true}'",
+        // Set when an account is anonymized (see anonymize_user() in the PG schema)
+        'ALTER TABLE users ADD COLUMN deleted_at DATETIME',
+        // Inbox preview + read cursors (messages are in DynamoDB)
+        'ALTER TABLE conversations ADD COLUMN last_message_at TEXT',
+        'ALTER TABLE conversations ADD COLUMN last_message_sender_id INTEGER REFERENCES users(user_id) ON DELETE SET NULL',
+        'ALTER TABLE conversations ADD COLUMN last_message_preview VARCHAR(200)',
+        'ALTER TABLE conversations ADD COLUMN buyer_last_read_at TEXT',
+        'ALTER TABLE conversations ADD COLUMN seller_last_read_at TEXT',
     ]) {
         try {
             db.exec(statement);

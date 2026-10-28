@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { ConversationModel, ConversationSummary } from "#models/conversation.model";
 import { ProductModel } from "#models/product.model";
 import { authUserId } from "#middleware/auth.middleware";
+import { isMessageId } from "#models/message.model";
+import { listChatMessages, sendChatMessage } from "#services/chat.service";
 
 // Mounted behind requireAuth: the caller is always authUserId(res).
 
@@ -65,13 +67,20 @@ export const createConversation = (req: Request, res: Response): void => {
     res.status(201).json({ success: true, data: ConversationModel.findById(conversationId, buyerId) });
 };
 
-export const getMessages = (req: Request, res: Response): void => {
+// ?after=<message_id> returns only newer messages; the app uses it to catch
+// up on whatever it missed while its socket was disconnected.
+export const getMessages = async (req: Request, res: Response): Promise<void> => {
     const conversation = loadOwnConversation(req, res);
     if (!conversation) return;
-    res.json({ success: true, data: ConversationModel.messages(conversation.conversation_id) });
+    const after = req.query.after;
+    if (after !== undefined && (typeof after !== 'string' || !isMessageId(after))) {
+        res.status(400).json({ success: false, message: 'after must be a message id' });
+        return;
+    }
+    res.json({ success: true, data: await listChatMessages(conversation.conversation_id, after) });
 };
 
-export const sendMessage = (req: Request, res: Response): void => {
+export const sendMessage = async (req: Request, res: Response): Promise<void> => {
     const conversation = loadOwnConversation(req, res);
     if (!conversation) return;
     const content = typeof req.body.content === 'string' ? req.body.content.trim() : '';
@@ -83,7 +92,7 @@ export const sendMessage = (req: Request, res: Response): void => {
         res.status(400).json({ success: false, message: 'Messages are limited to 2000 characters' });
         return;
     }
-    const message = ConversationModel.addMessage({
+    const message = await sendChatMessage({
         conversation_id: conversation.conversation_id,
         sender_id: authUserId(res),
         content,

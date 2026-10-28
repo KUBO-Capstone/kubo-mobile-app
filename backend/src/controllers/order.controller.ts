@@ -3,8 +3,8 @@ import { DeliveryMethod, Order, OrderModel, OrderStatus } from "#models/order.mo
 import { NegotiationModel } from "#models/negotiation.model";
 import { ProductModel } from "#models/product.model";
 import { BagsakanModel } from "#models/bagsakan.model";
-import { ConversationModel } from "#models/conversation.model";
 import { authUserId } from "#middleware/auth.middleware";
+import { sendChatMessage } from "#services/chat.service";
 
 // Mounted behind requireAuth: the acting user is always authUserId(res).
 
@@ -24,15 +24,21 @@ const formatAmount = (value: number): string =>
 
 // Order steps show up in the buyer/seller thread next to the offer events,
 // so the chat stays the one place that tells the whole story of a deal.
-const recordOrderEvent = (order: Order, actorId: number, content: string): void => {
-    ConversationModel.addMessage({
-        conversation_id: order.conversation_id,
-        sender_id: actorId,
-        content,
-        message_type: 'order',
-        negotiation_id: order.negotiation_id,
-        order_id: order.order_id,
-    });
+// The order row is already committed by the time this runs, so a failed
+// DynamoDB write is logged rather than failing the request.
+const recordOrderEvent = async (order: Order, actorId: number, content: string): Promise<void> => {
+    try {
+        await sendChatMessage({
+            conversation_id: order.conversation_id,
+            sender_id: actorId,
+            content,
+            message_type: 'order',
+            negotiation_id: order.negotiation_id,
+            order_id: order.order_id,
+        });
+    } catch (error) {
+        console.error(`Could not record event for order ${order.order_id}:`, error);
+    }
 };
 
 const describeHandover = (order: Order): string =>
@@ -65,7 +71,7 @@ export const getOrder = (req: Request, res: Response): void => {
 
 // Buyer turns an accepted offer into an order by choosing how to get the
 // produce: collect it at a bagsakan center or have it couriered.
-export const createOrder = (req: Request, res: Response): void => {
+export const createOrder = async (req: Request, res: Response): Promise<void> => {
     const buyerId = authUserId(res);
     const negotiationId = readId(req.body.negotiation_id);
     const method = readText(req.body.delivery_method);
@@ -125,7 +131,7 @@ export const createOrder = (req: Request, res: Response): void => {
         delivery_method: method as DeliveryMethod,
         drop_off_center_id: centerId,
     });
-    recordOrderEvent(
+    await recordOrderEvent(
         order,
         buyerId,
         `Placed order #${order.order_id}: ${formatAmount(order.quantity)} ${order.unit_measurement} for PHP ${formatAmount(order.total_amount)}, ${describeHandover(order)}`,
@@ -135,7 +141,7 @@ export const createOrder = (req: Request, res: Response): void => {
 
 // Seller moves it out the door, buyer confirms it arrived, either side can
 // cancel while nothing has moved yet.
-export const updateOrder = (req: Request, res: Response): void => {
+export const updateOrder = async (req: Request, res: Response): Promise<void> => {
     const userId = authUserId(res);
     const action = readText(req.body.action);
     if (!actions.has(action)) {
@@ -161,7 +167,7 @@ export const updateOrder = (req: Request, res: Response): void => {
             return;
         }
         const cancelled = OrderModel.cancel(order.order_id) as Order;
-        recordOrderEvent(cancelled, userId, `Cancelled order #${order.order_id}`);
+        await recordOrderEvent(cancelled, userId, `Cancelled order #${order.order_id}`);
         res.json({ success: true, data: cancelled });
         return;
     }
@@ -186,7 +192,7 @@ export const updateOrder = (req: Request, res: Response): void => {
             courier = { courier_name: courierName, tracking_number: trackingNumber };
         }
         const shipped = OrderModel.ship(order.order_id, courier) as Order;
-        recordOrderEvent(
+        await recordOrderEvent(
             shipped,
             userId,
             courier
@@ -212,7 +218,7 @@ export const updateOrder = (req: Request, res: Response): void => {
         return;
     }
     const delivered = OrderModel.deliver(order.order_id) as Order;
-    recordOrderEvent(
+    await recordOrderEvent(
         delivered,
         userId,
         order.delivery_method === 'meetup'

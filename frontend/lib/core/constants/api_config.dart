@@ -23,4 +23,7 @@ abstract final class ApiConfig {
         !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
     return isAndroidDevice ? _androidEmulatorBaseUrl : _loopbackBaseUrl;
   }
+
+  /// Socket.IO shares the server's port but lives at the root, not under /api.
+  static String get socketUrl => baseUrl.replaceFirst(RegExp(r'/api/?$'), '');
 }

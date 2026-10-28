@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../../../core/constants/api_config.dart';
 import '../../../shared/data/api_request.dart';
+import '../../../shared/data/chat_socket.dart';
 
 /// HTTP client for the backend account and login endpoints.
 class AuthService {
@@ -34,14 +35,17 @@ class AuthService {
   static void logout() {
     currentUser = null;
     ApiSession.token = null;
+    ChatSocket.disconnect();
   }
 
   /// Login and register both answer with the user row plus a `token`; the
   /// token goes to [ApiSession] and the rest becomes [currentUser].
   static Map<String, dynamic> _startSession(Map<String, dynamic> data) {
     final user = Map<String, dynamic>.of(data);
-    ApiSession.token = user.remove('token') as String?;
+    final token = user.remove('token') as String?;
+    ApiSession.token = token;
     currentUser = user;
+    if (token != null) ChatSocket.connect(token);
     return user;
   }
 

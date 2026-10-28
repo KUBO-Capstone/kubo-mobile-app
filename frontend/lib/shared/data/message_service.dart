@@ -44,12 +44,11 @@ class MessageRecord {
     this.orderId,
     this.offerPrice,
     this.offerQuantity,
-    this.readAt,
   });
 
   factory MessageRecord.fromJson(Map<String, dynamic> json) {
     return MessageRecord(
-      id: (json['message_id'] as num).toInt(),
+      id: json['message_id'].toString(),
       conversationId: (json['conversation_id'] as num).toInt(),
       senderId: (json['sender_id'] as num).toInt(),
       senderName: json['sender_name']?.toString() ?? 'User',
@@ -60,11 +59,12 @@ class MessageRecord {
       orderId: (json['order_id'] as num?)?.toInt(),
       offerPrice: (json['offer_price'] as num?)?.toDouble(),
       offerQuantity: (json['offer_quantity'] as num?)?.toDouble(),
-      readAt: DateTime.tryParse(json['read_at']?.toString() ?? ''),
     );
   }
 
-  final int id;
+  /// ULID: sorts as a string in send order, so it doubles as the
+  /// `?after=` catch-up cursor.
+  final String id;
   final int conversationId;
   final int senderId;
   final String senderName;
@@ -77,7 +77,6 @@ class MessageRecord {
   final int? orderId;
   final double? offerPrice;
   final double? offerQuantity;
-  final DateTime? readAt;
 
   bool isMine(int userId) => senderId == userId;
 }
@@ -97,10 +96,9 @@ class ConversationRecord {
     required this.unit,
     required this.productStatus,
     required this.sellerLocation,
-    required this.unreadCount,
+    required this.isUnread,
     this.productImage,
     this.lastMessage,
-    this.lastMessageType,
     this.lastMessageAt,
     this.negotiationId,
     this.negotiationStatus,
@@ -126,11 +124,8 @@ class ConversationRecord {
       productStatus: json['product_status']?.toString() ?? 'available',
       productImage: json['product_image']?.toString(),
       sellerLocation: json['seller_location']?.toString() ?? 'Philippines',
-      unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
+      isUnread: json['is_unread'] == true,
       lastMessage: json['last_message']?.toString(),
-      lastMessageType: json['last_message_type'] == null
-          ? null
-          : MessageType.parse(json['last_message_type'].toString()),
       lastMessageAt: DateTime.tryParse(json['last_message_at']?.toString() ?? ''),
       negotiationId: (json['negotiation_id'] as num?)?.toInt(),
       negotiationStatus: rawStatus == null ? null : NegotiationStatus.parse(rawStatus),
@@ -153,9 +148,9 @@ class ConversationRecord {
   final String productStatus;
   final String? productImage;
   final String sellerLocation;
-  final int unreadCount;
+  /// The other party sent something after this user last opened the thread.
+  final bool isUnread;
   final String? lastMessage;
-  final MessageType? lastMessageType;
   final DateTime? lastMessageAt;
 
   /// Latest offer on this thread, open or closed. Null before any offer.
@@ -265,8 +260,11 @@ class MessageService {
     return ConversationRecord.fromJson(readData(response) as Map<String, dynamic>);
   }
 
-  Future<List<MessageRecord>> fetchMessages({required int conversationId}) async {
-    final uri = Uri.parse('$_baseUrl/conversations/$conversationId/messages');
+  /// The whole thread, or only messages newer than [afterId] (used to catch
+  /// up after the chat socket reconnects).
+  Future<List<MessageRecord>> fetchMessages({required int conversationId, String? afterId}) async {
+    final uri = Uri.parse('$_baseUrl/conversations/$conversationId/messages')
+        .replace(queryParameters: afterId == null ? null : {'after': afterId});
     final response = await sendRequest(() => _client.get(uri));
     return (readData(response) as List<dynamic>)
         .whereType<Map<String, dynamic>>()

@@ -98,7 +98,7 @@ class _ConversationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final unread = thread.unreadCount > 0;
+    final unread = thread.isUnread;
     return ListTile(
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),

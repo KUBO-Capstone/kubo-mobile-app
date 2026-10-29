@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/order_service.dart';
+import '../../../shared/data/review_service.dart';
+import '../../../shared/widgets/kubo_star_rating.dart';
 import '../../chat/screens/chat_page.dart';
+import '../../reviews/screens/write_review_page.dart';
+import '../../reviews/widgets/review_card.dart';
 import '../../chat/widgets/counter_offer_dialog.dart';
 import '../../market/widgets/market_price_table.dart' show formatDate;
 import '../providers/order_controller.dart';
@@ -66,7 +70,27 @@ class _OrderPageState extends State<OrderPage> {
       action: order.isMeetup ? 'Picked up' : 'Received',
     );
     if (!confirmed) return;
-    _showError(await _controller.respond(OrderAction.deliver));
+    final error = await _controller.respond(OrderAction.deliver);
+    if (error != null) {
+      _showError(error);
+      return;
+    }
+    // The handover just happened, so this is when the buyer remembers it best.
+    final delivered = _controller.order;
+    if (mounted && delivered != null && delivered.canReview(_controller.userId ?? 0)) {
+      await _writeReview(delivered);
+    }
+  }
+
+  Future<void> _writeReview(OrderRecord order, {int initialRating = 0}) async {
+    final review = await Navigator.of(context).push<ReviewRecord>(
+      MaterialPageRoute<ReviewRecord>(
+        builder: (_) => WriteReviewPage(order: order, initialRating: initialRating),
+      ),
+    );
+    if (review == null || !mounted) return;
+    _controller.changed = true;
+    await _controller.load();
   }
 
   Future<void> _cancel(OrderRecord order) async {
@@ -214,6 +238,14 @@ class _OrderPageState extends State<OrderPage> {
             ],
           ],
         ),
+        if (order.status == OrderStatus.delivered) ...[
+          const SizedBox(height: 12),
+          _ReviewPanel(
+            order: order,
+            userId: userId,
+            onRate: (stars) => _writeReview(order, initialRating: stars),
+          ),
+        ],
         const SizedBox(height: 24),
         ..._buildActions(order, userId),
         if (widget.openChat) ...[
@@ -268,6 +300,53 @@ class _OrderPageState extends State<OrderPage> {
       ));
     }
     return buttons;
+  }
+}
+
+/// Delivered orders: a prompt to rate the other side, then both reviews.
+class _ReviewPanel extends StatelessWidget {
+  const _ReviewPanel({required this.order, required this.userId, required this.onRate});
+
+  final OrderRecord order;
+  final int userId;
+  final ValueChanged<int> onRate;
+
+  @override
+  Widget build(BuildContext context) {
+    final other = order.counterpartyName(userId);
+    final mine = order.myReview;
+    final theirs = order.theirReview;
+    return _Panel(
+      title: 'Reviews',
+      children: [
+        if (mine == null) ...[
+          Text(
+            order.isBuyer(userId) ? 'How was your order from $other?' : 'How was dealing with $other?',
+            style: const TextStyle(color: AppColors.black, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          KuboStarRatingInput(value: 0, size: 36, onChanged: onRate),
+          const SizedBox(height: 2),
+          const Center(
+            child: Text('Tap a star to rate', style: TextStyle(color: AppColors.gray, fontSize: 11)),
+          ),
+        ] else ...[
+          const Text('Your review', style: TextStyle(color: AppColors.gray, fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          ReviewCard(review: mine, showProduct: false, margin: EdgeInsets.zero),
+        ],
+        const SizedBox(height: 12),
+        if (theirs != null) ...[
+          Text("$other's review of you", style: const TextStyle(color: AppColors.gray, fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          ReviewCard(review: theirs, showProduct: false, margin: EdgeInsets.zero),
+        ] else
+          Text(
+            '$other has not reviewed you yet.',
+            style: const TextStyle(color: AppColors.gray, fontSize: 12),
+          ),
+      ],
+    );
   }
 }
 

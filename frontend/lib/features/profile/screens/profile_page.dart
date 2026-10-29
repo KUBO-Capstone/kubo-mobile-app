@@ -18,9 +18,12 @@ import '../../orders/screens/order_page.dart';
 import '../../orders/widgets/order_card.dart';
 import '../../saved/providers/saved_listings_controller.dart';
 import '../providers/profile_page_controller.dart';
+import '../../../core/utils/formatters.dart';
+import '../../earnings/screens/lifetime_earnings_page.dart';
+import '../../reviews/widgets/rating_summary_card.dart';
+import '../../reviews/widgets/review_card.dart';
 import '../widgets/profile_empty_state.dart';
 import '../widgets/profile_header_card.dart';
-import '../widgets/profile_review_card.dart';
 import '../widgets/profile_section_tab_bar.dart';
 import 'edit_profile_page.dart';
 import 'account_settings_page.dart';
@@ -85,10 +88,22 @@ class _ProfilePageState extends State<ProfilePage> {
     );
     _controller.loadListings();
     _controller.loadProfile();
+    _controller.loadReviews();
     if (widget.isOwnProfile) {
       SavedListingsController.instance.load();
       _orders.load();
+      _controller.loadEarnings();
     }
+  }
+
+  Future<void> _openEarnings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const LifetimeEarningsPage()),
+    );
+    if (!mounted) return;
+    // A listing may have been posted from the earnings page.
+    _controller.loadEarnings();
+    _controller.loadListings();
   }
 
   @override
@@ -267,12 +282,24 @@ class _ProfilePageState extends State<ProfilePage> {
                           onFollow: _followProfile,
                           onMessage: _messageProfile,
                           onChangePhoto: _openEditProfile,
+                          onRatingTap: () => _controller.selectSection(ProfileSection.reviews),
                         ),
                       ),
                     ],
                   ),
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 34)),
+                if (widget.isOwnProfile && _controller.earnings != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                      child: _EarningsBanner(
+                        total: _controller.earnings!.totalEarned,
+                        completedOrders: _controller.earnings!.completedOrders,
+                        onTap: _openEarnings,
+                      ),
+                    ),
+                  ),
                 SliverToBoxAdapter(
                   child: ProfileSectionTabBar(
                     selectedSection: _controller.selectedSection,
@@ -408,62 +435,91 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildReviewsSection() {
-    final reviews = _controller.reviews;
-    if (reviews.isEmpty) {
+    if (!_controller.reviewsLoaded) {
+      return const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(child: CircularProgressIndicator(color: AppColors.green)),
+      );
+    }
+    if (!_controller.hasAnyReviews) {
       return ProfileEmptyState(
         title: 'No reviews yet',
         message: widget.isOwnProfile
-            ? 'Reviews from buyers and sellers will appear here once they start coming in.'
+            ? 'After a completed order, buyers and sellers you deal with can rate you here.'
             : 'This profile has no reviews yet.',
         actionLabel: widget.isOwnProfile ? 'Share profile' : null,
         onActionPressed: widget.isOwnProfile ? _openShare : null,
       );
     }
 
+    final reviews = _controller.reviews;
+    final stars = _controller.starFilter;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+          child: RatingSummaryCard(summary: _controller.ratingSummary),
+        ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              Text(
-                _controller.profile.reviewScore.toStringAsFixed(1),
-                style: const TextStyle(
-                  color: AppColors.black,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
+              for (final filter in ReviewerFilter.values) ...[
+                _FilterChoice(
+                  label: switch (filter) {
+                    ReviewerFilter.all => 'All',
+                    ReviewerFilter.buyers => 'From buyers',
+                    ReviewerFilter.sellers => 'From sellers',
+                  },
+                  selected: _controller.reviewerFilter == filter,
+                  onTap: () => _controller.setReviewFilters(reviewer: filter),
                 ),
-              ),
-              const SizedBox(width: 5),
-              const Icon(Icons.star, color: AppColors.green, size: 14),
-              const SizedBox(width: 10),
-              Container(width: 1, height: 20, color: AppColors.border),
-              const SizedBox(width: 10),
-              Text(
-                '${_controller.profile.reviewCount} reviews',
-                style: const TextStyle(
-                  color: AppColors.black,
-                  fontSize: 12,
-                ),
-              ),
-              const Spacer(),
-              _PillButton(
-                label: 'Star ⭐ : All', 
-                fontSize: 12,
-                onTap: () {}
+                const SizedBox(width: 8),
+              ],
+              PopupMenuButton<int>(
+                tooltip: 'Filter by stars',
+                initialValue: stars ?? 0,
+                onSelected: (value) => _controller.setReviewFilters(stars: () => value == 0 ? null : value),
+                itemBuilder: (_) => [
+                  const PopupMenuItem<int>(value: 0, child: Text('All stars')),
+                  for (var star = 5; star >= 1; star--)
+                    PopupMenuItem<int>(value: star, child: Text('$star star${star == 1 ? '' : 's'}')),
+                ],
+                child: _PillButton(label: stars == null ? '★ All stars' : '★ $stars', fontSize: 12),
               ),
               const SizedBox(width: 8),
-              _PillButton(
-                label: 'Sort by: Newest', 
-                fontSize: 12,
-                onTap: () {}
+              PopupMenuButton<ReviewSort>(
+                tooltip: 'Sort reviews',
+                initialValue: _controller.reviewSort,
+                onSelected: (sort) => _controller.setReviewFilters(sort: sort),
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: ReviewSort.newest, child: Text('Newest')),
+                  PopupMenuItem(value: ReviewSort.highest, child: Text('Highest rated')),
+                  PopupMenuItem(value: ReviewSort.lowest, child: Text('Lowest rated')),
+                ],
+                child: _PillButton(
+                  label: 'Sort: ${switch (_controller.reviewSort) {
+                    ReviewSort.newest => 'Newest',
+                    ReviewSort.highest => 'Highest',
+                    ReviewSort.lowest => 'Lowest',
+                  }}',
+                  fontSize: 12,
+                ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 8),
-        ...reviews.map((review) => ProfileReviewCard(review: review)),
+        const SizedBox(height: 14),
+        if (reviews.isEmpty)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Text('No reviews match these filters.', style: TextStyle(color: AppColors.gray, fontSize: 13)),
+          )
+        else
+          ...reviews.map((review) => ReviewCard(review: review)),
       ],
     );
   }
@@ -566,7 +622,9 @@ class _ProfilePageState extends State<ProfilePage> {
               Expanded(
                 child: _AnalyticsCard(
                   label: 'Rating',
-                  value: _controller.profile.reviewScore.toStringAsFixed(1),
+                  value: _controller.ratingSummary.hasReviews
+                      ? _controller.ratingSummary.average!.toStringAsFixed(1)
+                      : '—',
                   accent: AppColors.green,
                 ),
               ),
@@ -702,30 +760,116 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
+/// Pill-shaped label used as the face of the star / sort menus.
 class _PillButton extends StatelessWidget {
   const _PillButton({
-    required this.label, 
-    required this.onTap,
+    required this.label,
     required this.fontSize,
   });
 
   final String label;
-  final VoidCallback onTap;
   final double fontSize;
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: onTap,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.black,
-        side: const BorderSide(color: AppColors.border),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
       ),
-      child: Text(
-        label, 
-        style: TextStyle(fontSize: fontSize)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(color: AppColors.black, fontSize: fontSize, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 2),
+          const Icon(Icons.arrow_drop_down, size: 18, color: AppColors.gray),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterChoice extends StatelessWidget {
+  const _FilterChoice({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.green : AppColors.white,
+      shape: StadiumBorder(side: BorderSide(color: selected ? AppColors.green : AppColors.border)),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? AppColors.white : AppColors.black,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Owner-only shortcut to Lifetime earnings, under the profile header.
+class _EarningsBanner extends StatelessWidget {
+  const _EarningsBanner({required this.total, required this.completedOrders, required this.onTap});
+
+  final double total;
+  final int completedOrders;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.green.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(color: AppColors.green, shape: BoxShape.circle),
+                child: const Icon(Icons.savings_outlined, color: AppColors.white, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Lifetime earnings', style: TextStyle(color: AppColors.gray, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(
+                      formatPeso(total),
+                      style: const TextStyle(color: AppColors.black, fontSize: 20, fontWeight: FontWeight.w900),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                completedOrders == 0 ? 'See details' : '$completedOrders sold',
+                style: const TextStyle(color: AppColors.green, fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.green),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

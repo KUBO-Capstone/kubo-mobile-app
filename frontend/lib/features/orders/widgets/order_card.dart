@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/order_service.dart';
+import '../../../shared/widgets/kubo_star_rating.dart';
 import '../../chat/widgets/counter_offer_dialog.dart';
 
 /// One row in an orders list: the listing thumbnail, what was ordered, how
@@ -91,6 +92,19 @@ class OrderCard extends StatelessWidget {
                       'Order $role ${order.counterpartyName(userId)}',
                       style: const TextStyle(color: AppColors.gray, fontSize: 11),
                     ),
+                    if (order.canReview(userId)) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.star_rounded, size: 14, color: kuboStarColor),
+                          const SizedBox(width: 3),
+                          Text(
+                            'Rate ${order.counterpartyName(userId)}',
+                            style: const TextStyle(color: AppColors.green, fontSize: 11, fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),

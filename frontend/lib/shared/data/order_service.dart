@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../../core/constants/api_config.dart';
 import 'api_request.dart';
+import 'review_service.dart';
 
 /// Lifecycle of an order. Mirrors the `orders.order_status` CHECK constraint.
 ///
@@ -72,9 +73,12 @@ class OrderRecord {
     this.centerAddress,
     this.courierName,
     this.trackingNumber,
+    this.myReview,
+    this.theirReview,
   });
 
   factory OrderRecord.fromJson(Map<String, dynamic> json) {
+    ReviewRecord? review(Object? raw) => raw is Map<String, dynamic> ? ReviewRecord.fromJson(raw) : null;
     return OrderRecord(
       id: (json['order_id'] as num).toInt(),
       negotiationId: (json['negotiation_id'] as num).toInt(),
@@ -100,8 +104,16 @@ class OrderRecord {
       trackingNumber: json['tracking_number']?.toString(),
       orderDate: DateTime.tryParse(json['order_date']?.toString() ?? ''),
       updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? ''),
+      myReview: review(json['my_review']),
+      theirReview: review(json['their_review']),
     );
   }
+
+  /// What the signed-in user wrote about the other party; null until then.
+  final ReviewRecord? myReview;
+
+  /// What the other party wrote about the signed-in user.
+  final ReviewRecord? theirReview;
 
   final int id;
   final int negotiationId;
@@ -170,6 +182,10 @@ class OrderRecord {
   /// Either side may back out while nothing has moved yet.
   bool canCancel(int userId) =>
       (isBuyer(userId) || isSeller(userId)) && status == OrderStatus.pending;
+
+  /// Once delivered, each side rates the other once.
+  bool canReview(int userId) =>
+      (isBuyer(userId) || isSeller(userId)) && status == OrderStatus.delivered && myReview == null;
 }
 
 /// HTTP client for the order endpoints. The acting user is whoever the token

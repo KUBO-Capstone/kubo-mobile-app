@@ -32,6 +32,7 @@ export interface Negotiation {
     product_status: string;
     allows_meetup: boolean;
     allows_delivery: boolean;
+    accepted_by: number | null;
     buyer_name: string;
     seller_name: string;
 }
@@ -65,6 +66,7 @@ function mapNegotiation(row: Record<string, unknown>): Negotiation {
         product_status: String(row.product_status),
         allows_meetup: Boolean(Number(row.allows_meetup ?? 1)),
         allows_delivery: Boolean(Number(row.allows_delivery ?? 1)),
+        accepted_by: row.accepted_by === null || row.accepted_by === undefined ? null : Number(row.accepted_by),
         buyer_name: String(row.buyer_name),
         seller_name: String(row.seller_name),
     };
@@ -114,20 +116,31 @@ export const NegotiationModel = {
         return NegotiationModel.findById(insert()) as Negotiation;
     },
 
-    // Accept/decline only move the status; a counter also rewrites the terms.
-    update(negotiationId: number, changes: { status: NegotiationStatus; offered_price?: number; offered_quantity?: number }): Negotiation | undefined {
+    // Accept/decline only move the status (an accept also records who did
+    // it); a counter also rewrites the terms.
+    update(negotiationId: number, changes: { status: NegotiationStatus; offered_price?: number; offered_quantity?: number; accepted_by?: number }): Negotiation | undefined {
         db.prepare(`
             UPDATE negotiations
             SET status = @status,
                 offered_price = COALESCE(@offered_price, offered_price),
-                offered_quantity = COALESCE(@offered_quantity, offered_quantity)
+                offered_quantity = COALESCE(@offered_quantity, offered_quantity),
+                accepted_by = COALESCE(@accepted_by, accepted_by)
             WHERE negotiation_id = @negotiationId
         `).run({
             negotiationId,
             status: changes.status,
             offered_price: changes.offered_price ?? null,
             offered_quantity: changes.offered_quantity ?? null,
+            accepted_by: changes.accepted_by ?? null,
         });
         return NegotiationModel.findById(negotiationId);
+    },
+
+    // Records that one side has seen the "deal closed" screen. Only the
+    // first call counts, so a second device does not move the timestamp.
+    markCelebrated(negotiationId: number, side: 'buyer' | 'seller'): void {
+        const column = side === 'buyer' ? 'buyer_celebrated_at' : 'seller_celebrated_at';
+        db.prepare(`UPDATE negotiations SET ${column} = COALESCE(${column}, ?) WHERE negotiation_id = ?`)
+            .run(new Date().toISOString(), negotiationId);
     },
 };

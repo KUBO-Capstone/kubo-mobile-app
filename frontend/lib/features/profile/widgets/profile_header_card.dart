@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/app_svg_icon.dart';
 import '../../../shared/data/profile_records.dart';
 import '../../../shared/data/profile_service.dart';
+import '../../../shared/widgets/kubo_star_rating.dart';
 
 /// Profile header card that sits on top of the profile content.
 class ProfileHeaderCard extends StatelessWidget {
@@ -18,7 +19,11 @@ class ProfileHeaderCard extends StatelessWidget {
     required this.onFollow,
     required this.onMessage,
     required this.onChangePhoto,
+    this.onRatingTap,
   });
+
+  /// Jumps to the Reviews tab from the rating line.
+  final VoidCallback? onRatingTap;
 
   /// Shared profile record shown in the header.
   final SyntheticProfileRecord profile;
@@ -103,7 +108,13 @@ class ProfileHeaderCard extends StatelessWidget {
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 8),
+          KuboRatingLine(
+            average: profile.reviewCount == 0 ? null : profile.reviewScore,
+            count: profile.reviewCount,
+            onTap: onRatingTap,
+          ),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [

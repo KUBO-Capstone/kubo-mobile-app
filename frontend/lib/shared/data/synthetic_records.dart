@@ -90,6 +90,8 @@ class SyntheticListingRecord {
     this.isPreorder = false,
     this.allowsMeetup = true,
     this.allowsDelivery = true,
+    this.sellerRating,
+    this.sellerReviewCount = 0,
   });
 
   factory SyntheticListingRecord.fromJson(Map<String, dynamic> json) {
@@ -122,6 +124,8 @@ class SyntheticListingRecord {
       isPreorder: json['is_preorder'] == true,
       allowsMeetup: json['allows_meetup'] != false,
       allowsDelivery: json['allows_delivery'] != false,
+      sellerRating: (json['seller_rating'] as num?)?.toDouble(),
+      sellerReviewCount: (json['seller_review_count'] as num?)?.toInt() ?? 0,
       date: createdAt == null ? 'Recently posted' : 'Posted ${createdAt.month}/${createdAt.day}/${createdAt.year}',
       groups: <String>[json['category']?.toString() ?? 'produce'],
       latitude: (json['latitude'] as num?)?.toDouble(),
@@ -163,6 +167,10 @@ class SyntheticListingRecord {
 
   /// Seller accepts courier delivery (`courier` orders).
   final bool allowsDelivery;
+
+  /// The seller's average rating; null until their first review.
+  final double? sellerRating;
+  final int sellerReviewCount;
 
   /// Stable identifier for the record.
   final String id;

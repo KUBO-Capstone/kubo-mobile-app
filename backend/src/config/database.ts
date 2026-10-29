@@ -77,6 +77,23 @@ function migrateLegacySchema(): void {
             }
         }
     }
+
+    // Deals accepted before the celebration screen existed count as already
+    // seen; otherwise every old thread would congratulate both sides once.
+    const negotiationColumns = new Set(
+        (db.pragma('table_info(negotiations)') as { name: string }[]).map((column) => column.name),
+    );
+    if (!negotiationColumns.has('buyer_celebrated_at')) {
+        db.transaction(() => {
+            if (!negotiationColumns.has('accepted_by')) {
+                db.exec('ALTER TABLE negotiations ADD COLUMN accepted_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL');
+            }
+            db.exec('ALTER TABLE negotiations ADD COLUMN buyer_celebrated_at TEXT');
+            db.exec('ALTER TABLE negotiations ADD COLUMN seller_celebrated_at TEXT');
+            db.prepare(`UPDATE negotiations SET buyer_celebrated_at = @now, seller_celebrated_at = @now WHERE status = 'accepted'`)
+                .run({ now: new Date().toISOString() });
+        })();
+    }
 }
 
 export function initDb(): void {
@@ -163,6 +180,9 @@ export function initDb(): void {
             FOREIGN KEY (drop_off_center_id) REFERENCES bagsakan_centers(center_id)
         );
 
+        -- One review per party per order (idx_reviews_order_reviewer below),
+        -- written once the order is delivered. tags is a JSON array of the
+        -- keys in models/review.model.ts.
         CREATE TABLE IF NOT EXISTS reviews (
             review_id INTEGER PRIMARY KEY AUTOINCREMENT,
             order_id INTEGER NOT NULL,
@@ -170,6 +190,7 @@ export function initDb(): void {
             reviewee_id INTEGER NOT NULL,
             rating INTEGER CHECK(rating >= 1 AND rating <= 5),
             comment TEXT,
+            tags TEXT NOT NULL DEFAULT '[]',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
             FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
@@ -286,6 +307,12 @@ export function initDb(): void {
             offered_price REAL NOT NULL,
             offered_quantity REAL NOT NULL,
             status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'countered', 'accepted', 'declined')),
+            -- Who tapped Accept: the seller on an offer, the buyer on a counter.
+            accepted_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+            -- When each side was shown the "deal closed" screen (ISO strings),
+            -- so it appears once per person, like the conversation read cursors.
+            buyer_celebrated_at TEXT,
+            seller_celebrated_at TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
             FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE,
@@ -421,6 +448,8 @@ export function initDb(): void {
         'ALTER TABLE products ADD COLUMN is_preorder BOOLEAN NOT NULL DEFAULT 0 CHECK (is_preorder IN (0, 1))',
         'ALTER TABLE products ADD COLUMN allows_meetup BOOLEAN NOT NULL DEFAULT 1 CHECK (allows_meetup IN (0, 1))',
         'ALTER TABLE products ADD COLUMN allows_delivery BOOLEAN NOT NULL DEFAULT 1 CHECK (allows_delivery IN (0, 1))',
+        // Ratings and reviews
+        "ALTER TABLE reviews ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'",
     ]) {
         try {
             db.exec(statement);
@@ -430,6 +459,10 @@ export function initDb(): void {
             }
         }
     }
+    db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_order_reviewer ON reviews (order_id, reviewer_id);
+        CREATE INDEX IF NOT EXISTS idx_reviews_reviewee ON reviews (reviewee_id);
+    `);
     console.log('Database tables created')
     db.exec(`
         INSERT OR IGNORE INTO user_addresses (user_id, address_id)

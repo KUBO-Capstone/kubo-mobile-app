@@ -195,6 +195,16 @@ class ChatController extends ChangeNotifier {
     });
   }
 
+  /// Records that the "deal closed" screen was shown for [negotiationId].
+  /// A failure is ignored: at worst the screen shows once more later.
+  Future<void> markCelebrated(int negotiationId) async {
+    try {
+      await _negotiations.markCelebrated(negotiationId: negotiationId);
+    } catch (error) {
+      debugPrint('Could not record the deal celebration: $error');
+    }
+  }
+
   // Every offer step writes a message server-side, so after the call the
   // thread is simply re-fetched rather than patched locally.
   Future<String?> _offerAction(Future<void> Function() call) async {

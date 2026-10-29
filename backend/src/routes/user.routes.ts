@@ -4,6 +4,8 @@ import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 import { getUsers, createUser, addUserAddress, addFarmAddress, getProfile, updateProfile, uploadProfilePhoto, deleteProfilePhoto, changePassword, updateUserAddress, choosePreferredAddress } from "#controllers/user.controller";
+import { getUserReviews } from "#controllers/review.controller";
+import { getEarnings } from "#controllers/earnings.controller";
 import { attachAuth, requireAuth, requireOwner } from "#middleware/auth.middleware";
 
 const router = Router();
@@ -27,6 +29,8 @@ router.get('/', requireAuth, getUsers);
 router.post('/', createUser);
 router.get('/:id/profile', attachAuth, getProfile);
 router.patch('/:id/profile', requireAuth, requireOwner, updateProfile);
+router.get('/:id/reviews', getUserReviews);
+router.get('/:id/earnings', requireAuth, requireOwner, getEarnings);
 router.post('/:id/profile/photo', requireAuth, requireOwner, profileUpload.single('photo'), uploadProfilePhoto);
 router.delete('/:id/profile/photo', requireAuth, requireOwner, deleteProfilePhoto);
 router.post('/:id/address', requireAuth, requireOwner, addUserAddress);

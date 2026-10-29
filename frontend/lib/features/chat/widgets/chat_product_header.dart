@@ -21,8 +21,12 @@ class ChatProductHeader extends StatelessWidget {
     required this.onRespond,
     required this.onPlaceOrder,
     required this.onOpenOrder,
+    this.onRateOrder,
     this.onOpenListing,
   });
+
+  /// Either side rates the other on a delivered order.
+  final void Function(int orderId)? onRateOrder;
 
   final ConversationRecord conversation;
   final int userId;
@@ -119,6 +123,7 @@ class ChatProductHeader extends StatelessWidget {
             onRespond: onRespond,
             onPlaceOrder: onPlaceOrder,
             onOpenOrder: onOpenOrder,
+            onRateOrder: onRateOrder,
           ),
         ],
       ),
@@ -135,6 +140,7 @@ class _OfferControl extends StatelessWidget {
     required this.onRespond,
     required this.onPlaceOrder,
     required this.onOpenOrder,
+    this.onRateOrder,
   });
 
   final ConversationRecord conversation;
@@ -144,6 +150,7 @@ class _OfferControl extends StatelessWidget {
   final void Function(NegotiationAction action, {double? price, double? quantity}) onRespond;
   final VoidCallback onPlaceOrder;
   final void Function(int orderId) onOpenOrder;
+  final void Function(int orderId)? onRateOrder;
 
   Future<void> _counter(BuildContext context) async {
     final offer = conversation.negotiation;
@@ -224,6 +231,8 @@ class _OfferControl extends StatelessWidget {
         OrderStatus.delivered => 'completed',
         OrderStatus.cancelled => 'cancelled',
       };
+      final rate = onRateOrder;
+      final canRate = rate != null && thread.canReviewOrder(userId);
       return Row(
         children: [
           Expanded(
@@ -232,9 +241,13 @@ class _OfferControl extends StatelessWidget {
               style: const TextStyle(color: AppColors.gray, fontSize: 12),
             ),
           ),
+          if (canRate) ...[
+            _SmallButton(label: 'Rate', filled: true, onTap: () => rate(orderId)),
+            const SizedBox(width: 8),
+          ],
           _SmallButton(
             label: 'View order',
-            filled: orderStatus.isOpen,
+            filled: orderStatus.isOpen && !canRate,
             onTap: () => onOpenOrder(orderId),
           ),
         ],

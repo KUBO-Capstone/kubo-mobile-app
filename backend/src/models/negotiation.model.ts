@@ -30,6 +30,8 @@ export interface Negotiation {
     unit_measurement: string;
     base_price: number;
     product_status: string;
+    allows_meetup: boolean;
+    allows_delivery: boolean;
     buyer_name: string;
     seller_name: string;
 }
@@ -37,6 +39,7 @@ export interface Negotiation {
 const negotiationQuery = `
     SELECT n.*,
            p.crop_name, p.unit_measurement, p.base_price, p.status AS product_status,
+           p.allows_meetup, p.allows_delivery,
            b.first_name || ' ' || b.last_name AS buyer_name,
            s.first_name || ' ' || s.last_name AS seller_name
     FROM negotiations n
@@ -60,6 +63,8 @@ function mapNegotiation(row: Record<string, unknown>): Negotiation {
         unit_measurement: String(row.unit_measurement),
         base_price: Number(row.base_price),
         product_status: String(row.product_status),
+        allows_meetup: Boolean(Number(row.allows_meetup ?? 1)),
+        allows_delivery: Boolean(Number(row.allows_delivery ?? 1)),
         buyer_name: String(row.buyer_name),
         seller_name: String(row.seller_name),
     };

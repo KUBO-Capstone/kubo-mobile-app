@@ -1,3 +1,6 @@
+import 'api_request.dart';
+import 'listing_options.dart';
+
 /// Shared synthetic search suggestion used by the mock search experience.
 class SyntheticSearchSuggestion {
   const SyntheticSearchSuggestion({
@@ -78,34 +81,88 @@ class SyntheticListingRecord {
     this.availableQuantity,
     this.unit,
     this.status,
+    this.images = const <String>[],
+    this.imagePaths = const <String>[],
+    this.writtenDescription = '',
+    this.qualityGrade,
+    this.farmingMethod,
+    this.harvestDate,
+    this.isPreorder = false,
+    this.allowsMeetup = true,
+    this.allowsDelivery = true,
   });
 
   factory SyntheticListingRecord.fromJson(Map<String, dynamic> json) {
-    final images = (json['images'] as List<dynamic>? ?? const <dynamic>[])
+    final imagePaths = (json['images'] as List<dynamic>? ?? const <dynamic>[])
         .whereType<String>()
+        .where((path) => path.isNotEmpty)
         .toList(growable: false);
+    final images = imagePaths.map((path) => resolveMediaUrl(path)!).toList(growable: false);
     final createdAt = DateTime.tryParse(json['created_at']?.toString() ?? '');
+    final written = json['description']?.toString().trim() ?? '';
+    final unit = json['unit_measurement']?.toString();
+    final basePrice = (json['base_price'] as num?)?.toDouble();
     return SyntheticListingRecord(
       id: '${json['product_id']}',
       title: json['crop_name']?.toString() ?? 'Untitled produce',
-      price: 'PHP ${json['base_price']}',
+      price: basePrice == null
+          ? 'PHP ${json['base_price']}'
+          : 'PHP ${formatQuantity(basePrice)}${unit == null ? '' : ' / $unit'}',
       locationLabel: json['location_label']?.toString() ?? 'Philippines',
       regionLabel: json['region_label']?.toString() ?? 'NCR',
       sellerLabel: json['seller_name']?.toString() ?? 'Kubo grower',
       imageAssetPath: images.isEmpty ? 'assets/images/Placeholder_img.png' : images.first,
-      description: json['description']?.toString() ?? 'Fresh local produce from a Kubo grower.',
+      images: images,
+      imagePaths: imagePaths,
+      writtenDescription: written,
+      description: written.isEmpty ? 'Fresh local produce from a Kubo grower.' : written,
+      qualityGrade: json['quality_grade']?.toString(),
+      farmingMethod: json['farming_method']?.toString(),
+      harvestDate: DateTime.tryParse(json['harvest_date']?.toString() ?? ''),
+      isPreorder: json['is_preorder'] == true,
+      allowsMeetup: json['allows_meetup'] != false,
+      allowsDelivery: json['allows_delivery'] != false,
       date: createdAt == null ? 'Recently posted' : 'Posted ${createdAt.month}/${createdAt.day}/${createdAt.year}',
       groups: <String>[json['category']?.toString() ?? 'produce'],
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
       productId: (json['product_id'] as num?)?.toInt(),
       sellerId: (json['seller_id'] as num?)?.toInt(),
-      basePrice: (json['base_price'] as num?)?.toDouble(),
+      basePrice: basePrice,
       availableQuantity: (json['available_quantity'] as num?)?.toDouble(),
-      unit: json['unit_measurement']?.toString(),
+      unit: unit,
       status: json['status']?.toString(),
     );
   }
+
+  /// Every photo, cover first, as loadable URLs. Empty for mock records.
+  final List<String> images;
+
+  /// [images] as the server stores them (`/uploads/...` or absolute). The
+  /// edit form sends these back so a listing never saves this device's host.
+  final List<String> imagePaths;
+
+  /// What the seller typed, empty when they wrote nothing; [description]
+  /// substitutes a fallback for display.
+  final String writtenDescription;
+
+  /// `premium`, `standard`, or `imperfect`; see `ListingOptions.qualityGrades`.
+  final String? qualityGrade;
+
+  /// `conventional`, `organic`, or `pesticide-free`.
+  final String? farmingMethod;
+
+  /// When it was picked or, for a pre-order, when it is expected to be.
+  final DateTime? harvestDate;
+
+  /// Listed before harvest; ships once [harvestDate] comes.
+  final bool isPreorder;
+
+  /// Seller accepts drop-off at a bagsakan center (`meetup` orders).
+  final bool allowsMeetup;
+
+  /// Seller accepts courier delivery (`courier` orders).
+  final bool allowsDelivery;
 
   /// Stable identifier for the record.
   final String id;

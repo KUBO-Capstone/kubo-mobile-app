@@ -86,7 +86,7 @@ class OrderRecord {
       productId: (json['product_id'] as num).toInt(),
       cropName: json['crop_name']?.toString() ?? 'Listing',
       unit: json['unit_measurement']?.toString() ?? '',
-      productImage: json['product_image']?.toString(),
+      productImage: resolveMediaUrl(json['product_image']?.toString()),
       quantity: (json['quantity'] as num).toDouble(),
       price: (json['negotiated_price'] as num).toDouble(),
       total: (json['total_amount'] as num).toDouble(),

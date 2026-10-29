@@ -8,14 +8,7 @@ import '../../core/constants/api_config.dart';
 import 'api_request.dart';
 import '../../features/login/services/auth_service.dart';
 
-String resolveProfilePhotoUrl(String? photoPath) {
-  if (photoPath == null || photoPath.isEmpty) return '';
-  if (photoPath.startsWith('http://') || photoPath.startsWith('https://')) {
-    return photoPath;
-  }
-  final base = Uri.parse(ApiConfig.baseUrl);
-  return base.replace(path: photoPath).toString();
-}
+String resolveProfilePhotoUrl(String? photoPath) => resolveMediaUrl(photoPath) ?? '';
 
 class ProfileService {
   ProfileService({http.Client? client}) : _client = client ?? apiClient();

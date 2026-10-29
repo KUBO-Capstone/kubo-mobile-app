@@ -42,6 +42,8 @@ class NegotiationRecord {
     required this.buyerName,
     required this.sellerName,
     required this.createdAt,
+    this.allowsMeetup = true,
+    this.allowsDelivery = true,
   });
 
   factory NegotiationRecord.fromJson(Map<String, dynamic> json) {
@@ -60,8 +62,15 @@ class NegotiationRecord {
       buyerName: json['buyer_name']?.toString() ?? 'Buyer',
       sellerName: json['seller_name']?.toString() ?? 'Seller',
       createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
+      allowsMeetup: json['allows_meetup'] != false,
+      allowsDelivery: json['allows_delivery'] != false,
     );
   }
+
+  /// Deal methods the seller accepts on this listing; the order page only
+  /// offers these.
+  final bool allowsMeetup;
+  final bool allowsDelivery;
 
   final int id;
 

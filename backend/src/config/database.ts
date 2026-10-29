@@ -186,6 +186,17 @@ export function initDb(): void {
             available_quantity REAL NOT NULL,
             unit_measurement VARCHAR(20) NOT NULL CHECK (unit_measurement IN ('kg', 'g', 'lb', 'oz', 'liter', 'ml', 'piece')),
             status VARCHAR(20) DEFAULT 'available' CHECK (status IN ('available', 'out of stock', 'delisted')),
+            description TEXT NOT NULL DEFAULT '',
+            quality_grade VARCHAR(20) NOT NULL DEFAULT 'standard' CHECK (quality_grade IN ('premium', 'standard', 'imperfect')),
+            farming_method VARCHAR(20) NOT NULL DEFAULT 'conventional' CHECK (farming_method IN ('conventional', 'organic', 'pesticide-free')),
+            -- 'YYYY-MM-DD'. When is_preorder is set this is the expected
+            -- harvest and is required; otherwise it is when it was picked.
+            harvest_date TEXT,
+            is_preorder BOOLEAN NOT NULL DEFAULT 0 CHECK (is_preorder IN (0, 1)),
+            -- Deal methods map onto orders.delivery_method: meetup is drop-off
+            -- at a bagsakan center, delivery is courier. At least one is set.
+            allows_meetup BOOLEAN NOT NULL DEFAULT 1 CHECK (allows_meetup IN (0, 1)),
+            allows_delivery BOOLEAN NOT NULL DEFAULT 1 CHECK (allows_delivery IN (0, 1)),
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
@@ -402,6 +413,14 @@ export function initDb(): void {
         'ALTER TABLE conversations ADD COLUMN last_message_preview VARCHAR(200)',
         'ALTER TABLE conversations ADD COLUMN buyer_last_read_at TEXT',
         'ALTER TABLE conversations ADD COLUMN seller_last_read_at TEXT',
+        // Listing details (create listing form)
+        "ALTER TABLE products ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE products ADD COLUMN quality_grade VARCHAR(20) NOT NULL DEFAULT 'standard' CHECK (quality_grade IN ('premium', 'standard', 'imperfect'))",
+        "ALTER TABLE products ADD COLUMN farming_method VARCHAR(20) NOT NULL DEFAULT 'conventional' CHECK (farming_method IN ('conventional', 'organic', 'pesticide-free'))",
+        'ALTER TABLE products ADD COLUMN harvest_date TEXT',
+        'ALTER TABLE products ADD COLUMN is_preorder BOOLEAN NOT NULL DEFAULT 0 CHECK (is_preorder IN (0, 1))',
+        'ALTER TABLE products ADD COLUMN allows_meetup BOOLEAN NOT NULL DEFAULT 1 CHECK (allows_meetup IN (0, 1))',
+        'ALTER TABLE products ADD COLUMN allows_delivery BOOLEAN NOT NULL DEFAULT 1 CHECK (allows_delivery IN (0, 1))',
     ]) {
         try {
             db.exec(statement);

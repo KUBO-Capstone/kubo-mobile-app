@@ -103,6 +103,15 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         res.status(409).json({ success: false, message: 'This listing has been removed' });
         return;
     }
+    if ((method === 'meetup' && !product.allows_meetup) || (method === 'courier' && !product.allows_delivery)) {
+        res.status(409).json({
+            success: false,
+            message: method === 'meetup'
+                ? 'This seller does not offer bagsakan center pickup for this listing'
+                : 'This seller does not offer courier delivery for this listing',
+        });
+        return;
+    }
     if (negotiation.offered_quantity > product.available_quantity) {
         res.status(409).json({ success: false, message: `Only ${product.available_quantity} ${product.unit_measurement} left on this listing` });
         return;

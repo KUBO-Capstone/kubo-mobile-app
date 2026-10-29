@@ -1,10 +1,64 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../../core/constants/api_config.dart';
 import 'api_request.dart';
+import 'listing_options.dart';
 import 'synthetic_records.dart';
+
+/// Everything the create / edit form sends for one listing.
+class ListingSubmission {
+  const ListingSubmission({
+    required this.cropName,
+    required this.category,
+    required this.price,
+    required this.quantity,
+    required this.unit,
+    required this.description,
+    required this.qualityGrade,
+    required this.farmingMethod,
+    required this.harvestDate,
+    required this.isPreorder,
+    required this.allowsMeetup,
+    required this.allowsDelivery,
+    required this.images,
+  });
+
+  final String cropName;
+  final String category;
+  final double price;
+  final double quantity;
+  final String unit;
+  final String description;
+  final String qualityGrade;
+  final String farmingMethod;
+  final DateTime? harvestDate;
+  final bool isPreorder;
+  final bool allowsMeetup;
+  final bool allowsDelivery;
+
+  /// Server paths or URLs from [ListingService.uploadImages], cover first.
+  final List<String> images;
+
+  Map<String, dynamic> toJson() => {
+        'crop_name': cropName,
+        'category': category,
+        'base_price': price,
+        'available_quantity': quantity,
+        'unit_measurement': unit,
+        'description': description,
+        'quality_grade': qualityGrade,
+        'farming_method': farmingMethod,
+        'harvest_date': harvestDate == null ? null : toApiDate(harvestDate!),
+        'is_preorder': isPreorder,
+        'allows_meetup': allowsMeetup,
+        'allows_delivery': allowsDelivery,
+        'images': images,
+      };
+}
 
 class ListingService {
   ListingService({http.Client? client}) : _client = client ?? apiClient();
@@ -40,48 +94,49 @@ class ListingService {
     return SyntheticListingRecord.fromJson(readData(response) as Map<String, dynamic>);
   }
 
+  /// Stores photos for a listing about to be saved and returns their
+  /// server paths, in the same order, for [ListingSubmission.images].
+  Future<List<String>> uploadImages(List<File> files) async {
+    if (files.isEmpty) return const <String>[];
+    final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/products/images'));
+    for (final file in files) {
+      final extension = file.path.split('.').last.toLowerCase();
+      final subtype = switch (extension) {
+        'png' => 'png',
+        'webp' => 'webp',
+        _ => 'jpeg',
+      };
+      request.files.add(
+        await http.MultipartFile.fromPath('images', file.path, contentType: MediaType('image', subtype)),
+      );
+    }
+    // Photos take longer than the usual JSON round trip on rural data.
+    final response = await sendRequest(
+      () async => http.Response.fromStream(await _client.send(request)),
+      timeout: const Duration(seconds: 90),
+    );
+    final data = readData(response) as Map<String, dynamic>;
+    return (data['images'] as List<dynamic>).whereType<String>().toList(growable: false);
+  }
+
   /// Lists produce as the signed-in user.
-  Future<SyntheticListingRecord> createListing({
-    required String cropName,
-    required String category,
-    required double price,
-    required double quantity,
-    required String unit,
-    List<String> images = const <String>[],
-  }) async {
+  Future<SyntheticListingRecord> createListing(ListingSubmission listing) async {
     final response = await sendRequest(
       () => _client.post(
         Uri.parse('$_baseUrl/products'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'crop_name': cropName,
-          'category': category,
-          'base_price': price,
-          'available_quantity': quantity,
-          'unit_measurement': unit,
-          'images': images,
-        }),
+        body: jsonEncode(listing.toJson()),
       ),
     );
     return SyntheticListingRecord.fromJson(readData(response) as Map<String, dynamic>);
   }
 
-  /// Seller edits the listing's details. Only non-null fields are sent.
+  /// Seller edits the whole listing, photos included.
   Future<SyntheticListingRecord> updateListing({
     required int productId,
-    String? cropName,
-    String? category,
-    double? price,
-    double? quantity,
-    String? unit,
+    required ListingSubmission listing,
   }) {
-    return _patch(productId, {
-      if (cropName != null) 'crop_name': cropName,
-      if (category != null) 'category': category,
-      if (price != null) 'base_price': price,
-      if (quantity != null) 'available_quantity': quantity,
-      if (unit != null) 'unit_measurement': unit,
-    });
+    return _patch(productId, listing.toJson());
   }
 
   /// Marks the listing sold out ([soldOut] true) or available again.

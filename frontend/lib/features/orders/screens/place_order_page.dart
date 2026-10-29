@@ -31,9 +31,14 @@ class _PlaceOrderPageState extends State<PlaceOrderPage> {
   String? _centersError;
   bool _placing = false;
 
+  // A listing always allows at least one; treat a malformed row as both.
+  bool get _allowsMeetup => widget.offer.allowsMeetup || !widget.offer.allowsDelivery;
+  bool get _allowsCourier => widget.offer.allowsDelivery || !widget.offer.allowsMeetup;
+
   @override
   void initState() {
     super.initState();
+    if (!_allowsMeetup) _method = DeliveryMethod.courier;
     _loadCenters();
   }
 
@@ -114,21 +119,32 @@ class _PlaceOrderPageState extends State<PlaceOrderPage> {
           const SizedBox(height: 20),
           const _SectionTitle('How will you get it?'),
           const SizedBox(height: 8),
-          _MethodTile(
-            selected: _method == DeliveryMethod.meetup,
-            icon: Icons.warehouse_outlined,
-            title: 'Pick up at a bagsakan center',
-            subtitle: 'The farmer drops it at the center; you collect it there.',
-            onTap: () => setState(() => _method = DeliveryMethod.meetup),
-          ),
-          const SizedBox(height: 8),
-          _MethodTile(
-            selected: _method == DeliveryMethod.courier,
-            icon: Icons.local_shipping_outlined,
-            title: 'Courier delivery',
-            subtitle: 'The farmer books a courier and shares the tracking number.',
-            onTap: () => setState(() => _method = DeliveryMethod.courier),
-          ),
+          if (_allowsMeetup) ...[
+            _MethodTile(
+              selected: _method == DeliveryMethod.meetup,
+              icon: Icons.warehouse_outlined,
+              title: 'Pick up at a bagsakan center',
+              subtitle: 'The farmer drops it at the center; you collect it there.',
+              onTap: () => setState(() => _method = DeliveryMethod.meetup),
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (_allowsCourier)
+            _MethodTile(
+              selected: _method == DeliveryMethod.courier,
+              icon: Icons.local_shipping_outlined,
+              title: 'Courier delivery',
+              subtitle: 'The farmer books a courier and shares the tracking number.',
+              onTap: () => setState(() => _method = DeliveryMethod.courier),
+            ),
+          if (!_allowsMeetup || !_allowsCourier)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'The farmer only offers ${_allowsMeetup ? 'bagsakan center pickup' : 'courier delivery'} for this listing.',
+                style: const TextStyle(color: AppColors.gray, fontSize: 12),
+              ),
+            ),
           if (_method == DeliveryMethod.meetup) ...[
             const SizedBox(height: 20),
             const _SectionTitle('Which center?'),
@@ -186,9 +202,11 @@ class _PlaceOrderPageState extends State<PlaceOrderPage> {
       );
     }
     if (_centers.isEmpty) {
-      return const Text(
-        'No bagsakan centers are set up yet. Choose courier delivery instead.',
-        style: TextStyle(color: AppColors.gray, fontSize: 12),
+      return Text(
+        _allowsCourier
+            ? 'No bagsakan centers are set up yet. Choose courier delivery instead.'
+            : 'No bagsakan centers are set up yet. Message the farmer to arrange the handover.',
+        style: const TextStyle(color: AppColors.gray, fontSize: 12),
       );
     }
     return Column(

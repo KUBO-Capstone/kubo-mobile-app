@@ -36,12 +36,25 @@ class _ListingImageCarouselState extends State<ListingImageCarousel> {
           items: images
               .map(
                 (item) => ClipRRect(
-                  child: Image.network(
-                    item,
-                    width: double.infinity,
-                    height: 300,
-                    fit: BoxFit.cover,
-                  ),
+                  child: item.startsWith('http')
+                      ? Image.network(
+                          item,
+                          width: double.infinity,
+                          height: 300,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const ColoredBox(
+                            color: AppColors.softBackground,
+                            child: Center(
+                              child: Icon(Icons.broken_image_outlined, color: AppColors.gray, size: 40),
+                            ),
+                          ),
+                        )
+                      : Image.asset(
+                          item,
+                          width: double.infinity,
+                          height: 300,
+                          fit: BoxFit.cover,
+                        ),
                 ),
               )
               .toList(),
@@ -58,6 +71,7 @@ class _ListingImageCarouselState extends State<ListingImageCarousel> {
             },
           ),
         ),
+        if (images.length > 1)
         Positioned(
           left: 0,
           right: 0,

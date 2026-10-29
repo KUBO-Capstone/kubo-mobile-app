@@ -122,7 +122,7 @@ class ConversationRecord {
       basePrice: (json['base_price'] as num?)?.toDouble() ?? 0,
       unit: json['unit_measurement']?.toString() ?? '',
       productStatus: json['product_status']?.toString() ?? 'available',
-      productImage: json['product_image']?.toString(),
+      productImage: resolveMediaUrl(json['product_image']?.toString()),
       sellerLocation: json['seller_location']?.toString() ?? 'Philippines',
       isUnread: json['is_unread'] == true,
       lastMessage: json['last_message']?.toString(),

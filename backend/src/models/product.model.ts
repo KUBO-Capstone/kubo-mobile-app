@@ -1,12 +1,31 @@
 import { db } from "#config/database";
 
-export interface ProductInput {
-    seller_id: number;
+// Mirror the CHECK constraints on products in config/database.ts.
+export const productCategories = ['vegetable', 'fruit', 'grain', 'legume', 'herb', 'spice'] as const;
+export const productUnits = ['kg', 'g', 'lb', 'oz', 'liter', 'ml', 'piece'] as const;
+export const qualityGrades = ['premium', 'standard', 'imperfect'] as const;
+export const farmingMethods = ['conventional', 'organic', 'pesticide-free'] as const;
+
+export type QualityGrade = typeof qualityGrades[number];
+export type FarmingMethod = typeof farmingMethods[number];
+
+export interface ProductDetails {
     crop_name: string;
     category: string;
     base_price: number;
     available_quantity: number;
     unit_measurement: string;
+    description: string;
+    quality_grade: QualityGrade;
+    farming_method: FarmingMethod;
+    harvest_date: string | null;
+    is_preorder: boolean;
+    allows_meetup: boolean;
+    allows_delivery: boolean;
+}
+
+export interface ProductInput extends ProductDetails {
+    seller_id: number;
 }
 
 // Mirrors the CHECK constraint on products.status in config/database.ts.
@@ -16,16 +35,11 @@ export type ProductStatus = 'available' | 'out of stock' | 'delisted';
 
 // Fields a seller may change after publishing. Everything is optional so a
 // status-only change does not have to resend the whole listing.
-export type ProductChanges = Partial<Omit<ProductInput, 'seller_id'> & { status: ProductStatus }>;
+export type ProductChanges = Partial<ProductDetails & { status: ProductStatus }>;
 
-export interface ProductListing {
+export interface ProductListing extends ProductDetails {
     product_id: number;
     seller_id: number;
-    crop_name: string;
-    category: string;
-    base_price: number;
-    available_quantity: number;
-    unit_measurement: string;
     status: string;
     created_at: string;
     seller_name: string;
@@ -33,9 +47,14 @@ export interface ProductListing {
     region_label: string;
     latitude: number | null;
     longitude: number | null;
-    description: string;
     images: string[];
 }
+
+const booleanColumns = new Set<string>(['is_preorder', 'allows_meetup', 'allows_delivery']);
+
+// better-sqlite3 cannot bind JS booleans; the columns hold 0 / 1.
+const toRow = (values: Record<string, unknown>): Record<string, unknown> =>
+    Object.fromEntries(Object.entries(values).map(([key, value]) => [key, booleanColumns.has(key) ? (value ? 1 : 0) : value]));
 
 // Exported so other models (saved listings) can list products in exactly the
 // shape the explore grid gets; keep the two in step.
@@ -45,7 +64,7 @@ export const listingQuery = `
            COALESCE(a.region, 'NCR') AS region_label,
            a.latitude AS latitude,
            a.longitude AS longitude,
-           GROUP_CONCAT(pi.image_url, '||') AS image_urls
+           GROUP_CONCAT(pi.image_url, '||' ORDER BY pi.display_order) AS image_urls
     FROM products p
     JOIN users u ON u.user_id = p.seller_id
     LEFT JOIN farmer_profiles fp ON fp.farmer_id = p.seller_id
@@ -69,10 +88,22 @@ export function mapListing(row: Record<string, unknown>): ProductListing {
         region_label: String(row.region_label),
         latitude: row.latitude === null || row.latitude === undefined ? null : Number(row.latitude),
         longitude: row.longitude === null || row.longitude === undefined ? null : Number(row.longitude),
-        description: String(row.description ?? 'Fresh local produce from a Kubo grower.'),
+        // Empty when the seller wrote none; the app shows its own fallback.
+        description: typeof row.description === 'string' ? row.description : '',
+        quality_grade: (row.quality_grade ?? 'standard') as QualityGrade,
+        farming_method: (row.farming_method ?? 'conventional') as FarmingMethod,
+        harvest_date: row.harvest_date ? String(row.harvest_date) : null,
+        is_preorder: Boolean(Number(row.is_preorder ?? 0)),
+        allows_meetup: Boolean(Number(row.allows_meetup ?? 1)),
+        allows_delivery: Boolean(Number(row.allows_delivery ?? 1)),
         images: row.image_urls ? String(row.image_urls).split('||') : [],
     };
 }
+
+const insertImages = (productId: number, images: string[]): void => {
+    const statement = db.prepare(`INSERT INTO product_images (product_id, image_url, display_order) VALUES (?, ?, ?)`);
+    images.forEach((url, index) => statement.run(productId, url, index));
+};
 
 export const ProductModel = {
     // includeUnavailable adds 'out of stock' rows for a seller's own tab;
@@ -102,24 +133,39 @@ export const ProductModel = {
     create(input: ProductInput, images: string[]): ProductListing {
         const transaction = db.transaction(() => {
             const product = db.prepare(`
-                INSERT INTO products (seller_id, crop_name, category, base_price, available_quantity, unit_measurement)
-                VALUES (@seller_id, @crop_name, @category, @base_price, @available_quantity, @unit_measurement)
-            `).run(input);
+                INSERT INTO products (seller_id, crop_name, category, base_price, available_quantity, unit_measurement,
+                                      description, quality_grade, farming_method, harvest_date, is_preorder, allows_meetup, allows_delivery)
+                VALUES (@seller_id, @crop_name, @category, @base_price, @available_quantity, @unit_measurement,
+                        @description, @quality_grade, @farming_method, @harvest_date, @is_preorder, @allows_meetup, @allows_delivery)
+            `).run(toRow({ ...input }));
             const productId = Number(product.lastInsertRowid);
-            const imageStatement = db.prepare(`INSERT INTO product_images (product_id, image_url, display_order) VALUES (?, ?, ?)`);
-            images.forEach((url, index) => imageStatement.run(productId, url, index));
+            insertImages(productId, images);
             return productId;
         });
         return ProductModel.findById(transaction()) as ProductListing;
     },
 
-    // Applies only the keys present in changes; images are not editable yet.
-    update(productId: number, changes: ProductChanges): ProductListing | undefined {
+    // Applies only the keys present in changes. A non-null images list
+    // replaces the listing's photos in the given order.
+    update(productId: number, changes: ProductChanges, images?: string[]): ProductListing | undefined {
         const columns = (Object.keys(changes) as (keyof ProductChanges)[]).filter((key) => changes[key] !== undefined);
-        if (columns.length === 0) return ProductModel.findById(productId);
-        const assignments = columns.map((column) => `${column} = @${column}`).join(', ');
-        db.prepare(`UPDATE products SET ${assignments}, updated_at = CURRENT_TIMESTAMP WHERE product_id = @product_id`)
-            .run({ ...changes, product_id: productId });
+        db.transaction(() => {
+            if (columns.length > 0) {
+                const assignments = columns.map((column) => `${column} = @${column}`).join(', ');
+                db.prepare(`UPDATE products SET ${assignments}, updated_at = CURRENT_TIMESTAMP WHERE product_id = @product_id`)
+                    .run(toRow({ ...changes, product_id: productId }));
+            }
+            if (images) {
+                db.prepare(`DELETE FROM product_images WHERE product_id = ?`).run(productId);
+                insertImages(productId, images);
+            }
+        })();
         return ProductModel.findById(productId);
+    },
+
+    // Whether any listing still points at this photo, so an uploaded file is
+    // only deleted from disk once nothing shows it.
+    isImageInUse(imageUrl: string): boolean {
+        return db.prepare(`SELECT 1 FROM product_images WHERE image_url = ? LIMIT 1`).get(imageUrl) !== undefined;
     },
 };

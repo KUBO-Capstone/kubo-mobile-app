@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../features/login/services/auth_service.dart';
@@ -33,6 +34,7 @@ class KuboSaveButton extends StatelessWidget {
   /// listing page's carousel heart, which has its own look.
   static Future<void> toggle(BuildContext context, SyntheticListingRecord listing) async {
     final messenger = ScaffoldMessenger.of(context);
+    HapticFeedback.lightImpact();
     final result = await SavedListingsController.instance.toggle(listing);
     messenger.hideCurrentSnackBar();
     if (result == null) {
@@ -57,16 +59,30 @@ class KuboSaveButton extends StatelessWidget {
       animation: SavedListingsController.instance,
       builder: (context, _) {
         final saved = SavedListingsController.instance.isSaved(listing.productId);
-        return InkResponse(
+        return Semantics(
+          button: true,
+          toggled: saved,
+          label: saved ? 'Remove ${listing.title} from saved' : 'Save ${listing.title}',
           onTap: () => toggle(context, listing),
-          radius: size - 4,
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: Icon(
-              saved ? Icons.favorite : Icons.favorite_border,
-              size: iconSize,
-              color: saved ? AppColors.green : AppColors.gray,
+          excludeSemantics: true,
+          child: InkResponse(
+            onTap: () => toggle(context, listing),
+            radius: size - 4,
+            child: SizedBox(
+              width: size,
+              height: size,
+              // The heart pops when it fills, like a like on social apps.
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 260),
+                switchInCurve: Curves.easeOutBack,
+                transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+                child: Icon(
+                  saved ? Icons.favorite : Icons.favorite_border,
+                  key: ValueKey<bool>(saved),
+                  size: iconSize,
+                  color: saved ? AppColors.green : AppColors.gray,
+                ),
+              ),
             ),
           ),
         );

@@ -363,6 +363,8 @@ class _CreateListingPageState extends State<CreateListingPage> {
       if (!mounted) return;
       _lastSaved = saved;
       if (_isEditing || _drafts.length == 1) {
+        // Edits are confirmed by whoever opened the form.
+        if (!_isEditing) _showMessage('"${saved.title}" is now listed.');
         Navigator.of(context).pop(saved);
         return;
       }

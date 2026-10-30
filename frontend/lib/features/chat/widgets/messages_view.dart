@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/message_service.dart';
+import '../../../shared/widgets/kubo_image.dart';
+import '../../../shared/widgets/kubo_skeleton.dart';
 import '../providers/messages_controller.dart';
 import '../screens/chat_page.dart';
 
-/// Inbox body: one row per thread, newest activity first, with the last
-/// message as the preview and a green dot while something is unread.
-/// Body of [MessagesPage], which is reached from the chat icon in the
-/// explore app bar.
+/// Inbox body: one row per thread, newest activity first, with the listing's
+/// photo, the last message as the preview, when it was sent, and a green dot
+/// while something is unread. Body of [MessagesPage], which is reached from
+/// the chat icon in the explore app bar.
 class MessagesView extends StatefulWidget {
   const MessagesView({super.key});
 
@@ -37,7 +39,7 @@ class _MessagesViewState extends State<MessagesView> {
       MaterialPageRoute<void>(builder: (_) => ChatPage(conversationId: thread.id)),
     );
     // Whatever happened in the thread (read, replied, offered) changes the row.
-    if (mounted) _controller.load();
+    if (mounted) _controller.load(silent: true);
   }
 
   @override
@@ -47,10 +49,13 @@ class _MessagesViewState extends State<MessagesView> {
       builder: (context, _) {
         final userId = _controller.userId;
         if (_controller.isLoading && _controller.conversations.isEmpty) {
-          return const Center(child: CircularProgressIndicator(color: AppColors.green));
+          return const SingleChildScrollView(
+            physics: NeverScrollableScrollPhysics(),
+            child: ListRowsSkeleton(thumbnailSize: 52),
+          );
         }
         final error = _controller.errorMessage;
-        if (error != null) {
+        if (error != null && _controller.conversations.isEmpty) {
           return _Empty(message: error, onRetry: _controller.load);
         }
         if (_controller.conversations.isEmpty || userId == null) {
@@ -61,11 +66,11 @@ class _MessagesViewState extends State<MessagesView> {
         }
         return RefreshIndicator(
           color: AppColors.green,
-          onRefresh: _controller.load,
+          onRefresh: () => _controller.load(silent: true),
           child: ListView.separated(
             physics: const AlwaysScrollableScrollPhysics(),
             itemCount: _controller.conversations.length,
-            separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.border),
+            separatorBuilder: (_, __) => const Divider(height: 1, indent: 80, color: AppColors.border),
             itemBuilder: (_, index) {
               final thread = _controller.conversations[index];
               return _ConversationTile(
@@ -79,6 +84,26 @@ class _MessagesViewState extends State<MessagesView> {
       },
     );
   }
+}
+
+/// "now", "5m", "3h" today; "Mon" within the week; "Mar 2" this year;
+/// "3/2/25" before that. The short form messaging apps use in an inbox.
+String inboxTimeLabel(DateTime? sentAt, {DateTime? now}) {
+  if (sentAt == null) return '';
+  final local = sentAt.toLocal();
+  final current = now ?? DateTime.now();
+  final difference = current.difference(local);
+  if (difference.inMinutes < 1) return 'now';
+  if (difference.inMinutes < 60) return '${difference.inMinutes}m';
+  final sameDay = local.year == current.year && local.month == current.month && local.day == current.day;
+  if (sameDay) return '${difference.inHours}h';
+  if (difference.inDays < 7) {
+    const weekdays = <String>['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return weekdays[local.weekday - 1];
+  }
+  const months = <String>['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  if (local.year == current.year) return '${months[local.month - 1]} ${local.day}';
+  return '${local.month}/${local.day}/${local.year % 100}';
 }
 
 class _ConversationTile extends StatelessWidget {
@@ -99,38 +124,91 @@ class _ConversationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final unread = thread.isUnread;
-    return ListTile(
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      leading: const CircleAvatar(
-        radius: 18,
-        backgroundColor: AppColors.black,
-        child: Icon(Icons.person, size: 20, color: AppColors.white),
-      ),
-      title: Text(
-        thread.counterpartyName(userId),
-        style: const TextStyle(color: AppColors.black, fontSize: 14, fontWeight: FontWeight.w800),
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 2),
-        child: Text(
-          '${thread.cropName} · $_preview',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: unread ? AppColors.black : AppColors.gray,
-            fontSize: 12,
-            fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
+    final image = thread.productImage;
+    final time = inboxTimeLabel(thread.lastMessageAt);
+    final name = thread.counterpartyName(userId);
+
+    return Semantics(
+      label: unread ? 'Unread conversation with $name' : 'Conversation with $name',
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              // The listing's photo says which deal the thread is about at a
+              // glance, the way Carousell's inbox does.
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: image == null
+                    ? Container(
+                        width: 52,
+                        height: 52,
+                        color: AppColors.softBackground,
+                        child: const Icon(Icons.storefront_outlined, color: AppColors.gray),
+                      )
+                    : KuboImage(image, width: 52, height: 52, errorIcon: Icons.storefront_outlined),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: AppColors.black, fontSize: 14, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        if (time.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            time,
+                            style: TextStyle(
+                              color: unread ? AppColors.green : AppColors.gray,
+                              fontSize: 11,
+                              fontWeight: unread ? FontWeight.w700 : FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${thread.cropName} · $_preview',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: unread ? AppColors.black : AppColors.gray,
+                              fontSize: 12,
+                              fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                        if (unread) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(color: AppColors.green, shape: BoxShape.circle),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
-      trailing: unread
-          ? Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(color: AppColors.green, shape: BoxShape.circle),
-            )
-          : null,
     );
   }
 }

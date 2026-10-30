@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/app_svg_icon.dart';
+import '../../../shared/widgets/kubo_image.dart';
+import '../../../shared/widgets/kubo_photo_viewer.dart';
 import '../../../shared/data/profile_records.dart';
 import '../../../shared/data/profile_service.dart';
 
@@ -84,7 +86,12 @@ class ProfileHeaderCard extends StatelessWidget {
                 _HeaderActionButton(label: 'Message', onTap: onMessage),
             ],
           ),
-          _ProfileAvatar(photoUrl: profile.photoUrl, onTap: isOwnProfile ? onChangePhoto : null),
+          _ProfileAvatar(
+            photoUrl: profile.photoUrl,
+            name: profile.displayName,
+            isOwnProfile: isOwnProfile,
+            onChangePhoto: onChangePhoto,
+          ),
           const SizedBox(height: 10),
           Text(
             profile.displayName,
@@ -127,39 +134,109 @@ class ProfileHeaderCard extends StatelessWidget {
   }
 }
 
+/// The profile photo. Tapping it opens the photo full screen, as on any
+/// social app; on your own profile it first asks whether to view or change
+/// it, and without a photo it goes straight to changing it.
 class _ProfileAvatar extends StatelessWidget {
-  const _ProfileAvatar({required this.photoUrl, this.onTap});
+  const _ProfileAvatar({
+    required this.photoUrl,
+    required this.name,
+    required this.isOwnProfile,
+    required this.onChangePhoto,
+  });
+
+  static const double _size = 104;
 
   final String photoUrl;
-  final VoidCallback? onTap;
+  final String name;
+  final bool isOwnProfile;
+  final VoidCallback onChangePhoto;
+
+  void _viewPhoto(BuildContext context, String url, Object heroTag) {
+    final decodeWidth = kuboDecodeWidthFor(context, width: _size, height: _size);
+    KuboPhotoViewer.open(
+      context,
+      photos: <String>[url],
+      heroTagFor: (_) => heroTag,
+      placeholderFor: (_) => kuboImageProvider(url, decodeWidth: decodeWidth),
+    );
+  }
+
+  Future<void> _chooseOwnPhotoAction(BuildContext context, String url, Object heroTag) async {
+    final view = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: AppColors.white,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.account_circle_outlined),
+              title: const Text('View profile photo'),
+              onTap: () => Navigator.of(sheetContext).pop(true),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Change profile photo'),
+              onTap: () => Navigator.of(sheetContext).pop(false),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (view == null || !context.mounted) return;
+    if (view) {
+      _viewPhoto(context, url, heroTag);
+    } else {
+      onChangePhoto();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final url = photoUrl.isEmpty ? '' : resolveProfilePhotoUrl(photoUrl);
+    final hasPhoto = url.isNotEmpty;
+    final heroTag = ('profile-photo', url);
+
     final avatar = Container(
-      width: 104,
-      height: 104,
+      width: _size,
+      height: _size,
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
         color: Color(0xFFF3F3F3),
       ),
-      child: photoUrl.isEmpty
+      child: !hasPhoto
           ? const Center(child: AppSvgIcon(assetPath: AppIcons.circleUserProfile, size: 76, color: AppColors.black))
-          : ClipOval(
-              child: SizedBox.square(
-                dimension: 104,
-                child: Image.network(
-                  resolveProfilePhotoUrl(photoUrl),
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const AppSvgIcon(
-                    assetPath: AppIcons.circleUserProfile,
-                    size: 76,
-                    color: AppColors.black,
-                  ),
+          : Hero(
+              tag: heroTag,
+              child: ClipOval(
+                child: KuboImage(
+                  url,
+                  width: _size,
+                  height: _size,
+                  errorIcon: Icons.person_outline,
+                  backgroundColor: const Color(0xFFF3F3F3),
                 ),
               ),
             ),
     );
-    return onTap == null ? avatar : GestureDetector(onTap: onTap, child: avatar);
+
+    final VoidCallback? onTap;
+    if (isOwnProfile) {
+      onTap = hasPhoto ? () => _chooseOwnPhotoAction(context, url, heroTag) : onChangePhoto;
+    } else {
+      onTap = hasPhoto ? () => _viewPhoto(context, url, heroTag) : null;
+    }
+    if (onTap == null) return avatar;
+    return Semantics(
+      button: true,
+      label: isOwnProfile ? 'Your profile photo' : 'Profile photo of $name',
+      onTap: onTap,
+      excludeSemantics: true,
+      child: GestureDetector(onTap: onTap, child: avatar),
+    );
   }
 }
 

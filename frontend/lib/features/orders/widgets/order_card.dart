@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/widgets/kubo_image.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/order_service.dart';
 import '../../chat/widgets/counter_offer_dialog.dart';
@@ -41,14 +42,7 @@ class OrderCard extends StatelessWidget {
                           color: AppColors.softBackground,
                           child: Icon(Icons.shopping_bag_outlined, color: AppColors.gray),
                         )
-                      : Image.network(
-                          image,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const ColoredBox(
-                            color: AppColors.softBackground,
-                            child: Icon(Icons.shopping_bag_outlined, color: AppColors.gray),
-                          ),
-                        ),
+                      : KuboImage(image, width: 56, height: 56, errorIcon: Icons.shopping_bag_outlined),
                 ),
               ),
               const SizedBox(width: 12),

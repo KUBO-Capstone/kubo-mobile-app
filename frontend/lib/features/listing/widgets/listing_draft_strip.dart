@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../shared/widgets/kubo_image.dart';
 import '../models/listing_draft.dart';
 import 'listing_form_fields.dart';
 
@@ -73,9 +74,13 @@ class _DraftThumb extends StatelessWidget {
     final cover = draft.photos.firstOrNull;
     final Widget content;
     if (cover?.file != null) {
-      content = Image.file(cover!.file!, fit: BoxFit.cover);
+      content = Image.file(
+        cover!.file!,
+        fit: BoxFit.cover,
+        cacheWidth: kuboDecodeWidthFor(context, width: _thumbSize, height: _thumbSize),
+      );
     } else if (cover?.displayUrl != null) {
-      content = Image.network(cover!.displayUrl!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox.shrink());
+      content = KuboImage(cover!.displayUrl!, width: _thumbSize, height: _thumbSize);
     } else {
       content = Center(
         child: Text('$number', style: const TextStyle(color: AppColors.gray, fontSize: 18, fontWeight: FontWeight.w800)),

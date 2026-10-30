@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/synthetic_records.dart';
+import '../../../shared/widgets/kubo_image.dart';
 import '../../../shared/widgets/kubo_save_button.dart';
 import '../../listing/screens/listing_page.dart';
 import '../models/bagsakan_center.dart';
@@ -145,14 +146,7 @@ class _MapCardShell extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: SizedBox(
-                  width: 72,
-                  height: 72,
-                  child:
-                      imagePath.startsWith('http')
-                          ? Image.network(imagePath, fit: BoxFit.cover)
-                          : Image.asset(imagePath, fit: BoxFit.cover),
-                ),
+                child: KuboImage(imagePath, width: 72, height: 72),
               ),
               const SizedBox(width: 12),
               Expanded(

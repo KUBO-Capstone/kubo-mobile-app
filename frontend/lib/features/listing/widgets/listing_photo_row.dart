@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../shared/widgets/kubo_image.dart';
 import '../models/listing_draft.dart';
 import 'listing_form_fields.dart';
 
@@ -78,17 +79,15 @@ class _PhotoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final file = photo.file;
+    // A camera shot is far bigger than this tile; decode it at tile size.
+    final decodeWidth = kuboDecodeWidthFor(context, width: _tileWidth, height: _tileHeight);
     final image = file != null
-        ? Image.file(file, fit: BoxFit.cover, width: _tileWidth, height: _tileHeight)
-        : Image.network(
+        ? Image.file(file, fit: BoxFit.cover, width: _tileWidth, height: _tileHeight, cacheWidth: decodeWidth)
+        : KuboImage(
             photo.displayUrl!,
-            fit: BoxFit.cover,
             width: _tileWidth,
             height: _tileHeight,
-            errorBuilder: (_, __, ___) => const ColoredBox(
-              color: AppColors.softBackground,
-              child: Center(child: Icon(Icons.broken_image_outlined, color: AppColors.gray)),
-            ),
+            errorIcon: Icons.broken_image_outlined,
           );
 
     return GestureDetector(

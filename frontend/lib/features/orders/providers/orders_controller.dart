@@ -10,6 +10,9 @@ class OrdersController extends ChangeNotifier {
 
   final OrderService _service;
 
+  // The page can close while a load is still in flight.
+  bool _disposed = false;
+
   List<OrderRecord> orders = const [];
   bool isLoading = false;
   String? errorMessage;
@@ -41,7 +44,13 @@ class OrdersController extends ChangeNotifier {
   }
 
   @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  @override
   void dispose() {
+    _disposed = true;
     _service.dispose();
     super.dispose();
   }

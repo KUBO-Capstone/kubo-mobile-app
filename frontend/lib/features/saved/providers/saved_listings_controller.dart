@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../../../shared/data/saved_listing_service.dart';
 import '../../../shared/data/synthetic_records.dart';
@@ -122,6 +123,19 @@ class SavedListingsController extends ChangeNotifier {
   void clear() {
     _reset();
     notifyListeners();
+  }
+
+  // Screens call load() from initState, which runs mid-frame, while hearts
+  // on other screens already listen. Marking those dirty during the build
+  // is an error, so a change made mid-frame is announced once it ends.
+  @override
+  void notifyListeners() {
+    final scheduler = SchedulerBinding.instance;
+    if (scheduler.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      scheduler.addPostFrameCallback((_) => super.notifyListeners());
+      return;
+    }
+    super.notifyListeners();
   }
 
   void _reset() {

@@ -42,8 +42,8 @@ class NegotiationRecord {
     required this.buyerName,
     required this.sellerName,
     required this.createdAt,
-    this.allowsMeetup = true,
-    this.allowsDelivery = true,
+    required this.allowsMeetup,
+    required this.allowsDelivery,
   });
 
   factory NegotiationRecord.fromJson(Map<String, dynamic> json) {

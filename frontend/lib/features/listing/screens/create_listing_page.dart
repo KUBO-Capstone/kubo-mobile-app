@@ -125,6 +125,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
         !await _confirm(title: 'Clear details?', message: 'Photos and everything typed in Listing ${_index + 1} will be cleared.', action: 'Clear')) {
       return;
     }
+    if (!mounted) return;
     setState(_draft.clear);
   }
 
@@ -133,6 +134,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
         !await _confirm(title: 'Delete this draft?', message: 'Listing ${_index + 1} will be removed. Your other drafts stay.', action: 'Delete')) {
       return;
     }
+    if (!mounted) return;
     setState(() => _removeDraftAt(_index));
   }
 
@@ -202,7 +204,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
         picked = single == null ? const <XFile>[] : [single];
       }
     } on PlatformException catch (error) {
-      _showMessage(error.message ?? 'Could not open your photos.');
+      if (mounted) _showMessage(error.message ?? 'Could not open your photos.');
       return;
     }
     if (picked.isEmpty || !mounted) return;

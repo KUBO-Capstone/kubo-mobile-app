@@ -13,7 +13,11 @@ class KuboSearchField extends StatelessWidget {
     this.hintText = 'Search',
     this.onClear,
     this.autofocus = false,
+    this.focusNode,
   });
+
+  /// Lets the page focus the field itself (tapping the Search tab again).
+  final FocusNode? focusNode;
 
   /// Controller that stores the current query text.
   final TextEditingController controller;
@@ -51,6 +55,7 @@ class KuboSearchField extends StatelessWidget {
           Expanded(
             child: TextField(
               controller: controller,
+              focusNode: focusNode,
               autofocus: autofocus,
               textInputAction: TextInputAction.search,
               onSubmitted: onSubmitted,
@@ -70,10 +75,16 @@ class KuboSearchField extends StatelessWidget {
                 return const SizedBox.shrink();
               }
 
-              return InkResponse(
+              return Semantics(
+                button: true,
+                label: 'Clear search',
                 onTap: onClear,
-                radius: 16,
-                child: const Icon(Icons.close, size: 18, color: AppColors.gray),
+                excludeSemantics: true,
+                child: InkResponse(
+                  onTap: onClear,
+                  radius: 16,
+                  child: const Icon(Icons.close, size: 18, color: AppColors.gray),
+                ),
               );
             },
           ),

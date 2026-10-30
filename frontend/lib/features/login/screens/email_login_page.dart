@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../explore/screens/explore_page.dart';
+import '../../shell/screens/app_shell.dart';
 import '../services/auth_service.dart';
 
 /// Login form backed by the users table's email and password fields.
@@ -38,10 +38,7 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
     try {
       await _authService.login(email: email, password: password);
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => const ExplorePage()),
-        (route) => false,
-      );
+      Navigator.of(context).pushAndRemoveUntil(AppShell.route(), (route) => false);
     } catch (error) {
       if (mounted) _showMessage(error.toString().replaceFirst('Exception: ', ''));
     } finally {

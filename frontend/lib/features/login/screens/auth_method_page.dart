@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../explore/screens/explore_page.dart';
+import '../../shell/screens/app_shell.dart';
 
 /// Placeholder page that represents a third-party or email auth flow.
 class AuthMethodPage extends StatelessWidget {
@@ -49,15 +49,7 @@ class AuthMethodPage extends StatelessWidget {
                   ),
                 ),
                 onPressed: () {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute<void>(
-                      builder:
-                          (_) => const ExplorePage(
-                            initialLocationLabel:
-                                ExplorePage.defaultLocationLabel,
-                          ),
-                    ),
-                  );
+                  Navigator.of(context).pushAndRemoveUntil(AppShell.route(), (route) => false);
                 },
                 child: const Text(
                   'Continue',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'core/constants/app_colors.dart';
 import 'features/chat/screens/messages_page.dart';
@@ -12,6 +13,19 @@ import 'features/profile/screens/profile_page.dart';
 import 'features/report/screens/report_page.dart';
 import 'features/saved/screens/saved_listings_page.dart';
 import 'features/search/screens/search_page.dart';
+import 'features/shell/providers/app_shell_controller.dart';
+import 'features/shell/screens/app_shell.dart';
+
+/// Status and navigation bar look for the app's white screens. Pages with an
+/// app bar set their own; this covers the rest (the listing page, profiles)
+/// and is what returns after the dark photo viewer closes.
+const SystemUiOverlayStyle _systemBars = SystemUiOverlayStyle(
+  statusBarColor: Colors.transparent,
+  statusBarIconBrightness: Brightness.dark,
+  statusBarBrightness: Brightness.light,
+  systemNavigationBarColor: AppColors.white,
+  systemNavigationBarIconBrightness: Brightness.dark,
+);
 
 /// Root application widget that defines the theme and named routes for Kubo.
 class KuboApp extends StatelessWidget {
@@ -37,6 +51,15 @@ class KuboApp extends StatelessWidget {
         useMaterial3: true,
         colorScheme: colorScheme,
         scaffoldBackgroundColor: AppColors.white,
+        // Floating snackbars sit above the bottom bar and action bars instead
+        // of covering them.
+        snackBarTheme: SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.black,
+          contentTextStyle: const TextStyle(color: AppColors.white, fontSize: 14),
+          actionTextColor: AppColors.greenLight,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
         textTheme: const TextTheme(
           headlineLarge: TextStyle(
             color: AppColors.black,
@@ -60,16 +83,22 @@ class KuboApp extends StatelessWidget {
           ),
         ),
       ),
+      builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: _systemBars,
+        child: child ?? const SizedBox.shrink(),
+      ),
       routes: {
         LoginPage.routeName: (_) => const LoginPage(),
         CreateAccountPage.routeName: (_) => const CreateAccountPage(),
         GetStartedPage.routeName: (_) => const GetStartedPage(),
-        ExplorePage.routeName: (_) => const ExplorePage(),
-        SearchPage.routeName: (_) => const SearchPage(),
-        MarketPage.routeName: (_) => const MarketPage(),
+        AppShell.routeName: (_) => const AppShell(),
+        // The tabs live in the shell; their old route names open it on them.
+        ExplorePage.routeName: (_) => const AppShell(),
+        SearchPage.routeName: (_) => const AppShell(initialTab: AppTab.search),
+        MarketPage.routeName: (_) => const AppShell(initialTab: AppTab.market),
+        ProfilePage.routeName: (_) => const AppShell(initialTab: AppTab.profile),
         NotificationPage.routeName: (_) => const NotificationPage(),
         MessagesPage.routeName: (_) => const MessagesPage(),
-        ProfilePage.routeName: (_) => const ProfilePage(),
         SavedListingsPage.routeName: (_) => const SavedListingsPage(),
         ReportPage.routeName: (_) => const ReportPage(),
       },

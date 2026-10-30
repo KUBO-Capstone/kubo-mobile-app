@@ -14,7 +14,7 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction): vo
     const header = req.headers.authorization ?? '';
     const [scheme, token] = header.split(' ');
     const payload = scheme === 'Bearer' && token ? verifyToken(token) : undefined;
-    if (!payload || !UserModel.findById(payload.sub)) {
+    if (!payload || !UserModel.isActive(payload.sub)) {
         res.status(401).json({ success: false, message: 'Your session has expired. Please log in again.' });
         return;
     }
@@ -27,7 +27,7 @@ export const attachAuth = (req: Request, _res: Response, next: NextFunction): vo
     const header = req.headers.authorization ?? '';
     const [scheme, token] = header.split(' ');
     const payload = scheme === 'Bearer' && token ? verifyToken(token) : undefined;
-    if (payload && UserModel.findById(payload.sub)) req.authUserId = payload.sub;
+    if (payload && UserModel.isActive(payload.sub)) req.authUserId = payload.sub;
     next();
 };
 

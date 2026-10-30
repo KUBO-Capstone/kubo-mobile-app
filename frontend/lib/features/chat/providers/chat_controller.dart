@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../shared/data/chat_socket.dart';
 import '../../../shared/data/message_service.dart';
 import '../../../shared/data/negotiation_service.dart';
 import '../../login/services/auth_service.dart';
@@ -9,8 +10,9 @@ import '../../login/services/auth_service.dart';
 /// State for one conversation thread: the header (listing, parties, current
 /// offer), the messages, and the offer actions.
 ///
-/// There are no sockets, so the thread re-fetches every [pollInterval] while
-/// the screen is open. That is plenty for a two-person demo.
+/// New messages arrive over [ChatSocket]. Whenever the socket (re)connects,
+/// the thread fetches only the messages after the newest one it has, so
+/// nothing sent while the phone was offline goes missing.
 class ChatController extends ChangeNotifier {
   ChatController({
     required this.conversationId,
@@ -18,8 +20,6 @@ class ChatController extends ChangeNotifier {
     NegotiationService? negotiations,
   })  : _messages = messages ?? MessageService(),
         _negotiations = negotiations ?? NegotiationService();
-
-  static const pollInterval = Duration(seconds: 4);
 
   final int conversationId;
   final MessageService _messages;
@@ -34,8 +34,10 @@ class ChatController extends ChangeNotifier {
   bool isOfferBusy = false;
   String? errorMessage;
 
-  Timer? _poll;
-  int? _lastMessageId;
+  StreamSubscription<MessageRecord>? _pushes;
+  StreamSubscription<void>? _connects;
+  String? _lastMessageId;
+  bool _disposed = false;
 
   int? get userId => AuthService.currentUserId;
 
@@ -48,12 +50,65 @@ class ChatController extends ChangeNotifier {
   }
 
   Future<void> start() async {
+    // Subscribe before the first fetch so a push that lands mid-load is kept.
+    _pushes ??= ChatSocket.messages
+        .where((m) => m.conversationId == conversationId)
+        .listen((m) => _receive([m]));
+    _connects ??= ChatSocket.connects.listen((_) => _catchUp());
     await refresh();
-    _poll ??= Timer.periodic(pollInterval, (_) => refresh(silent: true));
+  }
+
+  /// Merges [incoming] into the thread by id. The sender gets the same
+  /// message twice (REST response and socket echo), so ids are deduplicated.
+  /// Returns the messages that were actually new.
+  List<MessageRecord> _merge(Iterable<MessageRecord> incoming) {
+    final known = {for (final m in messages) m.id};
+    final fresh = incoming.where((m) => known.add(m.id)).toList();
+    if (fresh.isEmpty) return fresh;
+    messages = [...messages, ...fresh]..sort((a, b) => a.id.compareTo(b.id));
+    _lastMessageId = messages.last.id;
+    return fresh;
+  }
+
+  /// Applies pushed or caught-up messages: marks the other party's lines
+  /// read, and reloads the header when an offer or order event moved the deal.
+  Future<void> _receive(List<MessageRecord> incoming) async {
+    final id = userId;
+    if (_disposed || id == null) return;
+    final fresh = _merge(incoming);
+    if (fresh.isEmpty) return;
+    notifyListeners();
+    // The thread is on screen, so anything new from the other party is read.
+    if (fresh.any((m) => !m.isMine(id))) {
+      unawaited(_messages.markRead(conversationId: conversationId).catchError((_) {}));
+    }
+    if (fresh.any((m) => m.type != MessageType.text)) {
+      try {
+        conversation = await _messages.fetchConversation(conversationId: conversationId);
+        if (!_disposed) notifyListeners();
+      } catch (_) {
+        // The header catches up on the next refresh.
+      }
+    }
+  }
+
+  /// Fetches whatever was sent while the socket was down.
+  Future<void> _catchUp() async {
+    final lastId = _lastMessageId;
+    // Nothing loaded yet: the initial refresh() covers it.
+    if (lastId == null) {
+      if (conversation != null) await refresh(silent: true);
+      return;
+    }
+    try {
+      await _receive(await _messages.fetchMessages(conversationId: conversationId, afterId: lastId));
+    } catch (_) {
+      // Still offline; the next reconnect tries again.
+    }
   }
 
   /// Reloads the header and messages. [silent] skips the loading flag so a
-  /// background poll never flickers the screen.
+  /// background reload never flickers the screen.
   Future<void> refresh({bool silent = false}) async {
     final id = userId;
     if (id == null) {
@@ -71,25 +126,23 @@ class ChatController extends ChangeNotifier {
         _messages.fetchConversation(conversationId: conversationId),
         _messages.fetchMessages(conversationId: conversationId),
       ]);
+      if (_disposed) return;
       conversation = results[0] as ConversationRecord;
-      final fetched = results[1] as List<MessageRecord>;
-      final newest = fetched.isEmpty ? null : fetched.last.id;
-      final hasNew = newest != _lastMessageId;
-      messages = fetched;
-      _lastMessageId = newest;
+      // Merged, not replaced: a push may have landed while this was in flight.
+      final fresh = _merge(results[1] as List<MessageRecord>);
       errorMessage = null;
       // Anything the other party sent is on screen now; clear the inbox dot.
-      if (hasNew && fetched.any((m) => !m.isMine(id) && m.readAt == null)) {
-        unawaited(_messages.markRead(conversationId: conversationId));
+      if (conversation!.isUnread || fresh.any((m) => !m.isMine(id))) {
+        unawaited(_messages.markRead(conversationId: conversationId).catchError((_) {}));
       }
     } catch (error) {
-      // A failed background poll keeps the last good thread on screen.
+      // A failed background reload keeps the last good thread on screen.
       if (!silent || conversation == null) {
         errorMessage = error.toString().replaceFirst('Exception: ', '');
       }
     } finally {
       isLoading = false;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
@@ -106,8 +159,8 @@ class ChatController extends ChangeNotifier {
         conversationId: conversationId,
         content: content,
       );
-      messages = [...messages, sent];
-      _lastMessageId = sent.id;
+      // Sent over REST; the socket echo of the same id is ignored by _merge.
+      _merge([sent]);
       return null;
     } catch (error) {
       return error.toString().replaceFirst('Exception: ', '');
@@ -162,7 +215,9 @@ class ChatController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _poll?.cancel();
+    _disposed = true;
+    _pushes?.cancel();
+    _connects?.cancel();
     _messages.dispose();
     _negotiations.dispose();
     super.dispose();

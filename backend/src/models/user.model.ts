@@ -51,6 +51,12 @@ export const UserModel = {
         return stmt.get(id) as User | undefined;
     },
 
+    // Tokens live 7 days with no revocation, so auth must also reject accounts
+    // deleted (anonymized) after the token was issued.
+    isActive: (id: number): boolean => {
+        return db.prepare('SELECT 1 FROM users WHERE user_id = ? AND deleted_at IS NULL').get(id) !== undefined;
+    },
+
     findByEmail: (email: string): User | undefined => {
         const query = 'SELECT * FROM users WHERE email = ?';
         return db.prepare(query).get(email) as User | undefined;

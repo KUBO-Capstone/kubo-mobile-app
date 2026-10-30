@@ -253,7 +253,9 @@ CREATE TABLE IF NOT EXISTS reviews (
 
 -- ---------------------------------------------------------------------
 -- NOTE: there is intentionally no `messages` table.
--- Messages are stored in DynamoDB (PK conversation_id, SK message_id).
+-- Messages are stored in the DynamoDB table ChatMessages:
+--   PK chatRoomId (S) = conversation_id, SK timestamp (S) = message_id (ULID).
+-- See backend/src/models/message.model.ts.
 -- Message attachments are S3 keys under conversations/<conversation_id>/.
 -- ---------------------------------------------------------------------
 

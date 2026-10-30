@@ -25,7 +25,7 @@ async function main(): Promise<void> {
             return String(res.rows[0].v).split(',')[0];
         }),
         await check('DynamoDB', async () => {
-            const table = process.env.DDB_MESSAGES_TABLE ?? 'kubo_messages';
+            const table = process.env.DDB_MESSAGES_TABLE ?? 'ChatMessages';
             const res = await dynamoClient.send(new DescribeTableCommand({ TableName: table }));
             return `table "${table}" is ${res.Table?.TableStatus}`;
         }),

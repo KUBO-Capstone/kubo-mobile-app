@@ -115,8 +115,6 @@ class ConversationRecord {
     this.buyerReviewCount = 0,
     this.sellerRating,
     this.sellerReviewCount = 0,
-    this.allowsMeetup = true,
-    this.allowsDelivery = true,
   });
 
   factory ConversationRecord.fromJson(Map<String, dynamic> json) {
@@ -153,8 +151,6 @@ class ConversationRecord {
       buyerReviewCount: (json['buyer_review_count'] as num?)?.toInt() ?? 0,
       sellerRating: (json['seller_rating'] as num?)?.toDouble(),
       sellerReviewCount: (json['seller_review_count'] as num?)?.toInt() ?? 0,
-      allowsMeetup: json['allows_meetup'] != false,
-      allowsDelivery: json['allows_delivery'] != false,
     );
   }
 
@@ -273,10 +269,6 @@ class ConversationRecord {
       allowsDelivery: allowsDelivery,
     );
   }
-
-  /// The listing's deal methods, so the order page only offers those.
-  final bool allowsMeetup;
-  final bool allowsDelivery;
 }
 
 /// HTTP client for the conversation and message endpoints. The server knows

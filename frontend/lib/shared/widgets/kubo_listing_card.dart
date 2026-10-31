@@ -2,8 +2,18 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../features/listing/screens/listing_page.dart';
+import '../../features/shell/providers/app_shell_controller.dart';
 import '../data/synthetic_records.dart';
+import 'kubo_image.dart';
 import 'kubo_save_button.dart';
+
+/// Two-column layout every grid of [KuboListingCard]s uses.
+const SliverGridDelegate kuboListingGridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
+  crossAxisCount: 2,
+  mainAxisSpacing: 18,
+  crossAxisSpacing: 12,
+  childAspectRatio: 0.72,
+);
 
 /// Shared listing card used across explore and search result grids.
 class KuboListingCard extends StatelessWidget {
@@ -31,6 +41,8 @@ class KuboListingCard extends StatelessWidget {
     );
     if (changed == true) {
       onChanged?.call();
+      // Other feeds may still show the old version (or a removed listing).
+      AppShellController.instance.notifyListingsChanged();
     }
   }
 
@@ -49,9 +61,7 @@ class KuboListingCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  listing.imageAssetPath.startsWith('http')
-                      ? Image.network(listing.imageAssetPath, fit: BoxFit.cover)
-                      : Image.asset(listing.imageAssetPath, fit: BoxFit.cover),
+                  KuboImage(listing.imageAssetPath, semanticLabel: listing.title),
                   // Archived listings only show on the seller's own profile;
                   // dim them so the grid reads at a glance.
                   if (listing.isSoldOut) ...[

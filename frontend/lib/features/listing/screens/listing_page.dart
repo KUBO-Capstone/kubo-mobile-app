@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../providers/listing_page_controller.dart';
 import '../widgets/action_button.dart';
@@ -113,6 +114,15 @@ class _ListingPageState extends State<ListingPage> {
     }
   }
 
+  Future<void> _share(SyntheticListingRecord listing) async {
+    final where = listing.locationLabel.isEmpty ? '' : ' in ${listing.locationLabel}';
+    await Share.share(
+      '${listing.title}, ${listing.price}$where.\n\n'
+      'See it on Kubo: https://kubo.app/listing/${listing.productId}',
+      subject: '${listing.title} on Kubo',
+    );
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -154,6 +164,7 @@ class _ListingPageState extends State<ListingPage> {
                       onFavoriteToggle: canSave
                           ? () => KuboSaveButton.toggle(context, listing)
                           : null,
+                      onShare: listing.productId == null ? null : () => _share(listing),
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),

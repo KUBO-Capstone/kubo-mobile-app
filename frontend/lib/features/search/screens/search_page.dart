@@ -1,13 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
 import '../../../shared/widgets/kubo_search_field.dart';
 import '../../../shared/widgets/kubo_section_header.dart';
 import '../../explore/screens/explore_page.dart';
-import '../../listing/screens/create_listing_page.dart';
-import '../../market/screens/market_page.dart';
-import '../../profile/screens/profile_page.dart';
+import '../../shell/providers/app_shell_controller.dart';
 import '../providers/search_page_controller.dart';
 import 'search_results_page.dart';
 import '../widgets/search_recent_search_tile.dart';
@@ -33,24 +32,27 @@ class SearchPage extends StatefulWidget {
 class _SearchPageState extends State<SearchPage> {
   late final SearchPageController _controller;
   late final TextEditingController _searchController;
-
-  void _handleSearchTextChanged() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
+  final FocusNode _searchFocus = FocusNode();
+  final ScrollController _scroll = ScrollController();
+  late final StreamSubscription<AppTab> _reselected;
 
   @override
   void initState() {
     super.initState();
     _controller = SearchPageController();
     _searchController = TextEditingController();
-    _searchController.addListener(_handleSearchTextChanged);
+    // Tapping Search again scrolls back up, then puts the cursor in the field.
+    _reselected = AppShellController.instance.onReselect(
+      AppTab.search,
+      () => scrollToTopOr(_scroll, _searchFocus.requestFocus),
+    );
   }
 
   @override
   void dispose() {
-    _searchController.removeListener(_handleSearchTextChanged);
+    _reselected.cancel();
+    _scroll.dispose();
+    _searchFocus.dispose();
     _searchController.dispose();
     _controller.dispose();
     super.dispose();
@@ -80,45 +82,6 @@ class _SearchPageState extends State<SearchPage> {
     _submitSearch();
   }
 
-  void _navigateToTab(int index) {
-    if (index == 1) {
-      return;
-    }
-
-    Widget destination;
-    switch (index) {
-      case 0:
-        destination = ExplorePage(
-          initialLocationLabel: widget.initialLocationLabel,
-        );
-        break;
-      case 2:
-        destination = const MarketPage();
-        break;
-      case 3:
-        destination = const ProfilePage();
-        break;
-      default:
-        destination = SearchPage(
-          initialLocationLabel: widget.initialLocationLabel,
-        );
-        break;
-    }
-
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute<void>(builder: (_) => destination));
-  }
-
-  void _openCreateListing() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder:
-            (_) => const CreateListingPage(),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -128,7 +91,9 @@ class _SearchPageState extends State<SearchPage> {
           animation: _controller,
           builder: (context, _) {
             return CustomScrollView(
+              controller: _scroll,
               physics: const BouncingScrollPhysics(),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
@@ -138,6 +103,7 @@ class _SearchPageState extends State<SearchPage> {
                       children: [
                         KuboSearchField(
                           controller: _searchController,
+                          focusNode: _searchFocus,
                           onSubmitted: (_) => _submitSearch(),
                           onClear: () => _searchController.clear(),
                         ),
@@ -185,15 +151,6 @@ class _SearchPageState extends State<SearchPage> {
                         const SizedBox(height: 10),
                         const KuboSectionHeader(title: 'Search suggestions'),
                         const SizedBox(height: 12),
-                        // if (_searchController.text.trim().isNotEmpty)
-                        //   Text(
-                        //     'Results for "${_searchController.text.trim()}"',
-                        //     style: const TextStyle(
-                        //       color: AppColors.black,
-                        //       fontSize: 15,
-                        //       fontWeight: FontWeight.w700,
-                        //     ),
-                        //   ),
                       ],
                     ),
                   ),
@@ -223,11 +180,6 @@ class _SearchPageState extends State<SearchPage> {
             );
           },
         ),
-      ),
-      bottomNavigationBar: KuboBottomNavigationBar(
-        currentIndex: 1,
-        onDestinationSelected: _navigateToTab,
-        onCenterActionPressed: _openCreateListing,
       ),
     );
   }

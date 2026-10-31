@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -5,11 +7,11 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
 import '../../../shared/widgets/kubo_listing_card.dart';
-import '../../explore/screens/explore_page.dart';
-import '../../market/screens/market_page.dart';
-import '../../search/screens/search_page.dart';
+import '../../../shared/data/message_service.dart';
+import '../../chat/screens/chat_page.dart';
+import '../../shell/providers/app_shell_controller.dart';
 import '../../../shared/data/synthetic_records.dart';
-import '../../listing/screens/create_listing_page.dart';
+import '../widgets/message_listing_picker.dart';
 import '../../listing/widgets/manage_listing_sheet.dart';
 import '../../login/screens/login_page.dart';
 import '../../login/services/auth_service.dart';
@@ -35,6 +37,7 @@ class ProfilePage extends StatefulWidget {
     this.initialLocationLabel = 'Caybiga',
     this.isOwnProfile = true,
     this.subject,
+    this.isTabRoot = false,
   });
 
   /// Opens the profile behind a listing's seller box. Falls back to the own
@@ -69,6 +72,11 @@ class ProfilePage extends StatefulWidget {
   /// Account to show when [isOwnProfile] is false.
   final ProfileSubject? subject;
 
+  /// The Profile tab itself, under the shell's bar. Every other profile (a
+  /// seller's, or your own reached from one of your listings) is pushed
+  /// above the shell, gets a back button, and draws the bar itself.
+  final bool isTabRoot;
+
   @override
   State<ProfilePage> createState() => _ProfilePageState();
 }
@@ -79,9 +87,15 @@ class _ProfilePageState extends State<ProfilePage> {
   // Own profile only: purchases and sales for the Orders tab.
   final OrdersController _orders = OrdersController();
 
+  final ScrollController _scroll = ScrollController();
+  final GlobalKey<RefreshIndicatorState> _refreshKey = GlobalKey<RefreshIndicatorState>();
+  StreamSubscription<AppTab>? _reselected;
+  bool _wasActiveTab = true;
+
   @override
   void initState() {
     super.initState();
+    _listenToShell();
     _controller = ProfilePageController(
       isOwnProfile: widget.isOwnProfile,
       subject: widget.subject,
@@ -108,9 +122,43 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   void dispose() {
+    _reselected?.cancel();
+    if (widget.isTabRoot) AppShellController.instance.removeListener(_handleShellTabChanged);
+    _scroll.dispose();
     _controller.dispose();
     _orders.dispose();
     super.dispose();
+  }
+
+  void _listenToShell() {
+    if (!widget.isTabRoot) return;
+    // Tapping Profile again scrolls back to the top, then refreshes.
+    _reselected = AppShellController.instance.onReselect(
+      AppTab.profile,
+      () => scrollToTopOr(_scroll, () => _refreshKey.currentState?.show()),
+    );
+    AppShellController.instance.addListener(_handleShellTabChanged);
+  }
+
+  // Coming back to the Profile tab picks up listings posted and orders
+  // placed since it was last open, the way a social app's profile does.
+  void _handleShellTabChanged() {
+    final isActive = AppShellController.instance.current == AppTab.profile;
+    if (isActive && !_wasActiveTab) {
+      _controller.loadProfile();
+      _controller.loadListings();
+      if (widget.isOwnProfile) _orders.load();
+    }
+    _wasActiveTab = isActive;
+  }
+
+  Future<void> _refresh() async {
+    await Future.wait<void>([
+      _controller.loadProfile(),
+      _controller.loadListings(),
+      if (widget.isOwnProfile) SavedListingsController.instance.load(),
+      if (widget.isOwnProfile) _orders.load(),
+    ]);
   }
 
   Future<void> _openOrder(int orderId) async {
@@ -125,48 +173,9 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  void _navigateToTab(int index) {
-    if (index == 3) {
-      return;
-    }
-
-    Widget destination;
-    switch (index) {
-      case 0:
-        destination = ExplorePage(
-          initialLocationLabel: widget.initialLocationLabel,
-        );
-        break;
-      case 1:
-        destination = SearchPage(
-          initialLocationLabel: widget.initialLocationLabel,
-        );
-        break;
-      case 2:
-        destination = MarketPage(
-          initialLocationLabel: widget.initialLocationLabel,
-        );
-        break;
-      default:
-        destination = ProfilePage(
-          initialLocationLabel: widget.initialLocationLabel,
-          isOwnProfile: widget.isOwnProfile,
-        );
-        break;
-    }
-
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(builder: (_) => destination),
-    );
-  }
-
   Future<void> _openCreateListing() async {
-    final created = await Navigator.of(context).push<SyntheticListingRecord>(
-      MaterialPageRoute<SyntheticListingRecord>(
-        builder: (_) => const CreateListingPage(),
-      ),
-    );
-    if (created != null) {
+    final created = await AppShellController.instance.createListing(context);
+    if (created != null && mounted) {
       _controller.loadListings();
     }
   }
@@ -188,6 +197,7 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
     _controller.loadListings();
+    AppShellController.instance.notifyListingsChanged();
   }
 
   Future<void> _openEditProfile() async {
@@ -224,10 +234,43 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  void _messageProfile() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Message action tapped')),
-    );
+  // Chats belong to a listing, so messaging a seller means asking about one
+  // of theirs: pick it (skipped when there is only one), then open the same
+  // thread the listing page's Message button opens.
+  Future<void> _messageProfile() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final name = _controller.profile.displayName;
+    if (AuthService.currentUserId == null) {
+      messenger.showSnackBar(const SnackBar(content: Text('Log in to message sellers.')));
+      return;
+    }
+    if (_controller.listings.isEmpty) await _controller.loadListings();
+    if (!mounted) return;
+    final listings = _controller.listings
+        .where((listing) => listing.productId != null && !listing.isSoldOut)
+        .toList(growable: false);
+    if (listings.isEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text('$name has no listings to ask about yet.')));
+      return;
+    }
+    final listing = listings.length == 1
+        ? listings.first
+        : await showMessageListingPicker(context, sellerName: name, listings: listings);
+    if (listing == null || !mounted) return;
+    final service = MessageService();
+    try {
+      final thread = await service.openConversation(productId: listing.productId!);
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => ChatPage(conversationId: thread.id)),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      service.dispose();
+    }
   }
 
   @override
@@ -236,11 +279,13 @@ class _ProfilePageState extends State<ProfilePage> {
       backgroundColor: AppColors.white,
       body: SafeArea(
         bottom: false,
-        child: AnimatedBuilder(
+        child: RefreshIndicator(key: _refreshKey, color: AppColors.green, onRefresh: _refresh, child: AnimatedBuilder(
           animation: Listenable.merge([_controller, SavedListingsController.instance, _orders]),
           builder: (context, _) {
             return CustomScrollView(
-              physics: const BouncingScrollPhysics(),
+              controller: _scroll,
+              // Pull-to-refresh has to work even when the profile is short.
+              physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
               slivers: [
                 SliverToBoxAdapter(
                   child: Stack(
@@ -254,9 +299,10 @@ class _ProfilePageState extends State<ProfilePage> {
                           fit: BoxFit.cover,
                         ),
                       ),
-                      // Visitor profiles are pushed over a listing, so give
-                      // them a way back that the own-profile tab never needs.
-                      if (!widget.isOwnProfile && Navigator.of(context).canPop())
+                      // Every profile pushed above the shell (a seller's, or
+                      // your own from one of your listings) needs a way back;
+                      // the Profile tab itself never does.
+                      if (!widget.isTabRoot && Navigator.of(context).canPop())
                         Positioned(
                           top: 8,
                           left: 8,
@@ -266,6 +312,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             elevation: 2,
                             child: IconButton(
                               icon: const Icon(Icons.arrow_back),
+                              tooltip: 'Back',
                               color: AppColors.black,
                               onPressed: () => Navigator.of(context).pop(),
                             ),
@@ -325,13 +372,11 @@ class _ProfilePageState extends State<ProfilePage> {
               ],
             );
           },
-        ),
+        )),
       ),
-      bottomNavigationBar: KuboBottomNavigationBar(
-        currentIndex: 3,
-        onDestinationSelected: _navigateToTab,
-        onCenterActionPressed: _openCreateListing,
-      ),
+      // The tab's own profile sits under the shell's bar. A pushed profile
+      // draws the bar itself; its Profile item leads back to your own.
+      bottomNavigationBar: widget.isTabRoot ? null : const KuboBottomNavigationBar.detached(),
     );
   }
 
@@ -722,13 +767,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _navigateHomeToExplore() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(
-        builder: (_) => ExplorePage(
-          initialLocationLabel: widget.initialLocationLabel,
-        ),
-      ),
-    );
+    AppShellController.instance.goTo(AppTab.home);
   }
 }
 

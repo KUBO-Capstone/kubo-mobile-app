@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/constants/api_config.dart';
@@ -14,7 +15,15 @@ class AuthService {
 
   final http.Client _client;
 
-  static Map<String, dynamic>? currentUser;
+  static final ValueNotifier<Map<String, dynamic>?> _currentUser = ValueNotifier<Map<String, dynamic>?>(null);
+
+  /// The signed-in user's row, or null when nobody is logged in.
+  static Map<String, dynamic>? get currentUser => _currentUser.value;
+  static set currentUser(Map<String, dynamic>? user) => _currentUser.value = user;
+
+  /// Notifies on login, logout and profile edits (the Profile tab shows the
+  /// user's photo).
+  static ValueListenable<Map<String, dynamic>?> get currentUserListenable => _currentUser;
 
   static String? get accessToken => ApiSession.token;
 

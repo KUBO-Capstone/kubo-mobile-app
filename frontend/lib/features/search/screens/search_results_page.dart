@@ -9,15 +9,13 @@ import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
 import '../../../shared/widgets/kubo_listing_card.dart';
 import '../../../shared/widgets/kubo_location_badge.dart';
 import '../../../shared/widgets/kubo_search_field.dart';
+import '../../../shared/widgets/kubo_skeleton.dart';
 import '../../../shared/widgets/kubo_view_toggle_button.dart';
 import '../../explore/screens/explore_page.dart';
 import '../../explore/models/location_result.dart';
 import '../../explore/widgets/location_filter_sheet.dart';
 import '../../explore/widgets/listings_map.dart';
 import '../../explore/widgets/map_result_cards.dart';
-import '../../market/screens/market_page.dart';
-import '../../profile/screens/profile_page.dart';
-import '../../listing/screens/create_listing_page.dart';
 
 /// Search results page with list/map toggles over the matching listings.
 class SearchResultsPage extends StatefulWidget {
@@ -59,6 +57,9 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   /// "no results".
   String? _loadError;
 
+  /// A search is in flight; the grid shows placeholder cards meanwhile.
+  bool _isLoading = true;
+
   bool _isListView = true;
 
   /// Collapses the map to a strip, same control as the explore tab.
@@ -85,20 +86,25 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   }
 
   Future<void> _loadListings() async {
+    if (mounted && !_isLoading) setState(() => _isLoading = true);
+    final query = _query;
     try {
-      final listings = await _listingService.fetchListings(query: _query);
-      if (mounted) {
+      final listings = await _listingService.fetchListings(query: query);
+      // A newer search may have been submitted while this one was in flight.
+      if (mounted && query == _query) {
         setState(() {
           _listings = listings;
           _loadError = null;
+          _isLoading = false;
         });
       }
     } catch (error) {
       debugPrint('Search listing fetch failed: $error');
-      if (mounted) {
+      if (mounted && query == _query) {
         setState(() {
           _listings = const <SyntheticListingRecord>[];
           _loadError = 'Could not reach the Kubo server. Try again.';
+          _isLoading = false;
         });
       }
     }
@@ -187,45 +193,6 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
     _loadListings();
   }
 
-  void _navigateToTab(int index) {
-    if (index == 1) {
-      return;
-    }
-
-    Widget destination;
-    switch (index) {
-      case 0:
-        destination = ExplorePage(
-          initialLocationLabel: _accountLocationLabel,
-        );
-        break;
-      case 2:
-        destination = const MarketPage();
-        break;
-      case 3:
-        destination = const ProfilePage();
-        break;
-      default:
-        destination = SearchResultsPage(
-          query: _query,
-          initialLocationLabel: _accountLocationLabel,
-        );
-        break;
-    }
-
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute<void>(builder: (_) => destination));
-  }
-
-  void _openCreateListing() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const CreateListingPage(),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final listings = _visibleListings;
@@ -235,6 +202,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
       body: SafeArea(
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
@@ -247,6 +215,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.arrow_back),
+                          tooltip: 'Back',
                           onPressed: () {
                             Navigator.pop(context);
                           }
@@ -339,17 +308,37 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
               ),
             ),
             if (_isListView)
-              if (listings.isEmpty)
+              if (_isLoading && listings.isEmpty)
+                const SliverPadding(
+                  padding: EdgeInsets.fromLTRB(16, 18, 16, 0),
+                  sliver: ListingGridSkeleton.sliver(itemCount: 4),
+                )
+              else if (listings.isEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-                    child: Text(
-                      _loadError ?? 'No search results yet for this term.',
-                      style: const TextStyle(
-                        color: AppColors.gray,
-                        fontSize: 14,
-                        height: 1.45,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _loadError ??
+                              (_focusLocation != null
+                                  ? 'No results within ${_radiusKm.toStringAsFixed(0)} km. Try a wider radius.'
+                                  : 'No listings match "$_query" yet. Try a shorter or different word.'),
+                          style: const TextStyle(
+                            color: AppColors.gray,
+                            fontSize: 14,
+                            height: 1.45,
+                          ),
+                        ),
+                        if (_loadError != null)
+                          TextButton.icon(
+                            onPressed: _loadListings,
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: const Text('Try again'),
+                            style: TextButton.styleFrom(foregroundColor: AppColors.green),
+                          ),
+                      ],
                     ),
                   ),
                 )
@@ -357,13 +346,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
                   sliver: SliverGrid(
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 18,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: 0.72,
-                        ),
+                    gridDelegate: kuboListingGridDelegate,
                     delegate: SliverChildBuilderDelegate((context, index) {
                       return KuboListingCard(listing: listings[index]);
                     }, childCount: listings.length),
@@ -397,11 +380,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
           ],
         ),
       ),
-      bottomNavigationBar: KuboBottomNavigationBar(
-        currentIndex: 1,
-        onDestinationSelected: _navigateToTab,
-        onCenterActionPressed: _openCreateListing,
-      ),
+      bottomNavigationBar: const KuboBottomNavigationBar.detached(),
     );
   }
 }

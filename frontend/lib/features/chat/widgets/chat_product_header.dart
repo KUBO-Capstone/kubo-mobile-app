@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/message_service.dart';
 import '../../../shared/data/negotiation_service.dart';
 import '../../../shared/data/order_service.dart';
+import '../../../shared/widgets/kubo_image.dart';
 import 'counter_offer_dialog.dart';
 
 /// Listing card pinned above the thread, with the offer control the
@@ -92,24 +93,21 @@ class ChatProductHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: image == null
-                      ? const ColoredBox(
-                          color: AppColors.softBackground,
-                          child: Icon(Icons.shopping_cart_outlined, color: AppColors.gray),
-                        )
-                      : Image.network(
-                          image,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const ColoredBox(
+              // The thumbnail opens the listing too, not just the title.
+              GestureDetector(
+                onTap: onOpenListing,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: image == null
+                        ? const ColoredBox(
                             color: AppColors.softBackground,
                             child: Icon(Icons.shopping_cart_outlined, color: AppColors.gray),
-                          ),
-                        ),
+                          )
+                        : KuboImage(image, width: 44, height: 44, errorIcon: Icons.shopping_cart_outlined),
+                  ),
                 ),
               ),
             ],

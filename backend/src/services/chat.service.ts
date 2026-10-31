@@ -42,13 +42,18 @@ export async function sendChatMessage(input: NewMessage): Promise<ChatMessage> {
     ConversationModel.recordLastMessage(input.conversation_id, stored);
 
     const recipientId = parties.buyer_id === input.sender_id ? parties.seller_id : parties.buyer_id;
-    NotificationModel.create({
-        recipientId,
-        senderId: input.sender_id,
-        productId: parties.product_id,
-        title: notificationTitle(stored),
-        message: stored.content,
-    });
+    
+    try {
+        NotificationModel.create({
+            recipientId,
+            senderId: input.sender_id,
+            productId: parties.product_id,
+            title: notificationTitle(stored),
+            message: stored.content,
+        });
+    } catch (error) {
+        console.error('Failed to create chat notification', error);
+    }
 
     const [message] = withSenderNames([stored]);
     emitToUsers([parties.buyer_id, parties.seller_id], 'message:new', message);

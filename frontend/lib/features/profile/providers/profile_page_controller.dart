@@ -4,14 +4,21 @@ import 'package:flutter/foundation.dart';
 
 import '../../../shared/data/profile_records.dart';
 import '../../../shared/data/synthetic_records.dart';
+import '../../../shared/data/earnings_service.dart';
 import '../../../shared/data/listing_service.dart';
 import '../../../shared/data/profile_service.dart';
+import '../../../shared/data/review_service.dart';
 import '../../login/services/auth_service.dart';
 import '../../saved/providers/saved_listings_controller.dart';
 
 /// Profile sections shown in the tab row. [saved] and [orders] are only
 /// meaningful on the signed-in user's own profile.
 enum ProfileSection { listings, reviews, about, saved, orders }
+
+/// Which side of the deal the shown reviews come from.
+enum ReviewerFilter { all, buyers, sellers }
+
+enum ReviewSort { newest, highest, lowest }
 
 /// The account a visitor profile shows. Built from whatever the caller
 /// already has (a listing's seller fields), since there is no user endpoint
@@ -49,8 +56,24 @@ class ProfilePageController extends ChangeNotifier {
 
   final ListingService _listingService = ListingService();
   final ProfileService _profileService = ProfileService();
+  final ReviewService _reviewService = ReviewService();
+  final EarningsService _earningsService = EarningsService();
   List<SyntheticListingRecord> _listings = const <SyntheticListingRecord>[];
   Map<String, dynamic>? _loadedProfile;
+  UserReviews _userReviews = UserReviews.empty;
+
+  /// False until the first reviews fetch finishes, so the tab can show a
+  /// spinner instead of "No reviews yet" while loading.
+  bool reviewsLoaded = false;
+
+  ReviewerFilter reviewerFilter = ReviewerFilter.all;
+
+  /// Null shows every star count.
+  int? starFilter;
+  ReviewSort reviewSort = ReviewSort.newest;
+
+  /// Own profile only; null until loaded or when the request fails.
+  EarningsSummary? earnings;
 
   Map<String, bool> _normalizePrivacy(dynamic value) {
     final defaults = <String, bool>{
@@ -119,8 +142,8 @@ class ProfilePageController extends ChangeNotifier {
         followingCount: syntheticProfileRecord.followingCount,
         followersCount: syntheticProfileRecord.followersCount,
         listingCount: _listings.length,
-        reviewScore: syntheticProfileRecord.reviewScore,
-        reviewCount: syntheticProfileRecord.reviewCount,
+        reviewScore: ratingSummary.average ?? 0,
+        reviewCount: ratingSummary.count,
         photoUrl: _loadedProfile?['profile_photo_url']?.toString() ?? visitor.photoUrl ?? '',
       );
     }
@@ -164,8 +187,8 @@ class ProfilePageController extends ChangeNotifier {
       followingCount: syntheticProfileRecord.followingCount,
       followersCount: syntheticProfileRecord.followersCount,
       listingCount: _listings.length,
-      reviewScore: syntheticProfileRecord.reviewScore,
-      reviewCount: syntheticProfileRecord.reviewCount,
+      reviewScore: ratingSummary.average ?? 0,
+      reviewCount: ratingSummary.count,
       photoUrl: _loadedProfile?['profile_photo_url']?.toString() ?? user['profile_photo_url']?.toString() ?? '',
     );
   }
@@ -193,8 +216,63 @@ class ProfilePageController extends ChangeNotifier {
   /// Synthetic listings used by the listings tab.
   List<SyntheticListingRecord> get listings => _listings;
 
-  /// Synthetic reviews used by the reviews tab.
-  List<SyntheticProfileReviewRecord> get reviews => syntheticProfileReviews;
+  RatingSummary get ratingSummary => _userReviews.summary;
+
+  /// Whether this account has any review at all, before filters.
+  bool get hasAnyReviews => _userReviews.reviews.isNotEmpty;
+
+  /// The Reviews tab list after the side / star filters and the sort.
+  List<ReviewRecord> get reviews {
+    final filtered = _userReviews.reviews.where((review) {
+      if (reviewerFilter == ReviewerFilter.buyers && review.reviewerRole != ReviewerRole.buyer) return false;
+      if (reviewerFilter == ReviewerFilter.sellers && review.reviewerRole != ReviewerRole.seller) return false;
+      return starFilter == null || review.rating == starFilter;
+    }).toList();
+    switch (reviewSort) {
+      case ReviewSort.newest:
+        break; // The server already returns newest first.
+      case ReviewSort.highest:
+        filtered.sort((a, b) => b.rating.compareTo(a.rating));
+      case ReviewSort.lowest:
+        filtered.sort((a, b) => a.rating.compareTo(b.rating));
+    }
+    return filtered;
+  }
+
+  Future<void> loadReviews() async {
+    final userId = _subjectUserId;
+    if (userId == null) {
+      reviewsLoaded = true;
+      notifyListeners();
+      return;
+    }
+    try {
+      _userReviews = await _reviewService.fetchUserReviews(userId);
+    } catch (_) {
+      // Keeps whatever was shown before; the tab still renders.
+    }
+    reviewsLoaded = true;
+    notifyListeners();
+  }
+
+  void setReviewFilters({ReviewerFilter? reviewer, int? Function()? stars, ReviewSort? sort}) {
+    if (reviewer != null) reviewerFilter = reviewer;
+    if (stars != null) starFilter = stars();
+    if (sort != null) reviewSort = sort;
+    notifyListeners();
+  }
+
+  /// Lifetime earnings for the banner on the owner's profile.
+  Future<void> loadEarnings() async {
+    final userId = AuthService.currentUserId;
+    if (!isOwnProfile || userId == null) return;
+    try {
+      earnings = await _earningsService.fetchEarnings(userId);
+      notifyListeners();
+    } catch (_) {
+      // The banner just stays hidden while the server is unreachable.
+    }
+  }
 
   /// The signed-in user's saved listings (own profile only), from the
   /// app-wide store so the tab and the hearts elsewhere agree.
@@ -240,6 +318,8 @@ class ProfilePageController extends ChangeNotifier {
     _disposed = true;
     _listingService.dispose();
     _profileService.dispose();
+    _reviewService.dispose();
+    _earningsService.dispose();
     super.dispose();
   }
 

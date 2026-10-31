@@ -66,40 +66,6 @@ class SyntheticProfileRecord {
   final String photoUrl;
 }
 
-/// Synthetic review record for the profile reviews tab.
-class SyntheticProfileReviewRecord {
-  const SyntheticProfileReviewRecord({
-    required this.reviewerName,
-    required this.rating,
-    required this.timeLabel,
-    required this.message,
-    required this.productName,
-    required this.productPrice,
-    this.imageAssets = const <String>[],
-  });
-
-  /// Name of the user who posted the review.
-  final String reviewerName;
-
-  /// Star rating used for the review row.
-  final double rating;
-
-  /// Relative time label shown beside the stars.
-  final String timeLabel;
-
-  /// Review body text.
-  final String message;
-
-  /// Product name referenced in the review.
-  final String productName;
-
-  /// Product price referenced in the review.
-  final String productPrice;
-
-  /// Optional image assets attached to the review.
-  final List<String> imageAssets;
-}
-
 /// Synthetic profile shown in the own-account and visitor profile pages.
 const syntheticProfileRecord = SyntheticProfileRecord(
   displayName: 'Display Name',
@@ -167,29 +133,3 @@ final List<SyntheticListingRecord> syntheticProfileListings =
         groups: <String>['grains'],
       ),
     ];
-
-/// Synthetic reviews surfaced in the reviews tab.
-final List<SyntheticProfileReviewRecord>
-syntheticProfileReviews = <SyntheticProfileReviewRecord>[
-  const SyntheticProfileReviewRecord(
-    reviewerName: 'Ariamrhod',
-    rating: 5,
-    timeLabel: '1 year ago',
-    message:
-        'You\'d think I\'d be a fast learner. But guess I won\'t ever mind crisping up on your backburner',
-    productName: 'Product name',
-    productPrice: 'PHP XX,XXX',
-    imageAssets: <String>[
-      'assets/images/Placeholder_img.png',
-      'assets/images/Placeholder_img.png',
-    ],
-  ),
-  const SyntheticProfileReviewRecord(
-    reviewerName: 'Andreameda Galaxy',
-    rating: 5,
-    timeLabel: '1 year ago',
-    message: 'i will take sir duncan side',
-    productName: 'Product name',
-    productPrice: 'PHP XX,XXX',
-  ),
-];

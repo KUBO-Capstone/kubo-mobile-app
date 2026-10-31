@@ -179,5 +179,14 @@ class NegotiationService {
     return NegotiationRecord.fromJson(readData(response) as Map<String, dynamic>);
   }
 
+  /// Tells the server the signed-in user has seen the "deal closed" screen
+  /// for this accepted offer, so it is not shown again on any device.
+  Future<void> markCelebrated({required int negotiationId}) async {
+    final response = await sendRequest(
+      () => _client.post(Uri.parse('$_baseUrl/negotiations/$negotiationId/celebrated')),
+    );
+    checkResponse(response);
+  }
+
   void dispose() => _client.close();
 }

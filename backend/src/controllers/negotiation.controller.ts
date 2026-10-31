@@ -157,7 +157,7 @@ export const respondToNegotiation = async (req: Request, res: Response): Promise
         return;
     }
     if (action === 'accept') {
-        const accepted = NegotiationModel.update(negotiation.negotiation_id, { status: 'accepted' }) as Negotiation;
+        const accepted = NegotiationModel.update(negotiation.negotiation_id, { status: 'accepted', accepted_by: userId }) as Negotiation;
         await recordOfferEvent(accepted, userId, 'accepted');
         res.json({ success: true, data: accepted });
         return;
@@ -182,4 +182,26 @@ export const respondToNegotiation = async (req: Request, res: Response): Promise
     }) as Negotiation;
     await recordOfferEvent(updated, userId, 'counter');
     res.json({ success: true, data: updated });
+};
+
+// The app calls this once it has shown the caller the "deal closed" screen
+// for an accepted offer, so each side sees it exactly once.
+export const markNegotiationCelebrated = (req: Request, res: Response): void => {
+    const userId = authUserId(res);
+    const negotiation = NegotiationModel.findById(Number(req.params.id));
+    if (!negotiation) {
+        res.status(404).json({ success: false, message: 'Offer not found' });
+        return;
+    }
+    const isBuyer = negotiation.buyer_id === userId;
+    if (!isBuyer && negotiation.seller_id !== userId) {
+        res.status(403).json({ success: false, message: 'You are not part of this offer' });
+        return;
+    }
+    if (negotiation.status !== 'accepted') {
+        res.status(409).json({ success: false, message: 'Only an accepted offer can be celebrated' });
+        return;
+    }
+    NegotiationModel.markCelebrated(negotiation.negotiation_id, isBuyer ? 'buyer' : 'seller');
+    res.json({ success: true, data: { negotiation_id: negotiation.negotiation_id, celebrated: true } });
 };

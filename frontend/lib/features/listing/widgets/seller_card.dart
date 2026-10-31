@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/synthetic_records.dart';
+import '../../../shared/widgets/kubo_star_rating.dart';
 import '../../profile/screens/profile_page.dart';
 
 /// Seller box on the listing page. Tapping it opens the seller's profile;
@@ -75,13 +76,16 @@ class SellerCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      canOpen ? 'View seller profile' : 'Verified local grower',
-                      style: const TextStyle(
-                        color: AppColors.gray,
-                        fontSize: 13,
+                    if (canOpen)
+                      KuboRatingLine(average: listing.sellerRating, count: listing.sellerReviewCount)
+                    else
+                      const Text(
+                        'Verified local grower',
+                        style: TextStyle(
+                          color: AppColors.gray,
+                          fontSize: 13,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),

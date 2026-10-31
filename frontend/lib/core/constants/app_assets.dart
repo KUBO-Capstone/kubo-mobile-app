@@ -8,6 +8,12 @@ abstract final class AppAssets {
 
   /// Fallback product/listing image used when backend images are unavailable.
   static const placeholderImage = 'assets/images/Placeholder_img.png';
+
+  /// Animated "Congrats" cow on the buyer's deal-closed screen.
+  static const congratsCowGif = 'assets/images/congrats_cow.gif';
+
+  /// Animated bowing bear on the seller's deal-closed screen.
+  static const bowingBearGif = 'assets/images/bowing_bear.gif';
 }
 
 // SVG icon paths referenced by the app's navigation and toolbars.

@@ -48,6 +48,9 @@ export interface ProductListing extends ProductDetails {
     latitude: number | null;
     longitude: number | null;
     images: string[];
+    // The seller's average rating across every review they received.
+    seller_rating: number | null;
+    seller_review_count: number;
 }
 
 const booleanColumns = new Set<string>(['is_preorder', 'allows_meetup', 'allows_delivery']);
@@ -64,7 +67,9 @@ export const listingQuery = `
            COALESCE(a.region, 'NCR') AS region_label,
            a.latitude AS latitude,
            a.longitude AS longitude,
-           GROUP_CONCAT(pi.image_url, '||' ORDER BY pi.display_order) AS image_urls
+           GROUP_CONCAT(pi.image_url, '||' ORDER BY pi.display_order) AS image_urls,
+           (SELECT ROUND(AVG(r.rating), 1) FROM reviews r WHERE r.reviewee_id = p.seller_id) AS seller_rating,
+           (SELECT COUNT(*) FROM reviews r WHERE r.reviewee_id = p.seller_id) AS seller_review_count
     FROM products p
     JOIN users u ON u.user_id = p.seller_id
     LEFT JOIN farmer_profiles fp ON fp.farmer_id = p.seller_id
@@ -97,6 +102,8 @@ export function mapListing(row: Record<string, unknown>): ProductListing {
         allows_meetup: Boolean(Number(row.allows_meetup ?? 1)),
         allows_delivery: Boolean(Number(row.allows_delivery ?? 1)),
         images: row.image_urls ? String(row.image_urls).split('||') : [],
+        seller_rating: row.seller_rating === null || row.seller_rating === undefined ? null : Number(row.seller_rating),
+        seller_review_count: Number(row.seller_review_count ?? 0),
     };
 }
 

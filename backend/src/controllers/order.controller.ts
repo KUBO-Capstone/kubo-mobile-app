@@ -3,6 +3,7 @@ import { DeliveryMethod, Order, OrderModel, OrderStatus } from "#models/order.mo
 import { NegotiationModel } from "#models/negotiation.model";
 import { ProductModel } from "#models/product.model";
 import { BagsakanModel } from "#models/bagsakan.model";
+import { ReviewModel } from "#models/review.model";
 import { authUserId } from "#middleware/auth.middleware";
 import { sendChatMessage } from "#services/chat.service";
 
@@ -46,13 +47,24 @@ const describeHandover = (order: Order): string =>
         ? `pickup at ${order.center_name ?? 'a bagsakan center'}`
         : 'courier delivery';
 
+// An order as the viewer sees it: plus the review they wrote and the one
+// the other party wrote about them, each null until written.
+const present = (order: Order, viewerId: number) => {
+    const otherId = order.buyer_id === viewerId ? order.seller_id : order.buyer_id;
+    return {
+        ...order,
+        my_review: ReviewModel.findByOrderAndReviewer(order.order_id, viewerId) ?? null,
+        their_review: ReviewModel.findByOrderAndReviewer(order.order_id, otherId) ?? null,
+    };
+};
+
 export const getOrders = (req: Request, res: Response): void => {
     const userId = authUserId(res);
     const role = req.query.role === 'buyer' || req.query.role === 'seller' ? req.query.role : undefined;
     const status = typeof req.query.status === 'string' && statuses.has(req.query.status)
         ? (req.query.status as OrderStatus)
         : undefined;
-    res.json({ success: true, data: OrderModel.findForUser(userId, role, status) });
+    res.json({ success: true, data: OrderModel.findForUser(userId, role, status).map((order) => present(order, userId)) });
 };
 
 export const getOrder = (req: Request, res: Response): void => {
@@ -66,7 +78,7 @@ export const getOrder = (req: Request, res: Response): void => {
         res.status(403).json({ success: false, message: 'You are not part of this order' });
         return;
     }
-    res.json({ success: true, data: order });
+    res.json({ success: true, data: present(order, userId) });
 };
 
 // Buyer turns an accepted offer into an order by choosing how to get the
@@ -145,7 +157,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         buyerId,
         `Placed order #${order.order_id}: ${formatAmount(order.quantity)} ${order.unit_measurement} for PHP ${formatAmount(order.total_amount)}, ${describeHandover(order)}`,
     );
-    res.status(201).json({ success: true, data: order });
+    res.status(201).json({ success: true, data: present(order, buyerId) });
 };
 
 // Seller moves it out the door, buyer confirms it arrived, either side can
@@ -177,7 +189,7 @@ export const updateOrder = async (req: Request, res: Response): Promise<void> =>
         }
         const cancelled = OrderModel.cancel(order.order_id) as Order;
         await recordOrderEvent(cancelled, userId, `Cancelled order #${order.order_id}`);
-        res.json({ success: true, data: cancelled });
+        res.json({ success: true, data: present(cancelled, userId) });
         return;
     }
 
@@ -208,7 +220,7 @@ export const updateOrder = async (req: Request, res: Response): Promise<void> =>
                 ? `Order #${order.order_id} handed to ${courier.courier_name} (tracking ${courier.tracking_number})`
                 : `Order #${order.order_id} is ready for pickup at ${shipped.center_name ?? 'the bagsakan center'}`,
         );
-        res.json({ success: true, data: shipped });
+        res.json({ success: true, data: present(shipped, userId) });
         return;
     }
 
@@ -234,5 +246,5 @@ export const updateOrder = async (req: Request, res: Response): Promise<void> =>
             ? `Picked up order #${order.order_id}`
             : `Received order #${order.order_id}`,
     );
-    res.json({ success: true, data: delivered });
+    res.json({ success: true, data: present(delivered, userId) });
 };

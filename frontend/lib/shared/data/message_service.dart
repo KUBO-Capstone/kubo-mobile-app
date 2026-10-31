@@ -108,6 +108,13 @@ class ConversationRecord {
     this.offeredQuantity,
     this.orderId,
     this.orderStatus,
+    this.acceptedBy,
+    this.celebrationPending = false,
+    this.myReviewRating,
+    this.buyerRating,
+    this.buyerReviewCount = 0,
+    this.sellerRating,
+    this.sellerReviewCount = 0,
   });
 
   factory ConversationRecord.fromJson(Map<String, dynamic> json) {
@@ -137,8 +144,39 @@ class ConversationRecord {
       offeredQuantity: (json['offered_quantity'] as num?)?.toDouble(),
       orderId: (json['order_id'] as num?)?.toInt(),
       orderStatus: rawOrderStatus == null ? null : OrderStatus.parse(rawOrderStatus),
+      acceptedBy: (json['accepted_by'] as num?)?.toInt(),
+      celebrationPending: json['celebration_pending'] == true,
+      myReviewRating: (json['my_review_rating'] as num?)?.toInt(),
+      buyerRating: (json['buyer_rating'] as num?)?.toDouble(),
+      buyerReviewCount: (json['buyer_review_count'] as num?)?.toInt() ?? 0,
+      sellerRating: (json['seller_rating'] as num?)?.toDouble(),
+      sellerReviewCount: (json['seller_review_count'] as num?)?.toInt() ?? 0,
     );
   }
+
+  /// Who accepted the latest offer: the seller on an offer, the buyer on a
+  /// counter. Null until it is accepted.
+  final int? acceptedBy;
+
+  /// The offer is accepted and the signed-in user has not seen the
+  /// "deal closed" screen for it yet.
+  final bool celebrationPending;
+
+  /// The signed-in user's rating of the order, null until they review it.
+  final int? myReviewRating;
+  final double? buyerRating;
+  final int buyerReviewCount;
+  final double? sellerRating;
+  final int sellerReviewCount;
+
+  /// The other party's average rating, from [userId]'s side.
+  double? counterpartyRating(int userId) => isBuyer(userId) ? sellerRating : buyerRating;
+  int counterpartyReviewCount(int userId) => isBuyer(userId) ? sellerReviewCount : buyerReviewCount;
+
+  /// The order is delivered and [userId] has not rated the other side yet.
+  bool canReviewOrder(int userId) =>
+      orderId != null && orderStatus == OrderStatus.delivered && myReviewRating == null &&
+      (isBuyer(userId) || isSeller(userId));
 
   final int id;
   final int buyerId;

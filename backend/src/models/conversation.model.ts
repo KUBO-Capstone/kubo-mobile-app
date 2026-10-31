@@ -19,7 +19,7 @@ export interface ConversationSummary {
     base_price: number;
     unit_measurement: string;
     product_status: string;
-    // Deal methods the seller accepts; the order page only offers these.
+    // The listing's deal methods, so the order page only offers those.
     allows_meetup: boolean;
     allows_delivery: boolean;
     product_image: string | null;
@@ -34,9 +34,20 @@ export interface ConversationSummary {
     negotiation_status: string | null;
     offered_price: number | null;
     offered_quantity: number | null;
+    // Who accepted that negotiation, and whether the caller has yet to see
+    // the "deal closed" screen for it.
+    accepted_by: number | null;
+    celebration_pending: boolean;
     // The order placed on that latest negotiation, if any.
     order_id: number | null;
     order_status: string | null;
+    // The caller's rating of that order, null until they review it.
+    my_review_rating: number | null;
+    // Both parties' rating summaries, for the block under the listing card.
+    buyer_rating: number | null;
+    buyer_review_count: number;
+    seller_rating: number | null;
+    seller_review_count: number;
 }
 
 // Same length as conversations.last_message_preview in the RDS schema.
@@ -60,7 +71,16 @@ const conversationQuery = `
                      CASE WHEN c.buyer_id = @userId THEN c.buyer_last_read_at ELSE c.seller_last_read_at END, '')
                 THEN 1 ELSE 0 END AS is_unread,
            n.negotiation_id, n.status AS negotiation_status, n.offered_price, n.offered_quantity,
-           o.order_id, o.order_status
+           n.accepted_by,
+           CASE WHEN n.status = 'accepted'
+                 AND (CASE WHEN c.buyer_id = @userId THEN n.buyer_celebrated_at ELSE n.seller_celebrated_at END) IS NULL
+                THEN 1 ELSE 0 END AS celebration_pending,
+           o.order_id, o.order_status,
+           (SELECT r.rating FROM reviews r WHERE r.order_id = o.order_id AND r.reviewer_id = @userId) AS my_review_rating,
+           (SELECT ROUND(AVG(r.rating), 1) FROM reviews r WHERE r.reviewee_id = c.buyer_id) AS buyer_rating,
+           (SELECT COUNT(*) FROM reviews r WHERE r.reviewee_id = c.buyer_id) AS buyer_review_count,
+           (SELECT ROUND(AVG(r.rating), 1) FROM reviews r WHERE r.reviewee_id = c.seller_id) AS seller_rating,
+           (SELECT COUNT(*) FROM reviews r WHERE r.reviewee_id = c.seller_id) AS seller_review_count
     FROM conversations c
     JOIN users b ON b.user_id = c.buyer_id
     JOIN users s ON s.user_id = c.seller_id
@@ -99,8 +119,15 @@ function mapConversation(row: Record<string, unknown>): ConversationSummary {
         negotiation_status: str(row.negotiation_status),
         offered_price: num(row.offered_price),
         offered_quantity: num(row.offered_quantity),
+        accepted_by: num(row.accepted_by),
+        celebration_pending: Number(row.celebration_pending) === 1,
         order_id: num(row.order_id),
         order_status: str(row.order_status),
+        my_review_rating: num(row.my_review_rating),
+        buyer_rating: num(row.buyer_rating),
+        buyer_review_count: Number(row.buyer_review_count ?? 0),
+        seller_rating: num(row.seller_rating),
+        seller_review_count: Number(row.seller_review_count ?? 0),
     };
 }
 

@@ -410,7 +410,9 @@ class _CreateListingPageState extends State<CreateListingPage> {
         _lastSaved = await _save(draft);
         posted++;
         if (!mounted) return;
-        setState(() => _removeDraftAt(_drafts.indexOf(draft)));
+        // The last draft stays: the page pops right after the loop and can
+        // still rebuild on its way out, which needs a selected draft.
+        if (_drafts.length > 1) setState(() => _removeDraftAt(_drafts.indexOf(draft)));
       }
       if (!mounted) return;
       _showMessage('Posted $posted listing${posted == 1 ? '' : 's'}.');

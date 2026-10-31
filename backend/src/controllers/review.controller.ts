@@ -76,14 +76,20 @@ export const createReview = (req: Request, res: Response): void => {
         throw error;
     }
 
+    // The review is already saved, so a failed notification is logged rather
+    // than failing the request.
     const snippet = comment.length > 80 ? `${comment.slice(0, 77)}...` : comment;
-    NotificationModel.create({
-        recipientId: revieweeId,
-        senderId: reviewerId,
-        productId: order.product_id,
-        title: 'New Review',
-        message: `${review.reviewer_name} rated you ${rating} star${rating === 1 ? '' : 's'}${snippet ? `: "${snippet}"` : ''}`,
-    });
+    try {
+        NotificationModel.create({
+            recipientId: revieweeId,
+            senderId: reviewerId,
+            productId: order.product_id,
+            title: 'New Review',
+            message: `${review.reviewer_name} rated you ${rating} star${rating === 1 ? '' : 's'}${snippet ? `: "${snippet}"` : ''}`,
+        });
+    } catch (error) {
+        console.error(`Could not notify user ${revieweeId} about review ${review.review_id}:`, error);
+    }
     res.status(201).json({ success: true, data: review });
 };
 

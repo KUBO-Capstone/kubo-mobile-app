@@ -15,5 +15,7 @@ yarn-error.log*
 
 src/database/db.sqlite
 
-# User uploads (profile and listing photos) written by multer at runtime
+# Photos the server saved to disk before uploads moved to S3. Nothing writes
+# here any more; `npm run migrate:uploads` copies them to the bucket
+# (docs/media_storage.md). Kept ignored so leftovers are never committed.
 uploads/

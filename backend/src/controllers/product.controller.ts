@@ -1,6 +1,4 @@
 import { Request, Response } from "express";
-import fs from "fs";
-import path from "path";
 import {
     farmingMethods,
     FarmingMethod,
@@ -15,6 +13,7 @@ import {
     QualityGrade,
 } from "#models/product.model";
 import { authUserId } from "#middleware/auth.middleware";
+import { deleteStoredImage, storedImageExists, toStoredMediaUrl } from "#controllers/upload.controller";
 
 const categories = new Set<string>(productCategories);
 const units = new Set<string>(productUnits);
@@ -25,8 +24,6 @@ const sellerStatuses = new Set<string>(['available', 'out of stock']);
 
 export const maxListingImages = 10;
 const maxDescriptionLength = 2000;
-export const productUploadDirectory = path.resolve(__dirname, '../../uploads/products');
-const uploadedImagePattern = /^\/uploads\/products\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp)$/;
 
 const readId = (value: unknown): number | undefined => {
     const n = Number(value);
@@ -42,21 +39,27 @@ const isCalendarDate = (value: string): boolean => {
     return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 };
 
-// A photo is either one this server stored via POST /products/images, or
-// an absolute URL (seed data).
-const isAcceptedImage = (value: unknown): value is string => {
-    if (typeof value !== 'string') return false;
-    if (/^https?:\/\//.test(value)) return true;
-    return uploadedImagePattern.test(value) && fs.existsSync(path.join(productUploadDirectory, path.basename(value)));
+// A photo is one POST /products/images put in S3, in any of the URL forms
+// the API hands out (stored, presigned or MEDIA_BASE_URL), kept in its stored
+// form. On an edit, photos the listing already has (seed data's absolute
+// URLs, say) are accepted as they are. Returns undefined for anything else.
+const readImage = async (value: unknown, current: string[]): Promise<string | undefined> => {
+    if (typeof value !== 'string') return undefined;
+    const stored = toStoredMediaUrl(value, 'products');
+    if (stored) return current.includes(stored) || (await storedImageExists(stored)) ? stored : undefined;
+    return current.includes(value) ? value : undefined;
 };
 
 type Parsed<T> = { value: T; error?: undefined } | { value?: undefined; error: string };
 
-const readImages = (images: unknown): Parsed<string[]> => {
+const readImages = async (images: unknown, current: string[] = []): Promise<Parsed<string[]>> => {
     if (!Array.isArray(images) || images.length === 0) return { error: 'Add at least one photo' };
     if (images.length > maxListingImages) return { error: `A listing can have up to ${maxListingImages} photos` };
-    if (!images.every(isAcceptedImage)) return { error: 'One of the photos was not uploaded. Please add it again.' };
-    return { value: images };
+    const accepted = await Promise.all(images.map((image) => readImage(image, current)));
+    if (!accepted.every((image): image is string => image !== undefined)) {
+        return { error: 'One of the photos was not uploaded. Please add it again.' };
+    }
+    return { value: accepted };
 };
 
 // Reads the listing fields from a request body. On create every required
@@ -144,11 +147,8 @@ const checkListingRules = (listing: RuleFields, previous?: RuleFields): string |
 // Removes uploaded photos that no listing uses any more.
 const deleteUnusedUploads = (images: string[]): void => {
     for (const image of images) {
-        if (!uploadedImagePattern.test(image) || ProductModel.isImageInUse(image)) continue;
-        const file = path.join(productUploadDirectory, path.basename(image));
-        fs.rm(file, { force: true }, (error) => {
-            if (error) console.error(`Could not delete unused listing photo ${file}:`, error);
-        });
+        if (ProductModel.isImageInUse(image)) continue;
+        void deleteStoredImage(image, 'products');
     }
 };
 
@@ -171,16 +171,16 @@ export const getProduct = (req: Request, res: Response): void => {
 
 // Stores the photos for a listing that is about to be created or edited and
 // returns their paths, in upload order, for the images field.
-export const uploadProductImages = (req: Request, res: Response): void => {
-    const files = Array.isArray(req.files) ? req.files : [];
-    if (files.length === 0) {
+export const uploadProductImages = (_req: Request, res: Response): void => {
+    const images: string[] = res.locals.uploadedImages ?? [];
+    if (images.length === 0) {
         res.status(400).json({ success: false, message: 'Add a JPG, PNG, or WebP photo' });
         return;
     }
-    res.status(201).json({ success: true, data: { images: files.map((file) => `/uploads/products/${file.filename}`) } });
+    res.status(201).json({ success: true, data: { images } });
 };
 
-export const createProduct = (req: Request, res: Response): void => {
+export const createProduct = async (req: Request, res: Response): Promise<void> => {
     // The seller is whoever is signed in; a seller_id in the body is ignored.
     const seller_id = authUserId(res);
     const details = readDetails(req.body ?? {}, true);
@@ -188,7 +188,7 @@ export const createProduct = (req: Request, res: Response): void => {
         res.status(400).json({ success: false, message: details.error });
         return;
     }
-    const images = readImages(req.body?.images);
+    const images = await readImages(req.body?.images);
     if (images.error !== undefined) {
         res.status(400).json({ success: false, message: images.error });
         return;
@@ -238,7 +238,7 @@ const loadOwnedProduct = (req: Request, res: Response): ProductListing | undefin
 };
 
 // Seller edits the listing details and/or marks it sold out or available.
-export const updateProduct = (req: Request, res: Response): void => {
+export const updateProduct = async (req: Request, res: Response): Promise<void> => {
     const product = loadOwnedProduct(req, res);
     if (!product) return;
 
@@ -258,7 +258,7 @@ export const updateProduct = (req: Request, res: Response): void => {
     }
     let images: string[] | undefined;
     if (body.images !== undefined) {
-        const parsed = readImages(body.images);
+        const parsed = await readImages(body.images, product.images);
         if (parsed.error !== undefined) {
             res.status(400).json({ success: false, message: parsed.error });
             return;

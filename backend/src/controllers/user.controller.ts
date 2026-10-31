@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
-import fs from "fs";
-import path from "path";
 import { UserModel } from "#models/user.model";
+import { deleteStoredImage } from "#controllers/upload.controller";
 import { signToken } from "#utils/token";
 import { authUserId } from "#middleware/auth.middleware";
 import { verifyPassword } from "#utils/password";
@@ -172,24 +171,22 @@ export const changePassword = (req: Request<{ id: string }>, res: Response): voi
     res.json({ success: true, data: { message: 'Password updated successfully' } });
 };
 
+// The photo is already checked and in S3 (receiveImages in user.routes.ts).
 export const uploadProfilePhoto = (req: Request<{ id: string }>, res: Response): void => {
     const userId = Number(req.params.id);
-    if (!Number.isInteger(userId) || userId <= 0 || !req.file) {
+    const [photoUrl] = (res.locals.uploadedImages as string[] | undefined) ?? [];
+    if (!Number.isInteger(userId) || userId <= 0 || !photoUrl) {
         res.status(400).json({ success: false, message: 'A profile photo is required' });
         return;
     }
     const existingUser = UserModel.findById(userId);
     if (!existingUser) {
-        fs.unlinkSync(req.file.path);
+        void deleteStoredImage(photoUrl, 'profiles');
         res.status(404).json({ success: false, message: 'User not found' });
         return;
     }
-    const photoUrl = `/uploads/profile/${req.file.filename}`;
     const user = UserModel.setProfilePhoto(userId, photoUrl);
-    if (existingUser.profile_photo_url?.startsWith('/uploads/profile/')) {
-        const previousPath = path.resolve(__dirname, '../../uploads/profile', path.basename(existingUser.profile_photo_url));
-        if (fs.existsSync(previousPath)) fs.unlinkSync(previousPath);
-    }
+    if (existingUser.profile_photo_url) void deleteStoredImage(existingUser.profile_photo_url, 'profiles');
     res.json({ success: true, data: publicUser(user) });
 };
 
@@ -200,10 +197,7 @@ export const deleteProfilePhoto = (req: Request<{ id: string }>, res: Response):
         res.status(404).json({ success: false, message: 'User not found' });
         return;
     }
-    if (user.profile_photo_url?.startsWith('/uploads/profile/')) {
-        const photoPath = path.resolve(__dirname, '../../uploads/profile', path.basename(user.profile_photo_url));
-        if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
-    }
+    if (user.profile_photo_url) void deleteStoredImage(user.profile_photo_url, 'profiles');
     res.json({ success: true, data: publicUser(UserModel.setProfilePhoto(userId, null)) });
 };
 

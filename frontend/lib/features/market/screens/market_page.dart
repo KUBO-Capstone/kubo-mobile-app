@@ -1,13 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/market_service.dart';
-import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
 import '../../../shared/widgets/kubo_search_field.dart';
-import '../../explore/screens/explore_page.dart';
-import '../../listing/screens/create_listing_page.dart';
-import '../../profile/screens/profile_page.dart';
-import '../../search/screens/search_page.dart';
+import '../../shell/providers/app_shell_controller.dart';
 import '../providers/market_watch_controller.dart';
 import '../widgets/market_price_table.dart';
 import '../widgets/market_view_pill.dart';
@@ -32,6 +30,9 @@ class MarketPage extends StatefulWidget {
 class _MarketPageState extends State<MarketPage> {
   late final MarketWatchController _controller;
   final _searchController = TextEditingController();
+  final _scroll = ScrollController();
+  final _refreshKey = GlobalKey<RefreshIndicatorState>();
+  late final StreamSubscription<AppTab> _reselected;
 
   @override
   void initState() {
@@ -39,41 +40,20 @@ class _MarketPageState extends State<MarketPage> {
     _controller = MarketWatchController();
     _controller.load();
     _searchController.addListener(() => _controller.setQuery(_searchController.text));
+    // Tapping Market again scrolls back to the top, then refreshes prices.
+    _reselected = AppShellController.instance.onReselect(
+      AppTab.market,
+      () => scrollToTopOr(_scroll, () => _refreshKey.currentState?.show()),
+    );
   }
 
   @override
   void dispose() {
+    _reselected.cancel();
+    _scroll.dispose();
     _searchController.dispose();
     _controller.dispose();
     super.dispose();
-  }
-
-  void _navigateToTab(int index) {
-    if (index == 2) {
-      return;
-    }
-
-    Widget destination;
-    switch (index) {
-      case 0:
-        destination = ExplorePage(initialLocationLabel: widget.initialLocationLabel);
-      case 1:
-        destination = SearchPage(initialLocationLabel: widget.initialLocationLabel);
-      case 3:
-        destination = ProfilePage(initialLocationLabel: widget.initialLocationLabel);
-      default:
-        destination = MarketPage(initialLocationLabel: widget.initialLocationLabel);
-    }
-
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute<void>(builder: (_) => destination));
-  }
-
-  void _openCreateListing() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const CreateListingPage()),
-    );
   }
 
   void _openProduct(MarketProductSummary product) {
@@ -135,11 +115,6 @@ class _MarketPageState extends State<MarketPage> {
           },
         ),
       ),
-      bottomNavigationBar: KuboBottomNavigationBar(
-        currentIndex: 2,
-        onDestinationSelected: _navigateToTab,
-        onCenterActionPressed: _openCreateListing,
-      ),
     );
   }
 
@@ -156,10 +131,13 @@ class _MarketPageState extends State<MarketPage> {
       return const _Message(text: 'No market products match that search.');
     }
     return RefreshIndicator(
+      key: _refreshKey,
       color: AppColors.green,
       onRefresh: _controller.load,
       child: ListView(
+        controller: _scroll,
         physics: const AlwaysScrollableScrollPhysics(),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.only(bottom: 16),
         children: [
           _SourceNote(

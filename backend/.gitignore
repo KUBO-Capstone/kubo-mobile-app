@@ -14,3 +14,6 @@ yarn-debug.log*
 yarn-error.log*
 
 src/database/db.sqlite
+
+# User uploads (profile and listing photos) written by multer at runtime
+uploads/

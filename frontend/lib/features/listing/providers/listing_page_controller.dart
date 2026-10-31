@@ -4,14 +4,9 @@ import '../../../shared/data/market_service.dart';
 import '../../../shared/data/synthetic_records.dart';
 
 class ListingPageController extends ChangeNotifier {
-  ListingPageController({
-    required SyntheticListingRecord listing,
-    List<String>? images,
-  })  : _listing = listing,
-        _images = images ?? const <String>[];
+  ListingPageController({required SyntheticListingRecord listing}) : _listing = listing;
 
   SyntheticListingRecord _listing;
-  final List<String> _images;
 
   /// Set once the seller edits, archives or removes the listing from this
   /// page, so the caller knows to refresh its list when we pop.
@@ -57,7 +52,9 @@ class ListingPageController extends ChangeNotifier {
     _changed = true;
   }
 
-  List<String> get images => List<String>.unmodifiable(_images);
+  /// The listing's photos, cover first; mock rows fall back to their asset.
+  List<String> get images =>
+      _listing.images.isEmpty ? <String>[_listing.imageAssetPath] : _listing.images;
 
   int get currentImageIndex => _currentImageIndex;
 

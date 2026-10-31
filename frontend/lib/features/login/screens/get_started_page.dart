@@ -3,6 +3,7 @@ import 'package:philippines_rpcmb/philippines_rpcmb.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../explore/screens/explore_page.dart';
+import '../../shell/screens/app_shell.dart';
 import '../providers/get_started_form_controller.dart';
 import '../services/auth_service.dart';
 import '../widgets/login_field_section.dart';
@@ -140,16 +141,15 @@ class _GetStartedPageState extends State<GetStartedPage> {
         zipCode: zipCode,
       );
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(
-          builder:
-              (_) => ExplorePage(
-                initialLocationLabel:
-                    _controller.selectedCity?.name ??
-                    _controller.selectedRegion?.regionName ??
-                    ExplorePage.defaultLocationLabel,
-              ),
+      // Replace the whole sign-up flow so Back cannot return to it.
+      Navigator.of(context).pushAndRemoveUntil(
+        AppShell.route(
+          initialLocationLabel:
+              _controller.selectedCity?.name ??
+              _controller.selectedRegion?.regionName ??
+              ExplorePage.defaultLocationLabel,
         ),
+        (route) => false,
       );
     } catch (error) {
       if (mounted) {

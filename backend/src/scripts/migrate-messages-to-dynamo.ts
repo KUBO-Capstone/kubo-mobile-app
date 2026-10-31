@@ -5,6 +5,8 @@
  * Re-runnable: each message id is derived from its old row, so rows already
  * copied are left as they are and a partial run can simply be started again.
  * Run:  npm run migrate:messages
++* Before this command, stop every old server that can write SQLite messages.
++* Run `npm run ddb:create-messages` first, then `npm run migrate:messages`.
  */
 import 'dotenv/config'; // must stay first so env vars exist before other imports read them
 import { encodeTime, TIME_LEN } from 'ulid';

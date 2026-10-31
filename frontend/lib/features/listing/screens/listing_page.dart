@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../providers/listing_page_controller.dart';
 import '../widgets/action_button.dart';
@@ -10,6 +11,7 @@ import '../widgets/make_offer_dialog.dart';
 import '../widgets/manage_listing_sheet.dart';
 import '../widgets/market_reference_line.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../shared/data/listing_options.dart';
 import '../../../shared/data/synthetic_records.dart';
 import '../../../shared/data/message_service.dart';
 import '../../../shared/widgets/kubo_save_button.dart';
@@ -33,21 +35,12 @@ class ListingPage extends StatefulWidget {
 }
 
 class _ListingPageState extends State<ListingPage> {
-  static const List<String> _listingImages = <String>[
-    'https://picsum.photos/id/1018/600/400',
-    'https://picsum.photos/id/1015/600/400',
-    'https://picsum.photos/id/1016/600/400',
-  ];
-
   late final ListingPageController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = ListingPageController(
-      listing: widget.listing,
-      images: _listingImages,
-    );
+    _controller = ListingPageController(listing: widget.listing);
     _controller.loadMarketReference();
   }
 
@@ -121,6 +114,15 @@ class _ListingPageState extends State<ListingPage> {
     }
   }
 
+  Future<void> _share(SyntheticListingRecord listing) async {
+    final where = listing.locationLabel.isEmpty ? '' : ' in ${listing.locationLabel}';
+    await Share.share(
+      '${listing.title}, ${listing.price}$where.\n\n'
+      'See it on Kubo: https://kubo.app/listing/${listing.productId}',
+      subject: '${listing.title} on Kubo',
+    );
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -162,6 +164,7 @@ class _ListingPageState extends State<ListingPage> {
                       onFavoriteToggle: canSave
                           ? () => KuboSaveButton.toggle(context, listing)
                           : null,
+                      onShare: listing.productId == null ? null : () => _share(listing),
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -208,12 +211,23 @@ class _ListingPageState extends State<ListingPage> {
                                       children: [
                                         if (listing.isSoldOut)
                                           const ListingTag(label: 'Sold out'),
+                                        if (listing.isPreorder)
+                                          const ListingTag(label: 'Pre-order'),
+                                        if (listing.qualityGrade != null)
+                                          ListingTag(
+                                            label: ListingOptions.labelOf(ListingOptions.qualityGrades, listing.qualityGrade),
+                                          ),
+                                        if (listing.farmingMethod != null && listing.farmingMethod != 'conventional')
+                                          ListingTag(
+                                            label: ListingOptions.labelOf(ListingOptions.farmingMethods, listing.farmingMethod),
+                                          ),
                                         ListingTag(label: listing.regionLabel),
                                         ...listing.groups
                                             .take(2)
                                             .map(
-                                              (groupName) =>
-                                                  ListingTag(label: groupName),
+                                              (groupName) => ListingTag(
+                                                label: ListingOptions.labelOf(ListingOptions.categories, groupName),
+                                              ),
                                             ),
                                       ],
                                     ),
@@ -230,6 +244,22 @@ class _ListingPageState extends State<ListingPage> {
                                 value: listing.locationLabel,
                               ),
                               const SizedBox(height: 8),
+                              if (listing.availableQuantity != null) ...[
+                                ListingInfoRow(
+                                  icon: Icons.inventory_2_outlined,
+                                  value: '${formatQuantity(listing.availableQuantity!)} ${listing.unit ?? ''} available',
+                                ),
+                                const SizedBox(height: 8),
+                              ],
+                              if (listing.harvestDate != null) ...[
+                                ListingInfoRow(
+                                  icon: Icons.agriculture_outlined,
+                                  value: listing.isPreorder
+                                      ? 'Expected harvest ${formatListingDate(listing.harvestDate!)}'
+                                      : 'Harvested ${formatListingDate(listing.harvestDate!)}',
+                                ),
+                                const SizedBox(height: 8),
+                              ],
                               ListingInfoRow(
                                 icon: Icons.favorite_border,
                                 value: '${listing.numLikes} likes',
@@ -259,6 +289,30 @@ class _ListingPageState extends State<ListingPage> {
                               height: 1.6,
                             ),
                           ),
+                          if (listing.productId != null) ...[
+                            const SizedBox(height: 24),
+                            const Text(
+                              'Deal method',
+                              style: TextStyle(
+                                color: AppColors.black,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            if (listing.allowsMeetup)
+                              const _DealMethodRow(
+                                icon: Icons.warehouse_outlined,
+                                title: 'Meet-up',
+                                subtitle: 'Pick it up at a bagsakan center',
+                              ),
+                            if (listing.allowsDelivery)
+                              const _DealMethodRow(
+                                icon: Icons.local_shipping_outlined,
+                                title: 'Delivery',
+                                subtitle: 'The farmer ships it by courier',
+                              ),
+                          ],
                           const SizedBox(height: 24),
                           SellerCard(listing: listing),
                           const SizedBox(height: 28),
@@ -311,6 +365,43 @@ class _ListingPageState extends State<ListingPage> {
           ),
         );
       },
+    );
+  }
+}
+
+class _DealMethodRow extends StatelessWidget {
+  const _DealMethodRow({required this.icon, required this.title, required this.subtitle});
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.softBackground,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: AppColors.green, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(color: AppColors.black, fontSize: 14, fontWeight: FontWeight.w700)),
+                Text(subtitle, style: const TextStyle(color: AppColors.gray, fontSize: 12)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

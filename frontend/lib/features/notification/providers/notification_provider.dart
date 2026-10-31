@@ -92,7 +92,7 @@ class ProductDetails {
       quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
       unit: json['unit']?.toString() ?? '',
       status: json['status']?.toString() ?? 'unknown',
-      image: json['image']?.toString(),
+      image: resolveMediaUrl(json['image']?.toString()),
     );
   }
 

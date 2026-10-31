@@ -14,7 +14,11 @@ class KuboIconActionButton extends StatelessWidget {
     this.backgroundColor = AppColors.white,
     this.iconColor = AppColors.black,
     this.badgeCount = 0,
+    this.tooltip,
   });
+
+  /// Shown on long press and read out by screen readers.
+  final String? tooltip;
 
   /// SVG icon asset rendered inside the button.
   final String assetPath;
@@ -40,7 +44,8 @@ class KuboIconActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkResponse(
+    final label = tooltip;
+    final button = InkResponse(
       onTap: onTap,
       radius: size / 2 + 6,
       child: SizedBox(
@@ -91,6 +96,19 @@ class KuboIconActionButton extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+    if (label == null) return button;
+    final unread = badgeCount > 0 ? ', $badgeCount unread' : '';
+    return Tooltip(
+      message: label,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        label: '$label$unread',
+        onTap: onTap,
+        excludeSemantics: true,
+        child: button,
       ),
     );
   }

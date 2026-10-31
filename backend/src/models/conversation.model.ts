@@ -19,6 +19,9 @@ export interface ConversationSummary {
     base_price: number;
     unit_measurement: string;
     product_status: string;
+    // Deal methods the seller accepts; the order page only offers these.
+    allows_meetup: boolean;
+    allows_delivery: boolean;
     product_image: string | null;
     seller_location: string;
     created_at: string;
@@ -47,6 +50,7 @@ const conversationQuery = `
            b.first_name || ' ' || b.last_name AS buyer_name,
            s.first_name || ' ' || s.last_name AS seller_name,
            p.crop_name, p.base_price, p.unit_measurement, p.status AS product_status,
+           p.allows_meetup, p.allows_delivery,
            (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.display_order LIMIT 1) AS product_image,
            COALESCE(a.city_municipality, 'Philippines') AS seller_location,
            c.last_message_preview AS last_message,
@@ -83,6 +87,8 @@ function mapConversation(row: Record<string, unknown>): ConversationSummary {
         base_price: Number(row.base_price),
         unit_measurement: String(row.unit_measurement),
         product_status: String(row.product_status),
+        allows_meetup: Boolean(Number(row.allows_meetup ?? 1)),
+        allows_delivery: Boolean(Number(row.allows_delivery ?? 1)),
         product_image: str(row.product_image),
         seller_location: String(row.seller_location),
         created_at: String(row.created_at),

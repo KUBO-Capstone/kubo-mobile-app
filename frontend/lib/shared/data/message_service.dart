@@ -95,6 +95,8 @@ class ConversationRecord {
     required this.basePrice,
     required this.unit,
     required this.productStatus,
+    required this.allowsMeetup,
+    required this.allowsDelivery,
     required this.sellerLocation,
     required this.isUnread,
     this.productImage,
@@ -122,7 +124,9 @@ class ConversationRecord {
       basePrice: (json['base_price'] as num?)?.toDouble() ?? 0,
       unit: json['unit_measurement']?.toString() ?? '',
       productStatus: json['product_status']?.toString() ?? 'available',
-      productImage: json['product_image']?.toString(),
+      allowsMeetup: json['allows_meetup'] != false,
+      allowsDelivery: json['allows_delivery'] != false,
+      productImage: resolveMediaUrl(json['product_image']?.toString()),
       sellerLocation: json['seller_location']?.toString() ?? 'Philippines',
       isUnread: json['is_unread'] == true,
       lastMessage: json['last_message']?.toString(),
@@ -146,6 +150,10 @@ class ConversationRecord {
   final double basePrice;
   final String unit;
   final String productStatus;
+
+  /// Deal methods the seller accepts; passed on to the order page.
+  final bool allowsMeetup;
+  final bool allowsDelivery;
   final String? productImage;
   final String sellerLocation;
   /// The other party sent something after this user last opened the thread.
@@ -219,6 +227,8 @@ class ConversationRecord {
       buyerName: buyerName,
       sellerName: sellerName,
       createdAt: null,
+      allowsMeetup: allowsMeetup,
+      allowsDelivery: allowsDelivery,
     );
   }
 }

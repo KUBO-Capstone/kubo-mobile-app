@@ -41,14 +41,25 @@ class _AuthorizedClient extends http.BaseClient {
   void close() => _inner.close();
 }
 
+/// Turns a server-relative upload path (`/uploads/...`) into a URL on the
+/// API host. Absolute URLs pass through; null or empty gives null.
+String? resolveMediaUrl(String? path) {
+  if (path == null || path.isEmpty) return null;
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return Uri.parse(ApiConfig.baseUrl).replace(path: path).toString();
+}
+
 String get unreachableServerMessage =>
     'Cannot reach the Kubo server at ${ApiConfig.baseUrl}. Check that the '
     'backend is running (`npm run dev` in backend/) and, on a physical phone, '
     'that API_BASE_URL points at the LAN IP of this machine.';
 
-Future<http.Response> sendRequest(Future<http.Response> Function() send) async {
+Future<http.Response> sendRequest(
+  Future<http.Response> Function() send, {
+  Duration timeout = apiTimeout,
+}) async {
   try {
-    return await send().timeout(apiTimeout);
+    return await send().timeout(timeout);
   } on TimeoutException {
     throw Exception(unreachableServerMessage);
   } on http.ClientException {

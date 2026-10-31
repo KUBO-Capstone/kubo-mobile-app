@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../shared/widgets/kubo_image.dart';
 import '../providers/notification_provider.dart';
 
 class NotificationDetailPage extends StatelessWidget {
@@ -129,12 +130,11 @@ class _ProductImage extends StatelessWidget {
     if (source == null || source.isEmpty) {
       return _placeholder();
     }
-    return Image.network(
+    return KuboImage(
       source,
       height: 190,
       width: double.infinity,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => _placeholder(),
+      errorIcon: Icons.shopping_basket_outlined,
     );
   }
 

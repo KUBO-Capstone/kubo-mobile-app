@@ -237,6 +237,7 @@ class ProfilePageController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _listingService.dispose();
     _profileService.dispose();
     super.dispose();
@@ -250,5 +251,14 @@ class ProfilePageController extends ChangeNotifier {
 
     _selectedSection = section;
     notifyListeners();
+  }
+
+  // Leaving a profile while its listings are still loading disposes this
+  // controller before the request settles.
+  bool _disposed = false;
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
   }
 }

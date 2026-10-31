@@ -178,6 +178,55 @@ const storeImage = async (folder: MediaFolder, data: Buffer, type: ImageType): P
     return mediaUrlForKey(key);
 };
 
+// Uploads are held in memory, so the bytes held at once are capped. Before
+// multer reads anything, a request reserves the most it can hold (maxFiles x
+// maxBytes, which multer enforces on the bytes it actually receives, whatever
+// Content-Length claims) and gives it back once its response is over. A
+// request that does not fit waits in line for a short while, then gets a 503.
+const uploadMemoryBudget = 160 * 1024 * 1024; // two full 10-photo listing uploads
+const maxQueuedUploads = 20;
+const maxUploadWaitMs = 30_000;
+
+let reservedUploadBytes = 0;
+const uploadQueue: { bytes: number; admit: () => void }[] = [];
+
+const admitQueuedUploads = (): void => {
+    while (uploadQueue.length > 0 && reservedUploadBytes + uploadQueue[0].bytes <= uploadMemoryBudget) {
+        const next = uploadQueue.shift()!;
+        reservedUploadBytes += next.bytes;
+        next.admit();
+    }
+};
+
+// True once `bytes` are reserved; false when the line is full or the wait runs out.
+const reserveUploadMemory = (bytes: number): Promise<boolean> => {
+    if (uploadQueue.length === 0 && reservedUploadBytes + bytes <= uploadMemoryBudget) {
+        reservedUploadBytes += bytes;
+        return Promise.resolve(true);
+    }
+    if (uploadQueue.length >= maxQueuedUploads) return Promise.resolve(false);
+    return new Promise((resolve) => {
+        const entry = {
+            bytes,
+            admit: () => {
+                clearTimeout(timer);
+                resolve(true);
+            },
+        };
+        const timer = setTimeout(() => {
+            uploadQueue.splice(uploadQueue.indexOf(entry), 1);
+            admitQueuedUploads(); // whoever was behind it may fit now
+            resolve(false);
+        }, maxUploadWaitMs);
+        uploadQueue.push(entry);
+    });
+};
+
+const releaseUploadMemory = (bytes: number): void => {
+    reservedUploadBytes -= bytes;
+    admitQueuedUploads();
+};
+
 type ReceiveImagesOptions = {
     /** Multipart field the photos arrive in. */
     field: string;
@@ -193,15 +242,35 @@ type ReceiveImagesOptions = {
  * checks each one is a still JPEG, PNG or WebP image, uploads them to the
  * bucket and leaves their stored URLs, in upload order, in
  * res.locals.uploadedImages. Rejects the whole upload rather than skipping a
- * file, so the URLs always line up one-to-one with the photos sent.
+ * file, so the URLs always line up one-to-one with the photos sent. Waits
+ * its turn while other uploads hold the memory budget.
  */
 export const receiveImages = ({ field, folder, maxFiles, maxBytes, messages }: ReceiveImagesOptions): RequestHandler => {
     const upload = multer({
         storage: multer.memoryStorage(),
-        limits: { fileSize: maxBytes, files: maxFiles },
+        // The app sends files only; text fields would be held in memory too.
+        limits: { fileSize: maxBytes, files: maxFiles, fields: 0 },
     }).array(field, maxFiles);
+    const reservation = Math.min(maxFiles * maxBytes, uploadMemoryBudget);
 
-    return (req, res, next) => {
+    return async (req, res, next) => {
+        if (!(await reserveUploadMemory(reservation))) {
+            res.set('Retry-After', '10');
+            res.status(503).json({ success: false, message: 'The server is busy with other uploads. Please try again in a moment.' });
+            return;
+        }
+        let released = false;
+        const release = () => {
+            if (released) return;
+            released = true;
+            releaseUploadMemory(reservation);
+        };
+        // Fires when the response is done or the client hangs up.
+        res.once('close', release);
+        if (req.destroyed || req.socket.destroyed) {
+            release(); // hung up while waiting in line
+            return;
+        }
         upload(req, res, async (error: unknown) => {
             if (error instanceof multer.MulterError) {
                 res.status(400).json({ success: false, message: messages[error.code] ?? error.message });

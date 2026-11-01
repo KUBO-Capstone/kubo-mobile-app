@@ -14,9 +14,11 @@ and display do not work without the S3 settings below.**
 - Uploads are held in memory, checked by their bytes (still JPEG, PNG or
   WebP only; the file name and MIME type the client sends are ignored), then
   written with `PutObject`. Code: `backend/src/controllers/upload.controller.ts`.
-- The database stores the plain S3 URL,
-  `https://<bucket>.s3.<region>.amazonaws.com/<key>`
-  (`product_images.image_url`, `users.profile_photo_url`).
+- The database stores the object key (`product_images.image_key`,
+  `users.profile_photo_key`). The models turn it into the plain S3 URL,
+  `https://<bucket>.s3.<region>.amazonaws.com/<key>`, which is what the rest
+  of the backend works with. Absolute URLs that are not ours (the seed data's
+  sample photos) are stored and returned as they are.
 - The bucket stays private. Before any JSON response is sent, each stored URL
   in it is replaced with one the app can load
   (`backend/src/middleware/media.middleware.ts`):
@@ -71,7 +73,9 @@ would.
 
 Photos saved before this change sit in `backend/uploads/products/` and
 `backend/uploads/profile/`. Copy them to the bucket and point the database at
-them:
+them. The script works on the old SQLite database
+(`backend/src/database/db.sqlite`), not on Postgres, so run it before that
+data is copied anywhere:
 
 ```
 cd backend
@@ -85,10 +89,3 @@ URLs are left alone. Files that are not a still JPG, PNG or WebP are skipped
 and listed, as are rows that still point at a local path afterwards. It never
 deletes local files; remove `backend/uploads/` yourself once the app shows
 every photo.
-
-## RDS schema note
-
-`backend/src/database/migrations/001_init.sql` (the RDS schema) stores object
-keys (`profile_photo_key`, `image_key`) rather than URLs. When the data moves
-to RDS, the key is the stored URL with the
-`https://<bucket>.s3.<region>.amazonaws.com/` prefix removed.

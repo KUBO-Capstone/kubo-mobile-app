@@ -160,11 +160,12 @@ export const ProductModel = {
     async update(productId: number, changes: ProductChanges, images?: string[]): Promise<ProductListing | undefined> {
         const columns = (Object.keys(changes) as (keyof ProductChanges)[]).filter((key) => changes[key] !== undefined);
         await withTransaction(async (client) => {
-            if (columns.length > 0) {
-                const assignments = columns.map((column, i) => `${column} = $${i + 2}`).join(', ');
-                await client.query(`UPDATE products SET ${assignments}, updated_at = CURRENT_TIMESTAMP WHERE product_id = $1`,
-                    [productId, ...columns.map((column) => changes[column])]);
-            }
+            // Runs even for a photo-only edit: it locks the product row, so two
+            // edits replacing the photos at once take turns instead of
+            // leaving both new photo lists behind.
+            const assignments = columns.map((column, i) => `${column} = $${i + 2}, `).join('');
+            await client.query(`UPDATE products SET ${assignments}updated_at = CURRENT_TIMESTAMP WHERE product_id = $1`,
+                [productId, ...columns.map((column) => changes[column])]);
             if (images) {
                 await client.query(`DELETE FROM product_images WHERE product_id = $1`, [productId]);
                 await insertImages(client, productId, images);

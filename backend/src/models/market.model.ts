@@ -1,11 +1,11 @@
-import { db } from "#config/database";
+import { isRowId, pool } from "#database/pg";
 import { DA_REGIONS } from "#market/bantay-presyo";
 
 // Market Watch: reference prices per product per area. Nothing here reads
 // Kubo listings - it is the "what does this cost at the market" table buyers
 // compare a farmer's asking price against.
 //
-// market_prices holds two kinds of row (config/database.ts): 'region' rows are
+// market_prices holds two kinds of row (001_init.sql): 'region' rows are
 // the daily history (one per product x region x date, aggregated across that
 // region's markets) and 'market' rows are the latest per-market snapshot (the
 // map pins). Trends compare a region's latest row with its row from at least
@@ -146,9 +146,17 @@ function mapProduct(row: MarketProductRow) {
     };
 }
 
-function pricesFor(productId: number): PriceRow[] {
-    return db.prepare(`SELECT * FROM market_prices WHERE market_product_id = ? ORDER BY recorded_at DESC`)
-        .all(productId) as PriceRow[];
+// Every price row of each product, newest first, keyed by product. One query
+// for the whole Market tab rather than one per product.
+async function pricesFor(productIds: number[]): Promise<Map<number, PriceRow[]>> {
+    const byProduct = new Map<number, PriceRow[]>(productIds.map((id) => [id, []]));
+    if (productIds.length === 0) return byProduct;
+    const { rows } = await pool.query<PriceRow>(
+        `SELECT * FROM market_prices WHERE market_product_id = ANY($1::int[]) ORDER BY recorded_at DESC, market_price_id`,
+        [productIds],
+    );
+    for (const row of rows) byProduct.get(row.market_product_id)?.push(row);
+    return byProduct;
 }
 
 // Each region's newest region row (within STALE_DAYS of the product's newest)
@@ -216,28 +224,31 @@ function toArea(row: PriceRow, unit: string, changePct: number | null): MarketAr
 
 export const MarketModel = {
     // Table for the Market tab, optionally narrowed by search and classification.
-    listProducts(query = '', classification?: MarketClassification): MarketProductSummary[] {
+    async listProducts(query = '', classification?: MarketClassification): Promise<MarketProductSummary[]> {
         const conditions: string[] = [];
-        const params: Record<string, unknown> = {};
+        const params: unknown[] = [];
         if (query.trim()) {
-            conditions.push(`(LOWER(name) LIKE @q OR LOWER(product_groups) LIKE @q OR LOWER(crop_keywords) LIKE @q)`);
-            params.q = `%${query.trim().toLowerCase()}%`;
+            params.push(`%${query.trim().toLowerCase()}%`);
+            const n = `$${params.length}`;
+            conditions.push(`(LOWER(name) LIKE ${n} OR LOWER(product_groups) LIKE ${n} OR LOWER(crop_keywords) LIKE ${n})`);
         }
         if (classification) {
-            conditions.push(`classification = @classification`);
-            params.classification = classification;
+            params.push(classification);
+            conditions.push(`classification = $${params.length}`);
         }
         const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-        const products = db.prepare(`SELECT * FROM market_products ${where} ORDER BY classification, name`).all(params) as MarketProductRow[];
-        return products.map((product) => summarize(product, regionStates(pricesFor(product.market_product_id))));
+        const { rows: products } = await pool.query<MarketProductRow>(`SELECT * FROM market_products ${where} ORDER BY classification, name`, params);
+        const prices = await pricesFor(products.map((product) => product.market_product_id));
+        return products.map((product) => summarize(product, regionStates(prices.get(product.market_product_id) ?? [])));
     },
 
     // Product dashboard: nationwide summary, one row per region with its own
     // trend, and the latest per-market prices for the map.
-    findProduct(productId: number): MarketProductDetail | undefined {
-        const product = db.prepare(`SELECT * FROM market_products WHERE market_product_id = ?`).get(productId) as MarketProductRow | undefined;
+    async findProduct(productId: number): Promise<MarketProductDetail | undefined> {
+        if (!isRowId(productId)) return undefined;
+        const { rows: [product] } = await pool.query<MarketProductRow>(`SELECT * FROM market_products WHERE market_product_id = $1`, [productId]);
         if (!product) return undefined;
-        const rows = pricesFor(productId);
+        const rows = (await pricesFor([productId])).get(productId) ?? [];
         const states = regionStates(rows);
         const unit = product.unit_measurement;
 
@@ -260,10 +271,10 @@ export const MarketModel = {
     // Reference price for a Kubo listing: match the crop name against each
     // product's keywords (longest keyword wins so "corn starch" beats "corn"),
     // then take the seller's region's latest aggregate.
-    findReference(cropName: string, region?: string): MarketReference | undefined {
+    async findReference(cropName: string, region?: string): Promise<MarketReference | undefined> {
         const needle = cropName.trim().toLowerCase();
         if (!needle) return undefined;
-        const products = db.prepare(`SELECT * FROM market_products`).all() as MarketProductRow[];
+        const { rows: products } = await pool.query<MarketProductRow>(`SELECT * FROM market_products`);
         let best: { product: MarketProductRow; keyword: string } | undefined;
         for (const product of products) {
             for (const keyword of product.crop_keywords.split(',').map((k) => k.trim().toLowerCase()).filter(Boolean)) {
@@ -274,7 +285,8 @@ export const MarketModel = {
         }
         if (!best) return undefined;
 
-        const states = regionStates(pricesFor(best.product.market_product_id));
+        const productId = best.product.market_product_id;
+        const states = regionStates((await pricesFor([productId])).get(productId) ?? []);
         const summary = summarize(best.product, states);
         const wanted = region ? normalizeRegion(region) : null;
         const inRegion = wanted ? states.find((s) => normalizeRegion(s.current.region) === wanted) : undefined;

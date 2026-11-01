@@ -1,6 +1,7 @@
-import { db } from "#config/database";
+import { isRowId, pool, Queryable, withTransaction } from "#database/pg";
+import { fromMediaColumn, toMediaColumn } from "#controllers/upload.controller";
 
-// Mirror the CHECK constraints on products in config/database.ts.
+// Mirror the CHECK constraints on products in database/migrations.
 export const productCategories = ['vegetable', 'fruit', 'grain', 'legume', 'herb', 'spice'] as const;
 export const productUnits = ['kg', 'g', 'lb', 'oz', 'liter', 'ml', 'piece'] as const;
 export const qualityGrades = ['premium', 'standard', 'imperfect'] as const;
@@ -28,9 +29,9 @@ export interface ProductInput extends ProductDetails {
     seller_id: number;
 }
 
-// Mirrors the CHECK constraint on products.status in config/database.ts.
-// 'delisted' is the soft delete: negotiations cascade on a real DELETE, so
-// removing a listing must never drop the row.
+// Mirrors the CHECK constraint on products.status in database/migrations.
+// 'delisted' is the soft delete: negotiations and orders keep pointing at the
+// row (the schema refuses a real DELETE), so removing a listing never drops it.
 export type ProductStatus = 'available' | 'out of stock' | 'delisted';
 
 // Fields a seller may change after publishing. Everything is optional so a
@@ -53,12 +54,6 @@ export interface ProductListing extends ProductDetails {
     seller_review_count: number;
 }
 
-const booleanColumns = new Set<string>(['is_preorder', 'allows_meetup', 'allows_delivery']);
-
-// better-sqlite3 cannot bind JS booleans; the columns hold 0 / 1.
-const toRow = (values: Record<string, unknown>): Record<string, unknown> =>
-    Object.fromEntries(Object.entries(values).map(([key, value]) => [key, booleanColumns.has(key) ? (value ? 1 : 0) : value]));
-
 // Exported so other models (saved listings) can list products in exactly the
 // shape the explore grid gets; keep the two in step.
 export const listingQuery = `
@@ -67,14 +62,13 @@ export const listingQuery = `
            COALESCE(a.region, 'NCR') AS region_label,
            a.latitude AS latitude,
            a.longitude AS longitude,
-           GROUP_CONCAT(pi.image_url, '||' ORDER BY pi.display_order) AS image_urls,
+           ARRAY(SELECT pi.image_key FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.display_order) AS images,
            (SELECT ROUND(AVG(r.rating), 1) FROM reviews r WHERE r.reviewee_id = p.seller_id) AS seller_rating,
            (SELECT COUNT(*) FROM reviews r WHERE r.reviewee_id = p.seller_id) AS seller_review_count
     FROM products p
     JOIN users u ON u.user_id = p.seller_id
     LEFT JOIN farmer_profiles fp ON fp.farmer_id = p.seller_id
     LEFT JOIN addresses a ON a.address_id = fp.address_id
-    LEFT JOIN product_images pi ON pi.product_id = p.product_id
 `;
 
 export function mapListing(row: Record<string, unknown>): ProductListing {
@@ -98,81 +92,91 @@ export function mapListing(row: Record<string, unknown>): ProductListing {
         quality_grade: (row.quality_grade ?? 'standard') as QualityGrade,
         farming_method: (row.farming_method ?? 'conventional') as FarmingMethod,
         harvest_date: row.harvest_date ? String(row.harvest_date) : null,
-        is_preorder: Boolean(Number(row.is_preorder ?? 0)),
-        allows_meetup: Boolean(Number(row.allows_meetup ?? 1)),
-        allows_delivery: Boolean(Number(row.allows_delivery ?? 1)),
-        images: row.image_urls ? String(row.image_urls).split('||') : [],
+        is_preorder: row.is_preorder === true,
+        allows_meetup: row.allows_meetup !== false,
+        allows_delivery: row.allows_delivery !== false,
+        images: ((row.images ?? []) as string[]).map(fromMediaColumn),
         seller_rating: row.seller_rating === null || row.seller_rating === undefined ? null : Number(row.seller_rating),
         seller_review_count: Number(row.seller_review_count ?? 0),
     };
 }
 
-const insertImages = (productId: number, images: string[]): void => {
-    const statement = db.prepare(`INSERT INTO product_images (product_id, image_url, display_order) VALUES (?, ?, ?)`);
-    images.forEach((url, index) => statement.run(productId, url, index));
+// One statement for the whole list; display_order follows the array.
+const insertImages = async (q: Queryable, productId: number, images: string[]): Promise<void> => {
+    if (images.length === 0) return;
+    await q.query(`
+        INSERT INTO product_images (product_id, image_key, display_order)
+        SELECT $1::int, image.key, image.position - 1
+        FROM unnest($2::text[]) WITH ORDINALITY AS image(key, position)
+    `, [productId, images.map(toMediaColumn)]);
 };
 
 export const ProductModel = {
     // includeUnavailable adds 'out of stock' rows for a seller's own tab;
     // delisted rows never come back from a list query.
-    findAll(query = '', sellerId?: number, includeUnavailable = false): ProductListing[] {
+    async findAll(query = '', sellerId?: number, includeUnavailable = false): Promise<ProductListing[]> {
         const normalizedQuery = query.trim().toLowerCase();
         const conditions = [includeUnavailable ? `p.status IN ('available', 'out of stock')` : `p.status = 'available'`];
+        const params: unknown[] = [];
         if (normalizedQuery) {
-            conditions.push(`(LOWER(p.crop_name) LIKE @query OR LOWER(u.first_name || ' ' || u.last_name) LIKE @query OR LOWER(a.city_municipality) LIKE @query)`);
+            params.push(`%${normalizedQuery}%`);
+            const n = `$${params.length}`;
+            conditions.push(`(LOWER(p.crop_name) LIKE ${n} OR LOWER(u.first_name || ' ' || u.last_name) LIKE ${n} OR LOWER(a.city_municipality) LIKE ${n})`);
         }
         if (sellerId !== undefined) {
-            conditions.push(`p.seller_id = @sellerId`);
+            if (!isRowId(sellerId)) return [];
+            params.push(sellerId);
+            conditions.push(`p.seller_id = $${params.length}`);
         }
         const where = `WHERE ${conditions.join(' AND ')}`;
-        const rows = db.prepare(`${listingQuery} ${where} GROUP BY p.product_id ORDER BY p.created_at DESC`).all({
-            query: `%${normalizedQuery}%`,
-            sellerId,
-        }) as Record<string, unknown>[];
+        const { rows } = await pool.query(`${listingQuery} ${where} ORDER BY p.created_at DESC`, params);
         return rows.map(mapListing);
     },
 
-    findById(productId: number): ProductListing | undefined {
-        const rows = db.prepare(`${listingQuery} WHERE p.product_id = ? GROUP BY p.product_id`).all(productId) as Record<string, unknown>[];
+    async findById(productId: number): Promise<ProductListing | undefined> {
+        if (!isRowId(productId)) return undefined;
+        const { rows } = await pool.query(`${listingQuery} WHERE p.product_id = $1`, [productId]);
         return rows[0] ? mapListing(rows[0]) : undefined;
     },
 
-    create(input: ProductInput, images: string[]): ProductListing {
-        const transaction = db.transaction(() => {
-            const product = db.prepare(`
+    async create(input: ProductInput, images: string[]): Promise<ProductListing> {
+        const productId = await withTransaction(async (client) => {
+            const { rows: [product] } = await client.query(`
                 INSERT INTO products (seller_id, crop_name, category, base_price, available_quantity, unit_measurement,
                                       description, quality_grade, farming_method, harvest_date, is_preorder, allows_meetup, allows_delivery)
-                VALUES (@seller_id, @crop_name, @category, @base_price, @available_quantity, @unit_measurement,
-                        @description, @quality_grade, @farming_method, @harvest_date, @is_preorder, @allows_meetup, @allows_delivery)
-            `).run(toRow({ ...input }));
-            const productId = Number(product.lastInsertRowid);
-            insertImages(productId, images);
-            return productId;
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                RETURNING product_id
+            `, [input.seller_id, input.crop_name, input.category, input.base_price, input.available_quantity, input.unit_measurement,
+                input.description, input.quality_grade, input.farming_method, input.harvest_date,
+                input.is_preorder, input.allows_meetup, input.allows_delivery]);
+            await insertImages(client, product.product_id, images);
+            return Number(product.product_id);
         });
-        return ProductModel.findById(transaction()) as ProductListing;
+        return (await ProductModel.findById(productId)) as ProductListing;
     },
 
     // Applies only the keys present in changes. A non-null images list
     // replaces the listing's photos in the given order.
-    update(productId: number, changes: ProductChanges, images?: string[]): ProductListing | undefined {
+    async update(productId: number, changes: ProductChanges, images?: string[]): Promise<ProductListing | undefined> {
         const columns = (Object.keys(changes) as (keyof ProductChanges)[]).filter((key) => changes[key] !== undefined);
-        db.transaction(() => {
+        await withTransaction(async (client) => {
             if (columns.length > 0) {
-                const assignments = columns.map((column) => `${column} = @${column}`).join(', ');
-                db.prepare(`UPDATE products SET ${assignments}, updated_at = CURRENT_TIMESTAMP WHERE product_id = @product_id`)
-                    .run(toRow({ ...changes, product_id: productId }));
+                const assignments = columns.map((column, i) => `${column} = $${i + 2}`).join(', ');
+                await client.query(`UPDATE products SET ${assignments}, updated_at = CURRENT_TIMESTAMP WHERE product_id = $1`,
+                    [productId, ...columns.map((column) => changes[column])]);
             }
             if (images) {
-                db.prepare(`DELETE FROM product_images WHERE product_id = ?`).run(productId);
-                insertImages(productId, images);
+                await client.query(`DELETE FROM product_images WHERE product_id = $1`, [productId]);
+                await insertImages(client, productId, images);
             }
-        })();
+        });
         return ProductModel.findById(productId);
     },
 
     // Whether any listing still points at this photo, so an uploaded file is
-    // only deleted from disk once nothing shows it.
-    isImageInUse(imageUrl: string): boolean {
-        return db.prepare(`SELECT 1 FROM product_images WHERE image_url = ? LIMIT 1`).get(imageUrl) !== undefined;
+    // only deleted from S3 once nothing shows it.
+    async isImageInUse(imageUrl: string): Promise<boolean> {
+        const { rowCount } = await pool.query(`SELECT 1 FROM product_images WHERE image_key = $1 LIMIT 1`, [toMediaColumn(imageUrl)]);
+        return (rowCount ?? 0) > 0;
     },
 };

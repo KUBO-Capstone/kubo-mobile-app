@@ -1,10 +1,10 @@
-import { db } from "#config/database";
+import { isRowId, pool, Queryable } from "#database/pg";
+import { fromMediaColumn } from "#controllers/upload.controller";
 
 // Conversation metadata only. The messages themselves are in DynamoDB (see
 // models/message.model.ts). The inbox reads the denormalized last-message
-// and read-cursor columns, which mirror conversations in the RDS schema
-// (database/migrations/001_init.sql), so listing threads never touches
-// DynamoDB.
+// and read-cursor columns on conversations (database/migrations/001_init.sql),
+// so listing threads never touches DynamoDB.
 
 // One inbox row: the thread plus everything the list and the chat header
 // need without a second request.
@@ -53,30 +53,29 @@ export interface ConversationSummary {
 // Same length as conversations.last_message_preview in the RDS schema.
 const PREVIEW_LENGTH = 200;
 
-// @userId drives is_unread only; every other column is the same for both
-// parties. last_message_at and the read cursors are ISO strings written by
-// the app, so they compare correctly as text.
+// $1 is the caller: it drives is_unread, celebration_pending and
+// my_review_rating; every other column is the same for both parties.
 const conversationQuery = `
     SELECT c.*,
            b.first_name || ' ' || b.last_name AS buyer_name,
            s.first_name || ' ' || s.last_name AS seller_name,
            p.crop_name, p.base_price, p.unit_measurement, p.status AS product_status,
            p.allows_meetup, p.allows_delivery,
-           (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.display_order LIMIT 1) AS product_image,
+           (SELECT pi.image_key FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.display_order LIMIT 1) AS product_image,
            COALESCE(a.city_municipality, 'Philippines') AS seller_location,
            c.last_message_preview AS last_message,
            CASE WHEN c.last_message_at IS NOT NULL
-                 AND c.last_message_sender_id != @userId
+                 AND c.last_message_sender_id <> $1
                  AND c.last_message_at > COALESCE(
-                     CASE WHEN c.buyer_id = @userId THEN c.buyer_last_read_at ELSE c.seller_last_read_at END, '')
+                     CASE WHEN c.buyer_id = $1 THEN c.buyer_last_read_at ELSE c.seller_last_read_at END, '-infinity')
                 THEN 1 ELSE 0 END AS is_unread,
            n.negotiation_id, n.status AS negotiation_status, n.offered_price, n.offered_quantity,
            n.accepted_by,
            CASE WHEN n.status = 'accepted'
-                 AND (CASE WHEN c.buyer_id = @userId THEN n.buyer_celebrated_at ELSE n.seller_celebrated_at END) IS NULL
+                 AND (CASE WHEN c.buyer_id = $1 THEN n.buyer_celebrated_at ELSE n.seller_celebrated_at END) IS NULL
                 THEN 1 ELSE 0 END AS celebration_pending,
            o.order_id, o.order_status,
-           (SELECT r.rating FROM reviews r WHERE r.order_id = o.order_id AND r.reviewer_id = @userId) AS my_review_rating,
+           (SELECT r.rating FROM reviews r WHERE r.order_id = o.order_id AND r.reviewer_id = $1) AS my_review_rating,
            (SELECT ROUND(AVG(r.rating), 1) FROM reviews r WHERE r.reviewee_id = c.buyer_id) AS buyer_rating,
            (SELECT COUNT(*) FROM reviews r WHERE r.reviewee_id = c.buyer_id) AS buyer_review_count,
            (SELECT ROUND(AVG(r.rating), 1) FROM reviews r WHERE r.reviewee_id = c.seller_id) AS seller_rating,
@@ -107,9 +106,9 @@ function mapConversation(row: Record<string, unknown>): ConversationSummary {
         base_price: Number(row.base_price),
         unit_measurement: String(row.unit_measurement),
         product_status: String(row.product_status),
-        allows_meetup: Boolean(Number(row.allows_meetup ?? 1)),
-        allows_delivery: Boolean(Number(row.allows_delivery ?? 1)),
-        product_image: str(row.product_image),
+        allows_meetup: row.allows_meetup !== false,
+        allows_delivery: row.allows_delivery !== false,
+        product_image: row.product_image === null || row.product_image === undefined ? null : fromMediaColumn(String(row.product_image)),
         seller_location: String(row.seller_location),
         created_at: String(row.created_at),
         last_message: str(row.last_message),
@@ -132,69 +131,72 @@ function mapConversation(row: Record<string, unknown>): ConversationSummary {
 }
 
 export const ConversationModel = {
-    findById(conversationId: number, userId: number): ConversationSummary | undefined {
-        const row = db.prepare(`${conversationQuery} WHERE c.conversation_id = @conversationId`)
-            .get({ conversationId, userId }) as Record<string, unknown> | undefined;
-        return row ? mapConversation(row) : undefined;
+    async findById(conversationId: number, userId: number): Promise<ConversationSummary | undefined> {
+        if (!isRowId(conversationId)) return undefined;
+        const { rows } = await pool.query(`${conversationQuery} WHERE c.conversation_id = $2`, [userId, conversationId]);
+        return rows[0] ? mapConversation(rows[0]) : undefined;
     },
 
     // Inbox: every thread the user is on, most recently active first. Threads
     // with no messages yet (created by the Message button, never written to)
-    // sort by creation so they still show up. created_at is SQLite's
-    // 'YYYY-MM-DD HH:MM:SS', so it is converted to ISO to compare with
-    // last_message_at.
-    findForUser(userId: number): ConversationSummary[] {
-        const rows = db.prepare(`
+    // sort by creation so they still show up.
+    async findForUser(userId: number): Promise<ConversationSummary[]> {
+        const { rows } = await pool.query(`
             ${conversationQuery}
-            WHERE c.buyer_id = @userId OR c.seller_id = @userId
-            ORDER BY COALESCE(c.last_message_at, strftime('%Y-%m-%dT%H:%M:%fZ', c.created_at)) DESC, c.conversation_id DESC
-        `).all({ userId }) as Record<string, unknown>[];
+            WHERE c.buyer_id = $1 OR c.seller_id = $1
+            ORDER BY COALESCE(c.last_message_at, c.created_at) DESC, c.conversation_id DESC
+        `, [userId]);
         return rows.map(mapConversation);
     },
 
-    parties(conversationId: number): { buyer_id: number; seller_id: number; product_id: number | null } | undefined {
-        return db.prepare('SELECT buyer_id, seller_id, product_id FROM conversations WHERE conversation_id = ?')
-            .get(conversationId) as { buyer_id: number; seller_id: number; product_id: number | null } | undefined;
+    async parties(conversationId: number): Promise<{ buyer_id: number; seller_id: number; product_id: number | null } | undefined> {
+        const { rows } = await pool.query('SELECT buyer_id, seller_id, product_id FROM conversations WHERE conversation_id = $1', [conversationId]);
+        return rows[0];
     },
 
     // One thread per buyer/seller/product. Offers and the Message button both
-    // go through here so they can never fork into two conversations.
-    findOrCreate(buyerId: number, sellerId: number, productId: number): number {
-        const existing = db.prepare(`
-            SELECT conversation_id FROM conversations
-            WHERE buyer_id = ? AND seller_id = ? AND product_id = ?
-        `).get(buyerId, sellerId, productId) as { conversation_id: number } | undefined;
-        if (existing) return existing.conversation_id;
-        return Number(db.prepare(`INSERT INTO conversations (buyer_id, seller_id, product_id) VALUES (?, ?, ?)`)
-            .run(buyerId, sellerId, productId).lastInsertRowid);
+    // go through here, and uq_conversations_thread settles two arriving at
+    // once, so they can never fork into two conversations.
+    async findOrCreate(buyerId: number, sellerId: number, productId: number, q: Queryable = pool): Promise<number> {
+        const find = async (): Promise<number | undefined> => {
+            const { rows } = await q.query(`
+                SELECT conversation_id FROM conversations
+                WHERE buyer_id = $1 AND seller_id = $2 AND product_id = $3
+            `, [buyerId, sellerId, productId]);
+            return rows[0]?.conversation_id;
+        };
+        const existing = await find();
+        if (existing !== undefined) return existing;
+        const { rows } = await q.query(`
+            INSERT INTO conversations (buyer_id, seller_id, product_id) VALUES ($1, $2, $3)
+            ON CONFLICT (buyer_id, seller_id, product_id) DO NOTHING
+            RETURNING conversation_id
+        `, [buyerId, sellerId, productId]);
+        return rows[0]?.conversation_id ?? (await find())!;
     },
 
     // Inbox preview, updated after each DynamoDB write. The guard keeps a
     // slower, older write from overwriting a newer preview.
-    recordLastMessage(conversationId: number, message: { sender_id: number; content: string; sent_at: string }): void {
-        db.prepare(`
+    async recordLastMessage(conversationId: number, message: { sender_id: number; content: string; sent_at: string }): Promise<void> {
+        await pool.query(`
             UPDATE conversations
-            SET last_message_at = @sent_at,
-                last_message_sender_id = @sender_id,
-                last_message_preview = @preview
-            WHERE conversation_id = @conversation_id
-              AND (last_message_at IS NULL OR last_message_at <= @sent_at)
-        `).run({
-            conversation_id: conversationId,
-            sender_id: message.sender_id,
-            sent_at: message.sent_at,
-            preview: message.content.slice(0, PREVIEW_LENGTH),
-        });
+            SET last_message_at = $2,
+                last_message_sender_id = $3,
+                last_message_preview = $4
+            WHERE conversation_id = $1
+              AND (last_message_at IS NULL OR last_message_at <= $2)
+        `, [conversationId, message.sent_at, message.sender_id, message.content.slice(0, PREVIEW_LENGTH)]);
     },
 
     // Moves the reader's cursor up to the newest message in the thread.
-    markRead(conversationId: number, readerId: number): boolean {
-        return db.prepare(`
+    async markRead(conversationId: number, readerId: number): Promise<boolean> {
+        const { rowCount } = await pool.query(`
             UPDATE conversations
-            SET buyer_last_read_at  = CASE WHEN buyer_id  = @readerId THEN last_message_at ELSE buyer_last_read_at END,
-                seller_last_read_at = CASE WHEN seller_id = @readerId THEN last_message_at ELSE seller_last_read_at END
-            WHERE conversation_id = @conversationId
+            SET buyer_last_read_at  = CASE WHEN buyer_id  = $2 THEN last_message_at ELSE buyer_last_read_at END,
+                seller_last_read_at = CASE WHEN seller_id = $2 THEN last_message_at ELSE seller_last_read_at END
+            WHERE conversation_id = $1
               AND last_message_at IS NOT NULL
-        `).run({ conversationId, readerId }).changes > 0;
+        `, [conversationId, readerId]);
+        return (rowCount ?? 0) > 0;
     },
 };

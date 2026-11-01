@@ -20,6 +20,9 @@ import { MARKET_AREAS, REGION_CENTROIDS, displayMarketName } from "#market/marke
 
 export const DA_SOURCE = 'da-bantay-presyo';
 
+// Advisory lock id for writing a price table (database/migrate.ts uses 4405150001).
+const IMPORT_LOCK_KEY = 4405150002;
+
 export interface ImportOptions {
     // Short region labels ("NCR", "Region III"); default every region.
     regions?: string[];
@@ -158,6 +161,11 @@ export async function storePriceTable(table: DaPriceTable, created: { count: num
     if (!pricedRows.length) return { regionRows, marketRows };
 
     return withTransaction(async (client) => {
+        // A manual `npm run import:market` can overlap the daily run. Both
+        // would see a commodity missing and insert it, and the second insert
+        // would fail on external_key and end that import. Taking turns per
+        // table means the second one finds the products the first created.
+        await client.query(`SELECT pg_advisory_xact_lock($1)`, [IMPORT_LOCK_KEY]);
         const productIds = await ensureProducts(client, table.category, [...new Set(pricedRows.map((row) => row.commodity))], created);
         // Keyed like the table's unique index, so a market listed twice is
         // written once with its last price, as row-by-row upserts would leave it.

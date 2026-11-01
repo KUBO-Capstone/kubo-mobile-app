@@ -1,4 +1,4 @@
-import { isRowId, pool, withTransaction } from "#database/pg";
+import { isRowId, pool, Queryable, withTransaction } from "#database/pg";
 import { ConversationModel } from "#models/conversation.model";
 
 // Mirrors the CHECK constraint on negotiations.status in database/migrations.
@@ -73,9 +73,9 @@ function mapNegotiation(row: Record<string, unknown>): Negotiation {
 }
 
 export const NegotiationModel = {
-    async findById(negotiationId: number): Promise<Negotiation | undefined> {
+    async findById(negotiationId: number, q: Queryable = pool): Promise<Negotiation | undefined> {
         if (!isRowId(negotiationId)) return undefined;
-        const { rows } = await pool.query(`${negotiationQuery} WHERE n.negotiation_id = $1`, [negotiationId]);
+        const { rows } = await q.query(`${negotiationQuery} WHERE n.negotiation_id = $1`, [negotiationId]);
         return rows[0] ? mapNegotiation(rows[0]) : undefined;
     },
 
@@ -106,9 +106,11 @@ export const NegotiationModel = {
 
     // An offer always lives inside the buyer/seller thread for that listing
     // (negotiations.conversation_id is NOT NULL), so the chat screen can show
-    // it as the first message the way Carousell does.
+    // it as the first message the way Carousell does. Read back inside the
+    // transaction, so the offer event records these terms even if the seller
+    // counters the moment it commits.
     async create(input: NegotiationInput): Promise<Negotiation> {
-        const negotiationId = await withTransaction(async (client) => {
+        return withTransaction(async (client) => {
             const conversationId = await ConversationModel.findOrCreate(input.buyer_id, input.seller_id, input.product_id, client);
 
             const { rows: [row] } = await client.query(`
@@ -116,29 +118,34 @@ export const NegotiationModel = {
                 VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING negotiation_id
             `, [conversationId, input.product_id, input.buyer_id, input.seller_id, input.offered_price, input.offered_quantity]);
-            return Number(row.negotiation_id);
+            return (await NegotiationModel.findById(Number(row.negotiation_id), client)) as Negotiation;
         });
-        return (await NegotiationModel.findById(negotiationId)) as Negotiation;
     },
 
     // Accept/decline only move the status (an accept also records who did
     // it); a counter also rewrites the terms. Applies only while the offer is
-    // still `from`, the status the caller checked the turn against: undefined
-    // means the other party moved first and nothing was changed.
+    // still exactly what the caller checked: same status and same terms. The
+    // status alone is not enough, since a counter and a counter back return
+    // it to the same status with other terms. Undefined means the offer
+    // changed meanwhile and nothing was written. The result is read while
+    // the row is still locked, so it is this change and not a later one.
     async update(
         negotiationId: number,
-        from: NegotiationStatus,
+        expected: Pick<Negotiation, 'status' | 'offered_price' | 'offered_quantity'>,
         changes: { status: NegotiationStatus; offered_price?: number; offered_quantity?: number; accepted_by?: number },
     ): Promise<Negotiation | undefined> {
-        const { rowCount } = await pool.query(`
-            UPDATE negotiations
-            SET status = $3,
-                offered_price = COALESCE($4, offered_price),
-                offered_quantity = COALESCE($5, offered_quantity),
-                accepted_by = COALESCE($6, accepted_by)
-            WHERE negotiation_id = $1 AND status = $2
-        `, [negotiationId, from, changes.status, changes.offered_price ?? null, changes.offered_quantity ?? null, changes.accepted_by ?? null]);
-        return rowCount ? NegotiationModel.findById(negotiationId) : undefined;
+        return withTransaction(async (client) => {
+            const { rowCount } = await client.query(`
+                UPDATE negotiations
+                SET status = $3,
+                    offered_price = COALESCE($4, offered_price),
+                    offered_quantity = COALESCE($5, offered_quantity),
+                    accepted_by = COALESCE($6, accepted_by)
+                WHERE negotiation_id = $1 AND status = $2 AND offered_price = $7 AND offered_quantity = $8
+            `, [negotiationId, expected.status, changes.status, changes.offered_price ?? null, changes.offered_quantity ?? null,
+                changes.accepted_by ?? null, expected.offered_price, expected.offered_quantity]);
+            return rowCount ? NegotiationModel.findById(negotiationId, client) : undefined;
+        });
     },
 
     // Records that one side has seen the "deal closed" screen. Only the

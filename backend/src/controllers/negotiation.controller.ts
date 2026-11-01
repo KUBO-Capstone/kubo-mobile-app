@@ -165,7 +165,7 @@ export const respondToNegotiation = async (req: Request, res: Response): Promise
     const isMyTurn = awaitingSeller ? isSeller : isBuyer;
 
     if (action === 'decline') {
-        const declined = await NegotiationModel.update(negotiation.negotiation_id, negotiation.status, { status: 'declined' });
+        const declined = await NegotiationModel.update(negotiation.negotiation_id, negotiation, { status: 'declined' });
         if (!declined) {
             changedMeanwhile(res);
             return;
@@ -179,7 +179,7 @@ export const respondToNegotiation = async (req: Request, res: Response): Promise
         return;
     }
     if (action === 'accept') {
-        const accepted = await NegotiationModel.update(negotiation.negotiation_id, negotiation.status, { status: 'accepted', accepted_by: userId });
+        const accepted = await NegotiationModel.update(negotiation.negotiation_id, negotiation, { status: 'accepted', accepted_by: userId });
         if (!accepted) {
             changedMeanwhile(res);
             return;
@@ -201,7 +201,7 @@ export const respondToNegotiation = async (req: Request, res: Response): Promise
         res.status(400).json({ success: false, message: `Only ${product.available_quantity} ${product.unit_measurement} available` });
         return;
     }
-    const updated = await NegotiationModel.update(negotiation.negotiation_id, negotiation.status, {
+    const updated = await NegotiationModel.update(negotiation.negotiation_id, negotiation, {
         status: isSeller ? 'countered' : 'pending',
         offered_price: offeredPrice,
         offered_quantity: offeredQuantity,

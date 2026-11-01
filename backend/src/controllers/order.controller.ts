@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { DeliveryMethod, Order, OrderModel, OrderStatus } from "#models/order.model";
 import { NegotiationModel } from "#models/negotiation.model";
-import { ProductModel } from "#models/product.model";
+import { ProductListing, ProductModel } from "#models/product.model";
 import { BagsakanModel } from "#models/bagsakan.model";
 import { ReviewModel } from "#models/review.model";
 import { authUserId } from "#middleware/auth.middleware";
@@ -20,6 +20,16 @@ const readId = (value: unknown): number | undefined => {
 };
 
 const readText = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
+// Why the listing cannot take this order, or undefined if it can.
+// OrderModel.create checks the same things again in its stock update.
+const listingProblem = (product: ProductListing | undefined, method: string, quantity: number): string | undefined => {
+    if (!product || product.status === 'delisted') return 'This listing has been removed';
+    if (method === 'meetup' && !product.allows_meetup) return 'This seller does not offer bagsakan center pickup for this listing';
+    if (method === 'courier' && !product.allows_delivery) return 'This seller does not offer courier delivery for this listing';
+    if (quantity > product.available_quantity) return `Only ${product.available_quantity} ${product.unit_measurement} left on this listing`;
+    return undefined;
+};
 
 const formatAmount = (value: number): string =>
     Number.isInteger(value) ? String(value) : value.toFixed(2);
@@ -122,22 +132,9 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         return;
     }
 
-    const product = await ProductModel.findById(negotiation.product_id);
-    if (!product || product.status === 'delisted') {
-        res.status(409).json({ success: false, message: 'This listing has been removed' });
-        return;
-    }
-    if ((method === 'meetup' && !product.allows_meetup) || (method === 'courier' && !product.allows_delivery)) {
-        res.status(409).json({
-            success: false,
-            message: method === 'meetup'
-                ? 'This seller does not offer bagsakan center pickup for this listing'
-                : 'This seller does not offer courier delivery for this listing',
-        });
-        return;
-    }
-    if (negotiation.offered_quantity > product.available_quantity) {
-        res.status(409).json({ success: false, message: `Only ${product.available_quantity} ${product.unit_measurement} left on this listing` });
+    const problem = listingProblem(await ProductModel.findById(negotiation.product_id), method, negotiation.offered_quantity);
+    if (problem) {
+        res.status(409).json({ success: false, message: problem });
         return;
     }
 
@@ -175,8 +172,10 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         throw error;
     }
     if (!order) {
-        // Another order took the stock after the check above.
-        res.status(409).json({ success: false, message: `There is no longer enough ${product.unit_measurement} left on this listing for this order` });
+        // The listing changed after the check above: another order took the
+        // stock, or the seller delisted it or turned this method off.
+        const changed = listingProblem(await ProductModel.findById(negotiation.product_id), method, negotiation.offered_quantity);
+        res.status(409).json({ success: false, message: changed ?? 'This listing just changed. Refresh and try again.' });
         return;
     }
     await recordOrderEvent(

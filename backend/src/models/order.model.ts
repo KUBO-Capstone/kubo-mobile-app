@@ -54,8 +54,9 @@ const orderQuery = `
            b.first_name || ' ' || b.last_name AS buyer_name,
            s.first_name || ' ' || s.last_name AS seller_name,
            oi.product_id, oi.quantity, oi.negotiated_price,
-           p.crop_name, p.unit_measurement,
-           (SELECT pi.image_key FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.display_order LIMIT 1) AS product_image,
+           -- The snapshots, so an order keeps the name and unit it was placed with.
+           oi.product_name AS crop_name, oi.unit_measurement,
+           (SELECT pi.image_key FROM product_images pi WHERE pi.product_id = oi.product_id ORDER BY pi.display_order LIMIT 1) AS product_image,
            c.location_name AS center_name,
            a.city_municipality AS center_location,
            TRIM(COALESCE(a.street_details || ', ', '') || COALESCE(a.barangay, '')) AS center_address
@@ -64,7 +65,6 @@ const orderQuery = `
     JOIN users b ON b.user_id = o.buyer_id
     JOIN users s ON s.user_id = o.seller_id
     JOIN order_items oi ON oi.order_id = o.order_id
-    JOIN products p ON p.product_id = oi.product_id
     LEFT JOIN bagsakan_centers c ON c.center_id = o.drop_off_center_id
     LEFT JOIN addresses a ON a.address_id = c.address_id
 `;
@@ -146,8 +146,9 @@ export const OrderModel = {
     // Takes the quantity off the listing and writes the order and its single
     // item in one transaction. A listing that hits zero is marked
     // 'out of stock' so it drops out of explore; cancel() puts it back.
-    // Undefined when the listing no longer has the quantity (another order
-    // got there first); nothing is written then.
+    // Undefined, with nothing written, when the listing can no longer take
+    // the order: another order took the stock, or the seller delisted it or
+    // turned the chosen delivery method off after the controller checked.
     async create(input: OrderInput): Promise<Order | undefined> {
         const orderId = await withTransaction(async (client) => {
             const stock = await client.query(`
@@ -155,8 +156,9 @@ export const OrderModel = {
                 SET available_quantity = available_quantity - $2,
                     status = CASE WHEN available_quantity - $2 <= 0 AND status = 'available' THEN 'out of stock' ELSE status END,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE product_id = $1 AND available_quantity >= $2
-            `, [input.product_id, input.quantity]);
+                WHERE product_id = $1 AND available_quantity >= $2 AND status <> 'delisted'
+                  AND CASE WHEN $3 = 'meetup' THEN allows_meetup ELSE allows_delivery END
+            `, [input.product_id, input.quantity, input.delivery_method]);
             if (!stock.rowCount) return undefined;
 
             // Totals are worked out in numeric, not JS floats, so 2.5 x 33.33 is 83.33.

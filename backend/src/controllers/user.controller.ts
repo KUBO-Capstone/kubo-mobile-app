@@ -26,6 +26,12 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
         res.status(400).json({ success: false, message: "ZIP code must contain exactly 4 digits" });
         return;
     }
+    // The users and addresses column limits.
+    if (first_name.trim().length > 50 || last_name.trim().length > 50 || email.trim().length > 100 || contact_number.trim().length > 15 ||
+        region.trim().length > 100 || (province ?? '').trim().length > 100 || city_municipality.trim().length > 100) {
+        res.status(400).json({ success: false, message: "Account fields exceed their allowed length" });
+        return;
+    }
 
     const normalizedEmail = email.trim().toLowerCase();
     if (await UserModel.findByEmail(normalizedEmail)) {
@@ -124,7 +130,7 @@ export const updateProfile = async (req: Request<{ id: string }>, res: Response)
         res.status(400).json({ success: false, message: 'Name and contact number are required' });
         return;
     }
-    if (firstName.length > 50 || lastName.length > 50 || contactNumber.length > 20 || bio.length > 500 || location.length > 80 || businessName.length > 80 || businessType.length > 40) {
+    if (firstName.length > 50 || lastName.length > 50 || contactNumber.length > 15 || bio.length > 500 || location.length > 80 || businessName.length > 80 || businessType.length > 40) {
         res.status(400).json({ success: false, message: 'Profile fields exceed their allowed length' });
         return;
     }
@@ -217,6 +223,15 @@ const readAddressBody = (body: Record<string, any>) => ({
     longitude: body.longitude ?? null,
 });
 
+// The addresses column limits: Postgres refuses anything longer.
+const addressTooLong = (address: ReturnType<typeof readAddressBody>): boolean => {
+    const longerThan = (value: unknown, max: number) => typeof value === 'string' && value.length > max;
+    return [address.region, address.province, address.city_municipality, address.barangay].some((value) => longerThan(value, 100))
+        || [address.street_details, address.landmark].some((value) => longerThan(value, 255))
+        || longerThan(address.zip_code, 4);
+};
+const addressTooLongMessage = 'Address fields exceed their allowed length';
+
 // Sets the farm location for a farmer, which is what the explore map plots.
 export const addFarmAddress = async (req: Request<{ id: string }>, res: Response) => {
     try {
@@ -230,8 +245,12 @@ export const addFarmAddress = async (req: Request<{ id: string }>, res: Response
         if (!(await UserModel.findById(userId))) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
+        const address = readAddressBody(req.body);
+        if (addressTooLong(address)) {
+            return res.status(400).json({ success: false, message: addressTooLongMessage });
+        }
 
-        const addressId = await UserModel.setFarmAddress(userId, readAddressBody(req.body));
+        const addressId = await UserModel.setFarmAddress(userId, address);
         res.status(201).json({ success: true, data: { addressId } });
     } catch (error) {
         console.error("Error setting farm address:", error);
@@ -249,7 +268,11 @@ export const addUserAddress = async (req: Request<{ id: string }>, res: Response
         if (userId !== authUserId(res)) {
             return res.status(403).json({ success: false, message: "You can only change your own address" });
         }
-        const addressId = await UserModel.setPreferredAddress(userId, readAddressBody(req.body));
+        const address = readAddressBody(req.body);
+        if (addressTooLong(address)) {
+            return res.status(400).json({ success: false, message: addressTooLongMessage });
+        }
+        const addressId = await UserModel.setPreferredAddress(userId, address);
         
         res.status(201).json({ 
             success: true,
@@ -274,7 +297,12 @@ export const updateUserAddress = async (req: Request<{ id: string }>, res: Respo
         res.status(403).json({ success: false, message: 'You can only change your own address' });
         return;
     }
-    if (!(await UserModel.updateAddress(userId, addressId, readAddressBody(req.body)))) {
+    const address = readAddressBody(req.body);
+    if (addressTooLong(address)) {
+        res.status(400).json({ success: false, message: addressTooLongMessage });
+        return;
+    }
+    if (!(await UserModel.updateAddress(userId, addressId, address))) {
         res.status(404).json({ success: false, message: 'Address not found' });
         return;
     }

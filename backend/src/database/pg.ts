@@ -45,12 +45,16 @@ pool.on('error', (err) => {
 /** The pool, or the client of an open transaction: model functions accept either. */
 export type Queryable = Pool | PoolClient;
 
-/** Runs `work` on one connection between BEGIN and COMMIT; a throw rolls it all back. */
-export async function withTransaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+/**
+ * Runs `work` on one connection between BEGIN and COMMIT; a throw rolls it all back.
+ * `snapshot` makes it read-only and has every query in it see the same data
+ * (REPEATABLE READ), for summaries built from several queries.
+ */
+export async function withTransaction<T>(work: (client: PoolClient) => Promise<T>, { snapshot = false } = {}): Promise<T> {
     const client = await pool.connect();
     let broken: Error | undefined;
     try {
-        await client.query('BEGIN');
+        await client.query(snapshot ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' : 'BEGIN');
         const result = await work(client);
         await client.query('COMMIT');
         return result;

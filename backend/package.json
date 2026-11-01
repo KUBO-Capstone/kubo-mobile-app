@@ -13,6 +13,7 @@
     "import:market": "tsx src/scripts/import-market.ts",
     "ddb:create-messages": "tsx src/scripts/create-messages-table.ts",
     "migrate:messages": "tsx src/scripts/migrate-messages-to-dynamo.ts",
+    "migrate:uploads": "tsx src/scripts/migrate-local-to-s3.ts",
     "db:reset": "tsx src/scripts/reset-db.ts && tsx src/scripts/seed.ts",
     "dev": "tsx watch src/server.ts",
     "build": "tsc && tsc-alias",

@@ -1,21 +1,34 @@
-import fs from 'fs';
-import path from 'path';
+import 'dotenv/config'; // must stay first: database/pg reads PG* when imported
+import { migrate } from '#database/migrate';
+import { pool } from '#database/pg';
+import { seed } from './seed';
 
-// The schema is applied with CREATE TABLE IF NOT EXISTS and there is no
-// migration runner, so column renames and new constraints never reach an
-// existing db.sqlite. Deleting the file first is the supported way to pick up
-// a schema change in development.
-//
-//   npm run db:reset    (drop + recreate + reseed)
-const dbPath = path.resolve(__dirname, '../database/db.sqlite');
-
-if (fs.existsSync(dbPath)) {
-    fs.unlinkSync(dbPath);
-    console.log(`Removed ${dbPath}`);
-} else {
-    console.log('No existing database file, creating a fresh one');
+// Empties every table in the database PGHOST/PGDATABASE point at, brings the
+// schema up to date and reseeds it. On the shared RDS that wipes everyone's
+// data, so it asks for --yes:
+//   npm run db:reset -- --yes
+async function main(): Promise<void> {
+    const target = `${process.env.PGHOST}/${process.env.PGDATABASE}`;
+    if (!process.argv.includes('--yes')) {
+        console.error(`This deletes every row in ${target}. Run again with --yes to go ahead:\n  npm run db:reset -- --yes`);
+        process.exitCode = 1;
+        return;
+    }
+    await migrate();
+    const { rows } = await pool.query<{ name: string }>(`
+        SELECT quote_ident(tablename) AS name FROM pg_tables
+        WHERE schemaname = 'public' AND tablename <> 'schema_migrations'
+    `);
+    if (rows.length > 0) {
+        await pool.query(`TRUNCATE ${rows.map((row) => row.name).join(', ')} RESTART IDENTITY CASCADE`);
+    }
+    console.log(`Emptied ${rows.length} tables in ${target}.`);
+    await seed();
 }
 
-// Importing the config recreates every table against the current DDL.
-require('#config/database');
-console.log('Schema recreated. Run `npm run seed` to repopulate.');
+main()
+    .catch((error) => {
+        console.error(error);
+        process.exitCode = 1;
+    })
+    .finally(() => pool.end());

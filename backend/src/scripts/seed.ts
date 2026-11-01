@@ -1,4 +1,6 @@
-import { db } from '#config/database';
+import 'dotenv/config'; // must stay first: database/pg reads PG* when imported
+import { PoolClient } from 'pg';
+import { pool, withTransaction } from '#database/pg';
 import { hashPassword } from '#utils/password';
 import { seedMarketWatch } from './seed-market';
 
@@ -111,85 +113,92 @@ const centers: SeedCenter[] = [
     { name: 'Cabuyao Kubo Bagsakan Center', city: 'Cabuyao', province: 'Laguna', region: 'Region IV-A', barangay: 'Pulo', zip: '4025', latitude: 14.2495, longitude: 121.1417 },
 ];
 
-function seedCenter(center: SeedCenter): number {
-    const existing = db.prepare(`SELECT center_id FROM bagsakan_centers WHERE location_name = ?`).get(center.name) as { center_id: number } | undefined;
+async function seedCenter(client: PoolClient, center: SeedCenter): Promise<number> {
+    const { rows: [existing] } = await client.query(`SELECT center_id FROM bagsakan_centers WHERE location_name = $1`, [center.name]);
     if (existing) return existing.center_id;
 
-    const address = db.prepare(`
+    const { rows: [address] } = await client.query(`
         INSERT INTO addresses (region, province, city_municipality, barangay, zip_code, street_details, landmark, latitude, longitude)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(center.region, center.province, center.city, center.barangay, center.zip, 'Bagsakan drop-off lane', center.name, center.latitude, center.longitude);
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING address_id
+    `, [center.region, center.province, center.city, center.barangay, center.zip, 'Bagsakan drop-off lane', center.name, center.latitude, center.longitude]);
 
-    const result = db.prepare(`INSERT INTO bagsakan_centers (address_id, location_name) VALUES (?, ?)`)
-        .run(Number(address.lastInsertRowid), center.name);
-    return Number(result.lastInsertRowid);
+    const { rows: [created] } = await client.query(`INSERT INTO bagsakan_centers (address_id, location_name) VALUES ($1, $2) RETURNING center_id`,
+        [address.address_id, center.name]);
+    return created.center_id;
 }
 
-function getOrCreateAddress(user: SeedUser): number {
-    const existing = db.prepare(`SELECT address_id FROM addresses WHERE landmark = ?`).get(`${user.firstName} Kubo farm`) as { address_id: number } | undefined;
+async function getOrCreateAddress(client: PoolClient, user: SeedUser): Promise<number> {
+    const { rows: [existing] } = await client.query(`SELECT address_id FROM addresses WHERE landmark = $1`, [`${user.firstName} Kubo farm`]);
     if (existing) {
         // Backfill coordinates on rows seeded before the map view needed them.
-        db.prepare(`UPDATE addresses SET latitude = ?, longitude = ? WHERE address_id = ?`)
-            .run(user.latitude, user.longitude, existing.address_id);
+        await client.query(`UPDATE addresses SET latitude = $1, longitude = $2 WHERE address_id = $3`,
+            [user.latitude, user.longitude, existing.address_id]);
         return existing.address_id;
     }
 
-    const result = db.prepare(`
+    const { rows: [created] } = await client.query(`
         INSERT INTO addresses (region, province, city_municipality, barangay, zip_code, street_details, landmark, latitude, longitude)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(user.region, user.province, user.city, 'Central Barangay', '1400', 'Kubo growers lane', `${user.firstName} Kubo farm`, user.latitude, user.longitude);
-    return Number(result.lastInsertRowid);
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING address_id
+    `, [user.region, user.province, user.city, 'Central Barangay', '1400', 'Kubo growers lane', `${user.firstName} Kubo farm`, user.latitude, user.longitude]);
+    return created.address_id;
 }
 
-function getOrCreateFarmer(user: SeedUser, addressId: number): number {
-    db.prepare(`
-        INSERT OR IGNORE INTO users (first_name, last_name, email, password_hash, contact_number, role, is_verified)
-        VALUES (?, ?, ?, ?, ?, 'farmer', ?)
-    `).run(user.firstName, user.lastName, user.email, hashPassword(SEED_PASSWORD), user.contactNumber, 1);
-    // INSERT OR IGNORE leaves an existing row untouched, so force the role and
-    // the hash: rows seeded before farmer_profiles or password hashing existed
-    // would otherwise keep the old role / an unverifiable plaintext hash.
-    db.prepare(`UPDATE users SET role = 'farmer', password_hash = ? WHERE email = ?`)
-        .run(hashPassword(SEED_PASSWORD), user.email);
-    const userId = Number((db.prepare(`SELECT user_id FROM users WHERE email = ?`).get(user.email) as { user_id: number }).user_id);
+async function getOrCreateFarmer(client: PoolClient, user: SeedUser, addressId: number): Promise<number> {
+    await client.query(`
+        INSERT INTO users (first_name, last_name, email, password_hash, contact_number, role, is_verified)
+        VALUES ($1, $2, $3, $4, $5, 'farmer', true)
+        ON CONFLICT DO NOTHING
+    `, [user.firstName, user.lastName, user.email, hashPassword(SEED_PASSWORD), user.contactNumber]);
+    // ON CONFLICT DO NOTHING leaves an existing row untouched, so force the
+    // role and the hash: rows seeded before farmer_profiles or password
+    // hashing existed would otherwise keep the old role / an unverifiable hash.
+    const { rows: [farmer] } = await client.query(`UPDATE users SET role = 'farmer', password_hash = $1 WHERE email = $2 RETURNING user_id`,
+        [hashPassword(SEED_PASSWORD), user.email]);
+    const userId = Number(farmer.user_id);
 
     // The farm location lives on farmer_profiles; users.preferred_address_id is
     // the consumer-side pickup area and is deliberately left unset here.
-    db.prepare(`
+    await client.query(`
         INSERT INTO farmer_profiles (farmer_id, address_id, verification_status)
-        VALUES (?, ?, 'verified')
-        ON CONFLICT(farmer_id) DO UPDATE SET address_id = excluded.address_id, verification_status = 'verified'
-    `).run(userId, addressId);
+        VALUES ($1, $2, 'verified')
+        ON CONFLICT (farmer_id) DO UPDATE SET address_id = EXCLUDED.address_id, verification_status = 'verified'
+    `, [userId, addressId]);
 
     return userId;
 }
 
-function seedConsumer(): number {
-    db.prepare(`
-        INSERT OR IGNORE INTO users (first_name, last_name, email, password_hash, contact_number, role)
-        VALUES (?, ?, ?, ?, ?, 'consumer')
-    `).run(CONSUMER.firstName, CONSUMER.lastName, CONSUMER.email, hashPassword(CONSUMER.password), CONSUMER.contactNumber);
+async function seedConsumer(client: PoolClient): Promise<number> {
+    await client.query(`
+        INSERT INTO users (first_name, last_name, email, password_hash, contact_number, role)
+        VALUES ($1, $2, $3, $4, $5, 'consumer')
+        ON CONFLICT DO NOTHING
+    `, [CONSUMER.firstName, CONSUMER.lastName, CONSUMER.email, hashPassword(CONSUMER.password), CONSUMER.contactNumber]);
     // Same backfill as farmers: keep the hash verifiable on re-run.
-    db.prepare(`UPDATE users SET password_hash = ? WHERE email = ?`)
-        .run(hashPassword(CONSUMER.password), CONSUMER.email);
-    return Number((db.prepare(`SELECT user_id FROM users WHERE email = ?`).get(CONSUMER.email) as { user_id: number }).user_id);
+    const { rows: [consumer] } = await client.query(`UPDATE users SET password_hash = $1 WHERE email = $2 RETURNING user_id`,
+        [hashPassword(CONSUMER.password), CONSUMER.email]);
+    return Number(consumer.user_id);
 }
 
-function seedProduct(userId: number, product: SeedProduct): number {
-    const existing = db.prepare(`SELECT product_id FROM products WHERE seller_id = ? AND crop_name = ?`).get(userId, product.cropName) as { product_id: number } | undefined;
+async function seedProduct(client: PoolClient, userId: number, product: SeedProduct): Promise<number> {
+    const { rows: [existing] } = await client.query(`SELECT product_id FROM products WHERE seller_id = $1 AND crop_name = $2`, [userId, product.cropName]);
     if (existing) return existing.product_id;
 
-    const result = db.prepare(`
+    const { rows: [created] } = await client.query(`
         INSERT INTO products (seller_id, crop_name, category, base_price, available_quantity, unit_measurement)
-        VALUES (?, ?, ?, ?, ?, ?)
-    `).run(userId, product.cropName, product.category, product.price, product.quantity, product.unit);
-    const productId = Number(result.lastInsertRowid);
-    const image = db.prepare(`INSERT INTO product_images (product_id, image_url, display_order) VALUES (?, ?, ?)`);
-    imageUrls.forEach((url, index) => image.run(productId, url, index));
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING product_id
+    `, [userId, product.cropName, product.category, product.price, product.quantity, product.unit]);
+    const productId = Number(created.product_id);
+    // Absolute URLs, not S3 keys: the app shows them as they are.
+    for (const [index, url] of imageUrls.entries()) {
+        await client.query(`INSERT INTO product_images (product_id, image_key, display_order) VALUES ($1, $2, $3)`, [productId, url, index]);
+    }
     return productId;
 }
 
-const seed = db.transaction(() => {
+async function seedKubo(client: PoolClient) {
     const primaryUser: SeedUser = {
         firstName: 'Kubo',
         lastName: 'Grower',
@@ -201,9 +210,9 @@ const seed = db.transaction(() => {
         latitude: 14.6507,
         longitude: 120.9672,
     };
-    const primaryAddressId = getOrCreateAddress({ ...primaryUser });
-    const primaryUserId = getOrCreateFarmer(primaryUser, primaryAddressId);
-    const primaryProductId = seedProduct(primaryUserId, {
+    const primaryAddressId = await getOrCreateAddress(client, { ...primaryUser });
+    const primaryUserId = await getOrCreateFarmer(client, primaryUser, primaryAddressId);
+    const primaryProductId = await seedProduct(client, primaryUserId, {
         cropName: 'Fresh tomatoes bundle',
         category: 'vegetable',
         price: 120,
@@ -211,19 +220,33 @@ const seed = db.transaction(() => {
         unit: 'kg',
     });
 
-    const centerIds = centers.map(seedCenter);
-    const consumerId = seedConsumer();
+    const centerIds: number[] = [];
+    for (const center of centers) centerIds.push(await seedCenter(client, center));
+    const consumerId = await seedConsumer(client);
 
-    const seededUsers = users.map((user) => {
-        const addressId = getOrCreateAddress(user);
-        const userId = getOrCreateFarmer(user, addressId);
-        const products = productsByEmail[user.email] ?? [];
-        const productIds = products.map((product) => seedProduct(userId, product));
-        return { userId, email: user.email, productIds };
-    });
+    const seededUsers = [];
+    for (const user of users) {
+        const addressId = await getOrCreateAddress(client, user);
+        const userId = await getOrCreateFarmer(client, user, addressId);
+        const productIds: number[] = [];
+        for (const product of productsByEmail[user.email] ?? []) productIds.push(await seedProduct(client, userId, product));
+        seededUsers.push({ userId, email: user.email, productIds });
+    }
 
     return { primaryUserId, primaryProductId, consumerId, centerIds, users: seededUsers };
-});
+}
 
-console.log('Seeded Kubo records:', seed());
-console.log('Seeded Market Watch reference prices:', seedMarketWatch());
+/** Demo accounts, listings, bagsakan centers and Market Watch prices. Idempotent. */
+export async function seed(): Promise<void> {
+    console.log('Seeded Kubo records:', await withTransaction(seedKubo));
+    console.log('Seeded Market Watch reference prices:', await seedMarketWatch());
+}
+
+if (require.main === module) {
+    seed()
+        .catch((error) => {
+            console.error(error);
+            process.exitCode = 1;
+        })
+        .finally(() => pool.end());
+}

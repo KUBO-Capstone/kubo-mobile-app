@@ -145,23 +145,23 @@ const checkListingRules = (listing: RuleFields, previous?: RuleFields): string |
 };
 
 // Removes uploaded photos that no listing uses any more.
-const deleteUnusedUploads = (images: string[]): void => {
+const deleteUnusedUploads = async (images: string[]): Promise<void> => {
     for (const image of images) {
-        if (ProductModel.isImageInUse(image)) continue;
+        if (await ProductModel.isImageInUse(image)) continue;
         void deleteStoredImage(image, 'products');
     }
 };
 
-export const getProducts = (req: Request, res: Response): void => {
+export const getProducts = async (req: Request, res: Response): Promise<void> => {
     const query = typeof req.query.q === 'string' ? req.query.q : '';
     const sellerId = typeof req.query.seller_id === 'string' ? Number(req.query.seller_id) : undefined;
     // A seller's own tab asks for sold-out rows too; public views never do.
     const includeUnavailable = req.query.include_unavailable === 'true';
-    res.json({ success: true, data: ProductModel.findAll(query, Number.isInteger(sellerId) ? sellerId : undefined, includeUnavailable) });
+    res.json({ success: true, data: await ProductModel.findAll(query, Number.isInteger(sellerId) ? sellerId : undefined, includeUnavailable) });
 };
 
-export const getProduct = (req: Request, res: Response): void => {
-    const product = ProductModel.findById(Number(req.params.id));
+export const getProduct = async (req: Request, res: Response): Promise<void> => {
+    const product = await ProductModel.findById(Number(req.params.id));
     if (!product) {
         res.status(404).json({ success: false, message: 'Listing not found' });
         return;
@@ -210,7 +210,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
         return;
     }
     try {
-        const product = ProductModel.create({ ...listing, seller_id }, images.value);
+        const product = await ProductModel.create({ ...listing, seller_id }, images.value);
         res.status(201).json({ success: true, data: product });
     } catch (error) {
         res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Unable to create listing' });
@@ -218,14 +218,14 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
 };
 
 // Loads the listing and checks the signed-in user is its seller.
-const loadOwnedProduct = (req: Request, res: Response): ProductListing | undefined => {
+const loadOwnedProduct = async (req: Request, res: Response): Promise<ProductListing | undefined> => {
     const productId = readId(req.params.id);
     const sellerId = authUserId(res);
     if (!productId) {
         res.status(400).json({ success: false, message: 'Invalid listing id' });
         return undefined;
     }
-    const product = ProductModel.findById(productId);
+    const product = await ProductModel.findById(productId);
     if (!product || product.status === 'delisted') {
         res.status(404).json({ success: false, message: 'Listing not found' });
         return undefined;
@@ -239,7 +239,7 @@ const loadOwnedProduct = (req: Request, res: Response): ProductListing | undefin
 
 // Seller edits the listing details and/or marks it sold out or available.
 export const updateProduct = async (req: Request, res: Response): Promise<void> => {
-    const product = loadOwnedProduct(req, res);
+    const product = await loadOwnedProduct(req, res);
     if (!product) return;
 
     const body = req.body ?? {};
@@ -272,8 +272,12 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     }
 
     try {
-        const updated = ProductModel.update(product.product_id, changes, images);
-        if (images) deleteUnusedUploads(product.images.filter((image) => !images.includes(image)));
+        const updated = await ProductModel.update(product.product_id, changes, images);
+        if (images) {
+            // Not awaited: a failed clean-up only leaves an unused photo in S3, so it never fails the edit.
+            deleteUnusedUploads(product.images.filter((image) => !images.includes(image)))
+                .catch((error) => console.error('Could not remove replaced listing photos:', error));
+        }
         res.json({ success: true, data: updated });
     } catch (error) {
         res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Unable to update listing' });
@@ -282,9 +286,9 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
 
 // Soft delete. The row stays so buyers' past offers on it keep resolving;
 // it just never appears in any list again.
-export const deleteProduct = (req: Request, res: Response): void => {
-    const product = loadOwnedProduct(req, res);
+export const deleteProduct = async (req: Request, res: Response): Promise<void> => {
+    const product = await loadOwnedProduct(req, res);
     if (!product) return;
-    ProductModel.update(product.product_id, { status: 'delisted' });
+    await ProductModel.update(product.product_id, { status: 'delisted' });
     res.json({ success: true, data: { product_id: product.product_id, status: 'delisted' } });
 };

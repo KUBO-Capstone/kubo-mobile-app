@@ -10,11 +10,11 @@ declare global {
     }
 }
 
-export const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
+export const requireAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const header = req.headers.authorization ?? '';
     const [scheme, token] = header.split(' ');
     const payload = scheme === 'Bearer' && token ? verifyToken(token) : undefined;
-    if (!payload || !UserModel.isActive(payload.sub)) {
+    if (!payload || !(await UserModel.isActive(payload.sub))) {
         res.status(401).json({ success: false, message: 'Your session has expired. Please log in again.' });
         return;
     }
@@ -23,11 +23,11 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction): vo
     next();
 };
 
-export const attachAuth = (req: Request, _res: Response, next: NextFunction): void => {
+export const attachAuth = async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     const header = req.headers.authorization ?? '';
     const [scheme, token] = header.split(' ');
     const payload = scheme === 'Bearer' && token ? verifyToken(token) : undefined;
-    if (payload && UserModel.isActive(payload.sub)) req.authUserId = payload.sub;
+    if (payload && (await UserModel.isActive(payload.sub))) req.authUserId = payload.sub;
     next();
 };
 

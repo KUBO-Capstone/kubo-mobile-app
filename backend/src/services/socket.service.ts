@@ -17,11 +17,16 @@ export function initSocket(httpServer: HttpServer): Server {
 
     // The token comes in the handshake `auth` field, not the URL, so it never
     // lands in access logs.
-    io.use((socket, next) => {
+    io.use(async (socket, next) => {
         const token = socket.handshake.auth?.token;
         const payload = typeof token === 'string' ? verifyToken(token) : undefined;
-        if (!payload || !UserModel.isActive(payload.sub)) {
-            next(new Error('unauthorized'));
+        try {
+            if (!payload || !(await UserModel.isActive(payload.sub))) {
+                next(new Error('unauthorized'));
+                return;
+            }
+        } catch (error) {
+            next(error instanceof Error ? error : new Error(String(error)));
             return;
         }
         socket.data.userId = payload.sub;

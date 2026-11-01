@@ -3,18 +3,18 @@ import { CLASSIFICATIONS, MarketClassification, MarketModel } from "#models/mark
 
 // Read-only reference data; no identity involved, so nothing to trust here.
 
-export const getMarketProducts = (req: Request, res: Response): void => {
+export const getMarketProducts = async (req: Request, res: Response): Promise<void> => {
     const query = typeof req.query.q === 'string' ? req.query.q : '';
     const raw = typeof req.query.classification === 'string' ? req.query.classification : '';
     if (raw && !CLASSIFICATIONS.includes(raw as MarketClassification)) {
         res.status(400).json({ success: false, message: `classification must be one of: ${CLASSIFICATIONS.join(', ')}` });
         return;
     }
-    res.json({ success: true, data: MarketModel.listProducts(query, raw ? (raw as MarketClassification) : undefined) });
+    res.json({ success: true, data: await MarketModel.listProducts(query, raw ? (raw as MarketClassification) : undefined) });
 };
 
-export const getMarketProduct = (req: Request, res: Response): void => {
-    const product = MarketModel.findProduct(Number(req.params.id));
+export const getMarketProduct = async (req: Request, res: Response): Promise<void> => {
+    const product = await MarketModel.findProduct(Number(req.params.id));
     if (!product) {
         res.status(404).json({ success: false, message: 'Market product not found' });
         return;
@@ -25,14 +25,14 @@ export const getMarketProduct = (req: Request, res: Response): void => {
 // Reference price for a listing: `crop` is the listing's crop_name, `region`
 // the seller's region label in either short or long form. 404 when no market
 // product matches, so the listing page can simply show nothing.
-export const getMarketReference = (req: Request, res: Response): void => {
+export const getMarketReference = async (req: Request, res: Response): Promise<void> => {
     const crop = typeof req.query.crop === 'string' ? req.query.crop : '';
     const region = typeof req.query.region === 'string' ? req.query.region : undefined;
     if (!crop.trim()) {
         res.status(400).json({ success: false, message: 'crop is required' });
         return;
     }
-    const reference = MarketModel.findReference(crop, region);
+    const reference = await MarketModel.findReference(crop, region);
     if (!reference) {
         res.status(404).json({ success: false, message: 'No market reference price for this crop' });
         return;

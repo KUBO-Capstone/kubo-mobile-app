@@ -3,10 +3,10 @@ import { UserModel } from "#models/user.model";
 import { verifyPassword } from "#utils/password";
 import { signToken } from "#utils/token";
 
-export const login = (req: Request, res: Response): void => {
+export const login = async (req: Request, res: Response): Promise<void> => {
 	const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
 	const password = typeof req.body.password === "string" ? req.body.password : "";
-	const user = UserModel.findByEmail(email);
+	const user = await UserModel.findByEmail(email);
 
 	if (!user || !verifyPassword(password, user.password_hash)) {
 		res.status(401).json({ success: false, message: "Invalid email or password" });

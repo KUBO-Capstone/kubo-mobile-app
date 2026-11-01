@@ -1,19 +1,20 @@
 import { Request, Response } from "express";
-import { UserModel } from "#models/user.model";
+import { ProfilePrivacy, User, UserModel } from "#models/user.model";
 import { deleteStoredImage } from "#controllers/upload.controller";
 import { signToken } from "#utils/token";
 import { authUserId } from "#middleware/auth.middleware";
 import { verifyPassword } from "#utils/password";
+import { isUniqueViolation } from "#database/pg";
 
-export const getUsers = (req: Request, res: Response): void => {
-    const users = UserModel.findAll();
+export const getUsers = async (req: Request, res: Response): Promise<void> => {
+    const users = await UserModel.findAll();
     res.json({
         success: true,
         data: users.map(({ password_hash: _passwordHash, ...user }) => user),
     });
 };
 
-export const createUser = (req: Request, res: Response): void => {
+export const createUser = async (req: Request, res: Response): Promise<void> => {
     const { first_name, last_name, email, password, contact_number, role, region, province, city_municipality, zip_code } = req.body;
 
     if (!first_name || !last_name || !email || !password || !contact_number ||
@@ -27,48 +28,50 @@ export const createUser = (req: Request, res: Response): void => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    if (UserModel.findByEmail(normalizedEmail)) {
+    if (await UserModel.findByEmail(normalizedEmail)) {
         res.status(409).json({ success: false, message: "An account with this email already exists" });
         return;
     }
 
     // Admins are never self-registered; anything but 'farmer' signs up as a consumer.
     const requestedRole = role === 'farmer' ? role : 'consumer';
-    const user = UserModel.createWithAddress(
-        {
-            first_name: first_name.trim(),
-            last_name: last_name.trim(),
-            email: normalizedEmail,
-            password,
-            contact_number: contact_number.trim(),
-            role: requestedRole,
-        },
-        {
-            region: region.trim(),
-            province: (province ?? '').trim(),
-            city_municipality: city_municipality.trim(),
-            zip_code: zip_code.trim(),
-        },
-    );
+    let user: User;
+    try {
+        user = await UserModel.createWithAddress(
+            {
+                first_name: first_name.trim(),
+                last_name: last_name.trim(),
+                email: normalizedEmail,
+                password,
+                contact_number: contact_number.trim(),
+                role: requestedRole,
+            },
+            {
+                region: region.trim(),
+                province: (province ?? '').trim(),
+                city_municipality: city_municipality.trim(),
+                zip_code: zip_code.trim(),
+            },
+        );
+    } catch (error) {
+        // Two sign-ups with the same email racing past the check above.
+        if (isUniqueViolation(error, 'uq_users_email_lower')) {
+            res.status(409).json({ success: false, message: "An account with this email already exists" });
+            return;
+        }
+        throw error;
+    }
     const { password_hash: _passwordHash, ...safeUser } = user;
     // Registering signs the user in, same as login.
     res.status(201).json({ success: true, data: { ...safeUser, token: signToken(user.user_id, user.role) } });
 };
 
-const publicUser = (
-    user: ReturnType<typeof UserModel.findById> | ReturnType<typeof UserModel.findProfile>,
-    viewerId?: number,
-) => {
+const publicUser = (user: User | undefined, viewerId?: number) => {
     if (!user) return undefined;
     const { password_hash: _passwordHash, ...safeUser } = user;
     if (viewerId !== user.user_id) {
         const visibleUser: Record<string, unknown> = { ...safeUser };
-        let privacy: Record<string, boolean> = {};
-        try {
-            privacy = JSON.parse(user.profile_privacy || '{}') as Record<string, boolean>;
-        } catch (_) {
-            privacy = {};
-        }
+        const privacy: Partial<ProfilePrivacy> = user.profile_privacy ?? {};
         if (privacy.public_profile === false) {
             return {
                 user_id: user.user_id,
@@ -86,13 +89,13 @@ const publicUser = (
     return safeUser;
 };
 
-export const getProfile = (req: Request<{ id: string }>, res: Response): void => {
+export const getProfile = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const userId = Number(req.params.id);
     if (!Number.isInteger(userId) || userId <= 0) {
         res.status(400).json({ success: false, message: 'Invalid user ID format' });
         return;
     }
-    const user = UserModel.findProfile(userId);
+    const user = await UserModel.findProfile(userId);
     if (!user) {
         res.status(404).json({ success: false, message: 'User not found' });
         return;
@@ -100,7 +103,7 @@ export const getProfile = (req: Request<{ id: string }>, res: Response): void =>
     res.json({ success: true, data: publicUser(user, req.authUserId) });
 };
 
-export const updateProfile = (req: Request<{ id: string }>, res: Response): void => {
+export const updateProfile = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const userId = Number(req.params.id);
     const firstName = typeof req.body.first_name === 'string' ? req.body.first_name.trim() : '';
     const lastName = typeof req.body.last_name === 'string' ? req.body.last_name.trim() : '';
@@ -109,14 +112,14 @@ export const updateProfile = (req: Request<{ id: string }>, res: Response): void
     const location = typeof req.body.location === 'string' ? req.body.location.trim() : '';
     const businessName = typeof req.body.business_name === 'string' ? req.body.business_name.trim() : '';
     const businessType = typeof req.body.business_type === 'string' ? req.body.business_type.trim() : '';
-    const profilePrivacy = typeof req.body.profile_privacy === 'object' && req.body.profile_privacy !== null
-        ? JSON.stringify({
+    const profilePrivacy: ProfilePrivacy = typeof req.body.profile_privacy === 'object' && req.body.profile_privacy !== null
+        ? {
             public_profile: req.body.profile_privacy.public_profile !== false,
             show_bio: req.body.profile_privacy.show_bio !== false,
             show_contact_number: req.body.profile_privacy.show_contact_number !== false,
             show_location: req.body.profile_privacy.show_location !== false,
-        })
-        : JSON.stringify({ public_profile: true, show_bio: true, show_contact_number: true, show_location: true });
+        }
+        : { public_profile: true, show_bio: true, show_contact_number: true, show_location: true };
     if (!Number.isInteger(userId) || userId <= 0 || !firstName || !lastName || !contactNumber) {
         res.status(400).json({ success: false, message: 'Name and contact number are required' });
         return;
@@ -125,7 +128,7 @@ export const updateProfile = (req: Request<{ id: string }>, res: Response): void
         res.status(400).json({ success: false, message: 'Profile fields exceed their allowed length' });
         return;
     }
-    const user = UserModel.updateProfile(userId, {
+    const user = await UserModel.updateProfile(userId, {
         first_name: firstName,
         last_name: lastName,
         contact_number: contactNumber,
@@ -139,10 +142,10 @@ export const updateProfile = (req: Request<{ id: string }>, res: Response): void
         res.status(404).json({ success: false, message: 'User not found' });
         return;
     }
-    res.json({ success: true, data: publicUser(UserModel.findProfile(userId)) });
+    res.json({ success: true, data: publicUser(await UserModel.findProfile(userId)) });
 };
 
-export const changePassword = (req: Request<{ id: string }>, res: Response): void => {
+export const changePassword = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const userId = Number(req.params.id);
     const currentPassword = typeof req.body.current_password === 'string' ? req.body.current_password : '';
     const newPassword = typeof req.body.new_password === 'string' ? req.body.new_password : '';
@@ -154,7 +157,7 @@ export const changePassword = (req: Request<{ id: string }>, res: Response): voi
         res.status(403).json({ success: false, message: "You can only change your own password" });
         return;
     }
-    const user = UserModel.findById(userId);
+    const user = await UserModel.findById(userId);
     if (!user) {
         res.status(404).json({ success: false, message: 'User not found' });
         return;
@@ -167,38 +170,38 @@ export const changePassword = (req: Request<{ id: string }>, res: Response): voi
         res.status(400).json({ success: false, message: 'New password must be at least 8 characters' });
         return;
     }
-    UserModel.updatePassword(userId, newPassword);
+    await UserModel.updatePassword(userId, newPassword);
     res.json({ success: true, data: { message: 'Password updated successfully' } });
 };
 
 // The photo is already checked and in S3 (receiveImages in user.routes.ts).
-export const uploadProfilePhoto = (req: Request<{ id: string }>, res: Response): void => {
+export const uploadProfilePhoto = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const userId = Number(req.params.id);
     const [photoUrl] = (res.locals.uploadedImages as string[] | undefined) ?? [];
     if (!Number.isInteger(userId) || userId <= 0 || !photoUrl) {
         res.status(400).json({ success: false, message: 'A profile photo is required' });
         return;
     }
-    const existingUser = UserModel.findById(userId);
+    const existingUser = await UserModel.findById(userId);
     if (!existingUser) {
         void deleteStoredImage(photoUrl, 'profiles');
         res.status(404).json({ success: false, message: 'User not found' });
         return;
     }
-    const user = UserModel.setProfilePhoto(userId, photoUrl);
+    const user = await UserModel.setProfilePhoto(userId, photoUrl);
     if (existingUser.profile_photo_url) void deleteStoredImage(existingUser.profile_photo_url, 'profiles');
     res.json({ success: true, data: publicUser(user) });
 };
 
-export const deleteProfilePhoto = (req: Request<{ id: string }>, res: Response): void => {
+export const deleteProfilePhoto = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const userId = Number(req.params.id);
-    const user = UserModel.findById(userId);
+    const user = await UserModel.findById(userId);
     if (!user) {
         res.status(404).json({ success: false, message: 'User not found' });
         return;
     }
     if (user.profile_photo_url) void deleteStoredImage(user.profile_photo_url, 'profiles');
-    res.json({ success: true, data: publicUser(UserModel.setProfilePhoto(userId, null)) });
+    res.json({ success: true, data: publicUser(await UserModel.setProfilePhoto(userId, null)) });
 };
 
 // Builds the addresses row payload shared by the pickup and farm endpoints.
@@ -215,7 +218,7 @@ const readAddressBody = (body: Record<string, any>) => ({
 });
 
 // Sets the farm location for a farmer, which is what the explore map plots.
-export const addFarmAddress = (req: Request<{ id: string }>, res: Response) => {
+export const addFarmAddress = async (req: Request<{ id: string }>, res: Response) => {
     try {
         const userId = parseInt(req.params.id, 10);
         if (isNaN(userId)) {
@@ -224,11 +227,11 @@ export const addFarmAddress = (req: Request<{ id: string }>, res: Response) => {
         if (userId !== authUserId(res)) {
             return res.status(403).json({ success: false, message: "You can only change your own farm address" });
         }
-        if (!UserModel.findById(userId)) {
+        if (!(await UserModel.findById(userId))) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
 
-        const addressId = UserModel.setFarmAddress(userId, readAddressBody(req.body));
+        const addressId = await UserModel.setFarmAddress(userId, readAddressBody(req.body));
         res.status(201).json({ success: true, data: { addressId } });
     } catch (error) {
         console.error("Error setting farm address:", error);
@@ -236,7 +239,7 @@ export const addFarmAddress = (req: Request<{ id: string }>, res: Response) => {
     }
 };
 
-export const addUserAddress = (req: Request<{ id: string }>, res: Response) => {
+export const addUserAddress = async (req: Request<{ id: string }>, res: Response) => {
     try {
         const userId = parseInt(req.params.id, 10);
 
@@ -246,11 +249,11 @@ export const addUserAddress = (req: Request<{ id: string }>, res: Response) => {
         if (userId !== authUserId(res)) {
             return res.status(403).json({ success: false, message: "You can only change your own address" });
         }
-        const addressId = UserModel.setPreferredAddress(userId, readAddressBody(req.body));
+        const addressId = await UserModel.setPreferredAddress(userId, readAddressBody(req.body));
         
         res.status(201).json({ 
             success: true,
-            data: publicUser(UserModel.findProfile(userId)),
+            data: publicUser(await UserModel.findProfile(userId)),
             message: "Address updated successfully",
             addressId
         });
@@ -260,7 +263,7 @@ export const addUserAddress = (req: Request<{ id: string }>, res: Response) => {
     }
 };
 
-export const updateUserAddress = (req: Request<{ id: string }>, res: Response) => {
+export const updateUserAddress = async (req: Request<{ id: string }>, res: Response) => {
     const userId = Number(req.params.id);
     const addressId = Number(req.body.address_id);
     if (!Number.isInteger(userId) || !Number.isInteger(addressId)) {
@@ -271,23 +274,23 @@ export const updateUserAddress = (req: Request<{ id: string }>, res: Response) =
         res.status(403).json({ success: false, message: 'You can only change your own address' });
         return;
     }
-    if (!UserModel.updateAddress(userId, addressId, readAddressBody(req.body))) {
+    if (!(await UserModel.updateAddress(userId, addressId, readAddressBody(req.body)))) {
         res.status(404).json({ success: false, message: 'Address not found' });
         return;
     }
-    res.json({ success: true, data: UserModel.findProfile(userId) });
+    res.json({ success: true, data: await UserModel.findProfile(userId) });
 };
 
-export const choosePreferredAddress = (req: Request<{ id: string }>, res: Response) => {
+export const choosePreferredAddress = async (req: Request<{ id: string }>, res: Response) => {
     const userId = Number(req.params.id);
     const addressId = Number(req.body.address_id);
     if (!Number.isInteger(userId) || !Number.isInteger(addressId)) {
         res.status(400).json({ success: false, message: 'Invalid user or address ID' });
         return;
     }
-    if (!UserModel.choosePreferredAddress(userId, addressId)) {
+    if (!(await UserModel.choosePreferredAddress(userId, addressId))) {
         res.status(404).json({ success: false, message: 'Address not found' });
         return;
     }
-    res.json({ success: true, data: UserModel.findProfile(userId) });
+    res.json({ success: true, data: await UserModel.findProfile(userId) });
 };

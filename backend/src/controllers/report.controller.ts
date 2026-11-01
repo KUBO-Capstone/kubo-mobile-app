@@ -4,7 +4,7 @@ import { ReportCategory, ReportModel } from "#models/report.model";
 
 const categories = new Set<ReportCategory>(['feedback', 'bug', 'other']);
 
-export const createReport = (req: Request, res: Response): void => {
+export const createReport = async (req: Request, res: Response): Promise<void> => {
     const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
     const message = typeof req.body.message === 'string' ? req.body.message.trim() : '';
     const category = typeof req.body.category === 'string' && categories.has(req.body.category)
@@ -20,7 +20,7 @@ export const createReport = (req: Request, res: Response): void => {
         return;
     }
 
-    const reportId = ReportModel.create({
+    const reportId = await ReportModel.create({
         senderId: authUserId(res),
         name,
         category,

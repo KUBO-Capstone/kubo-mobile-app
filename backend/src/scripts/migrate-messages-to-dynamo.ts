@@ -11,8 +11,10 @@
 import 'dotenv/config'; // must stay first so env vars exist before other imports read them
 import { encodeTime, TIME_LEN } from 'ulid';
 import { db } from '#config/database';
-import { ConversationModel } from '#models/conversation.model';
 import { MessageModel, MessageType } from '#models/message.model';
+
+// The preview length the app uses (models/conversation.model.ts).
+const PREVIEW_LENGTH = 200;
 
 interface LegacyMessage {
     message_id: number;
@@ -73,13 +75,23 @@ async function main(): Promise<void> {
                 if (!isAlreadyCopied(err)) throw err;
             }
         }
+        // The preview goes into the same SQLite conversations row as the read
+        // cursors below; these ids are the old install's, not Postgres's.
         // Only ever moves the preview forward, so a rerun is harmless.
         const last = rows[rows.length - 1];
         if (last) {
-            ConversationModel.recordLastMessage(id, {
+            db.prepare(`
+                UPDATE conversations
+                SET last_message_at = @sent_at,
+                    last_message_sender_id = @sender_id,
+                    last_message_preview = @preview
+                WHERE conversation_id = @id
+                  AND (last_message_at IS NULL OR last_message_at <= @sent_at)
+            `).run({
+                id,
                 sender_id: last.sender_id,
-                content: last.content,
                 sent_at: parseSqliteTime(last.sent_at).toISOString(),
+                preview: last.content.slice(0, PREVIEW_LENGTH),
             });
         }
 

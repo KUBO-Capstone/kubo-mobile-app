@@ -29,8 +29,8 @@ class ProfileValidation {
     if (contactNumber.trim().isEmpty) {
       errors.add('Contact number is required.');
     }
-    if (contactNumber.length > 20) {
-      errors.add('Contact number must be 20 characters or fewer.');
+    if (contactNumber.length > 15) {
+      errors.add('Contact number must be 15 characters or fewer.');
     }
     if (bio.length > 500) {
       errors.add('Bio must be 500 characters or fewer.');

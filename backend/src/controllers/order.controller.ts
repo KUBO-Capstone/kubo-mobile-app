@@ -1,11 +1,12 @@
 import { Request, Response } from "express";
 import { DeliveryMethod, Order, OrderModel, OrderStatus } from "#models/order.model";
 import { NegotiationModel } from "#models/negotiation.model";
-import { ProductModel } from "#models/product.model";
+import { ProductListing, ProductModel } from "#models/product.model";
 import { BagsakanModel } from "#models/bagsakan.model";
 import { ReviewModel } from "#models/review.model";
 import { authUserId } from "#middleware/auth.middleware";
 import { sendChatMessage } from "#services/chat.service";
+import { isUniqueViolation } from "#database/pg";
 
 // Mounted behind requireAuth: the acting user is always authUserId(res).
 
@@ -19,6 +20,16 @@ const readId = (value: unknown): number | undefined => {
 };
 
 const readText = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
+// Why the listing cannot take this order, or undefined if it can.
+// OrderModel.create checks the same things again in its stock update.
+const listingProblem = (product: ProductListing | undefined, method: string, quantity: number): string | undefined => {
+    if (!product || product.status === 'delisted') return 'This listing has been removed';
+    if (method === 'meetup' && !product.allows_meetup) return 'This seller does not offer bagsakan center pickup for this listing';
+    if (method === 'courier' && !product.allows_delivery) return 'This seller does not offer courier delivery for this listing';
+    if (quantity > product.available_quantity) return `Only ${product.available_quantity} ${product.unit_measurement} left on this listing`;
+    return undefined;
+};
 
 const formatAmount = (value: number): string =>
     Number.isInteger(value) ? String(value) : value.toFixed(2);
@@ -47,29 +58,39 @@ const describeHandover = (order: Order): string =>
         ? `pickup at ${order.center_name ?? 'a bagsakan center'}`
         : 'courier delivery';
 
-// An order as the viewer sees it: plus the review they wrote and the one
-// the other party wrote about them, each null until written.
-const present = (order: Order, viewerId: number) => {
-    const otherId = order.buyer_id === viewerId ? order.seller_id : order.buyer_id;
-    return {
-        ...order,
-        my_review: ReviewModel.findByOrderAndReviewer(order.order_id, viewerId) ?? null,
-        their_review: ReviewModel.findByOrderAndReviewer(order.order_id, otherId) ?? null,
-    };
+// Orders as the viewer sees them: each plus the review they wrote and the
+// one the other party wrote about them, null until written. One reviews
+// query covers the whole list.
+const presentAll = async (orders: Order[], viewerId: number) => {
+    const reviews = await ReviewModel.findForOrders(orders.map((order) => order.order_id));
+    const reviewBy = (orderId: number, reviewerId: number) =>
+        reviews.find((review) => review.order_id === orderId && review.reviewer_id === reviewerId) ?? null;
+    return orders.map((order) => {
+        const otherId = order.buyer_id === viewerId ? order.seller_id : order.buyer_id;
+        return { ...order, my_review: reviewBy(order.order_id, viewerId), their_review: reviewBy(order.order_id, otherId) };
+    });
 };
 
-export const getOrders = (req: Request, res: Response): void => {
+const present = async (order: Order, viewerId: number) => (await presentAll([order], viewerId))[0];
+
+// Someone acted on the order between our read and our write (the other
+// party, or a second tap), so it is no longer in the state that was checked.
+const changedMeanwhile = (res: Response): void => {
+    res.status(409).json({ success: false, message: 'This order was just updated. Refresh to see its status.' });
+};
+
+export const getOrders = async (req: Request, res: Response): Promise<void> => {
     const userId = authUserId(res);
     const role = req.query.role === 'buyer' || req.query.role === 'seller' ? req.query.role : undefined;
     const status = typeof req.query.status === 'string' && statuses.has(req.query.status)
         ? (req.query.status as OrderStatus)
         : undefined;
-    res.json({ success: true, data: OrderModel.findForUser(userId, role, status).map((order) => present(order, userId)) });
+    res.json({ success: true, data: await presentAll(await OrderModel.findForUser(userId, role, status), userId) });
 };
 
-export const getOrder = (req: Request, res: Response): void => {
+export const getOrder = async (req: Request, res: Response): Promise<void> => {
     const userId = authUserId(res);
-    const order = OrderModel.findById(Number(req.params.id));
+    const order = await OrderModel.findById(Number(req.params.id));
     if (!order) {
         res.status(404).json({ success: false, message: 'Order not found' });
         return;
@@ -78,7 +99,7 @@ export const getOrder = (req: Request, res: Response): void => {
         res.status(403).json({ success: false, message: 'You are not part of this order' });
         return;
     }
-    res.json({ success: true, data: present(order, userId) });
+    res.json({ success: true, data: await present(order, userId) });
 };
 
 // Buyer turns an accepted offer into an order by choosing how to get the
@@ -92,7 +113,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         return;
     }
 
-    const negotiation = NegotiationModel.findById(negotiationId);
+    const negotiation = await NegotiationModel.findById(negotiationId);
     if (!negotiation) {
         res.status(404).json({ success: false, message: 'Offer not found' });
         return;
@@ -105,27 +126,15 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         res.status(409).json({ success: false, message: 'Only an accepted offer can be ordered' });
         return;
     }
-    if (OrderModel.findByNegotiation(negotiationId)) {
-        res.status(409).json({ success: false, message: 'This offer has already been ordered' });
+    const alreadyOrdered = () => res.status(409).json({ success: false, message: 'This offer has already been ordered' });
+    if (await OrderModel.findByNegotiation(negotiationId)) {
+        alreadyOrdered();
         return;
     }
 
-    const product = ProductModel.findById(negotiation.product_id);
-    if (!product || product.status === 'delisted') {
-        res.status(409).json({ success: false, message: 'This listing has been removed' });
-        return;
-    }
-    if ((method === 'meetup' && !product.allows_meetup) || (method === 'courier' && !product.allows_delivery)) {
-        res.status(409).json({
-            success: false,
-            message: method === 'meetup'
-                ? 'This seller does not offer bagsakan center pickup for this listing'
-                : 'This seller does not offer courier delivery for this listing',
-        });
-        return;
-    }
-    if (negotiation.offered_quantity > product.available_quantity) {
-        res.status(409).json({ success: false, message: `Only ${product.available_quantity} ${product.unit_measurement} left on this listing` });
+    const problem = listingProblem(await ProductModel.findById(negotiation.product_id), method, negotiation.offered_quantity);
+    if (problem) {
+        res.status(409).json({ success: false, message: problem });
         return;
     }
 
@@ -136,28 +145,45 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
             res.status(400).json({ success: false, message: 'Pick a bagsakan center for pickup' });
             return;
         }
-        if (!BagsakanModel.findById(centerId)) {
+        if (!(await BagsakanModel.findById(centerId))) {
             res.status(404).json({ success: false, message: 'Bagsakan center not found' });
             return;
         }
     }
 
-    const order = OrderModel.create({
-        negotiation_id: negotiationId,
-        buyer_id: buyerId,
-        seller_id: negotiation.seller_id,
-        product_id: negotiation.product_id,
-        quantity: negotiation.offered_quantity,
-        negotiated_price: negotiation.offered_price,
-        delivery_method: method as DeliveryMethod,
-        drop_off_center_id: centerId,
-    });
+    let order: Order | undefined;
+    try {
+        order = await OrderModel.create({
+            negotiation_id: negotiationId,
+            buyer_id: buyerId,
+            seller_id: negotiation.seller_id,
+            product_id: negotiation.product_id,
+            quantity: negotiation.offered_quantity,
+            negotiated_price: negotiation.offered_price,
+            delivery_method: method as DeliveryMethod,
+            drop_off_center_id: centerId,
+        });
+    } catch (error) {
+        // A second tap that raced past the "already ordered" check.
+        if (isUniqueViolation(error)) {
+            alreadyOrdered();
+            return;
+        }
+        throw error;
+    }
+    if (!order) {
+        // The listing changed after the check above: another order took the
+        // stock, or the seller delisted it or turned this method off.
+        const changed = listingProblem(await ProductModel.findById(negotiation.product_id), method, negotiation.offered_quantity);
+        res.status(409).json({ success: false, message: changed ?? 'This listing just changed. Refresh and try again.' });
+        return;
+    }
     await recordOrderEvent(
         order,
         buyerId,
         `Placed order #${order.order_id}: ${formatAmount(order.quantity)} ${order.unit_measurement} for PHP ${formatAmount(order.total_amount)}, ${describeHandover(order)}`,
     );
-    res.status(201).json({ success: true, data: present(order, buyerId) });
+    res.status(201).json({ success: true, data: await present(order, buyerId) });
 };
 
 // Seller moves it out the door, buyer confirms it arrived, either side can
@@ -170,7 +196,7 @@ export const updateOrder = async (req: Request, res: Response): Promise<void> =>
         return;
     }
 
-    const order = OrderModel.findById(Number(req.params.id));
+    const order = await OrderModel.findById(Number(req.params.id));
     if (!order) {
         res.status(404).json({ success: false, message: 'Order not found' });
         return;
@@ -187,9 +213,13 @@ export const updateOrder = async (req: Request, res: Response): Promise<void> =>
             res.status(409).json({ success: false, message: `An order that is ${order.order_status} can no longer be cancelled` });
             return;
         }
-        const cancelled = OrderModel.cancel(order.order_id) as Order;
+        const cancelled = await OrderModel.cancel(order.order_id);
+        if (!cancelled) {
+            changedMeanwhile(res);
+            return;
+        }
         await recordOrderEvent(cancelled, userId, `Cancelled order #${order.order_id}`);
-        res.json({ success: true, data: present(cancelled, userId) });
+        res.json({ success: true, data: await present(cancelled, userId) });
         return;
     }
 
@@ -202,25 +232,30 @@ export const updateOrder = async (req: Request, res: Response): Promise<void> =>
             res.status(409).json({ success: false, message: `This order is already ${order.order_status}` });
             return;
         }
-        let courier: { courier_name: string; tracking_number: string } | undefined;
-        if (order.delivery_method === 'courier') {
-            const courierName = readText(req.body.courier_name);
-            const trackingNumber = readText(req.body.tracking_number);
-            if (!courierName || !trackingNumber) {
-                res.status(400).json({ success: false, message: 'courier_name and tracking_number are required for a courier order' });
-                return;
-            }
-            courier = { courier_name: courierName, tracking_number: trackingNumber };
+        // Both optional for a courier order: the seller may send the
+        // courier's tracking link or details in the chat instead.
+        const courierName = order.delivery_method === 'courier' ? readText(req.body.courier_name) : '';
+        const trackingNumber = order.delivery_method === 'courier' ? readText(req.body.tracking_number) : '';
+        if (courierName.length > 100 || trackingNumber.length > 100) {
+            res.status(400).json({ success: false, message: 'courier_name and tracking_number can be at most 100 characters' });
+            return;
         }
-        const shipped = OrderModel.ship(order.order_id, courier) as Order;
+        const shipped = await OrderModel.ship(order.order_id, {
+            courier_name: courierName || null,
+            tracking_number: trackingNumber || null,
+        });
+        if (!shipped) {
+            changedMeanwhile(res);
+            return;
+        }
         await recordOrderEvent(
             shipped,
             userId,
-            courier
-                ? `Order #${order.order_id} handed to ${courier.courier_name} (tracking ${courier.tracking_number})`
+            order.delivery_method === 'courier'
+                ? `Order #${order.order_id} ${courierName ? `handed to ${courierName}` : 'is on its way'}${trackingNumber ? ` (tracking ${trackingNumber})` : ''}`
                 : `Order #${order.order_id} is ready for pickup at ${shipped.center_name ?? 'the bagsakan center'}`,
         );
-        res.json({ success: true, data: present(shipped, userId) });
+        res.json({ success: true, data: await present(shipped, userId) });
         return;
     }
 
@@ -238,7 +273,11 @@ export const updateOrder = async (req: Request, res: Response): Promise<void> =>
         });
         return;
     }
-    const delivered = OrderModel.deliver(order.order_id) as Order;
+    const delivered = await OrderModel.deliver(order.order_id);
+    if (!delivered) {
+        changedMeanwhile(res);
+        return;
+    }
     await recordOrderEvent(
         delivered,
         userId,
@@ -246,5 +285,5 @@ export const updateOrder = async (req: Request, res: Response): Promise<void> =>
             ? `Picked up order #${order.order_id}`
             : `Received order #${order.order_id}`,
     );
-    res.json({ success: true, data: present(delivered, userId) });
+    res.json({ success: true, data: await present(delivered, userId) });
 };

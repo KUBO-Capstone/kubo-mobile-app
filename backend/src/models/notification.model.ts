@@ -1,4 +1,5 @@
-import { db } from "#config/database";
+import { pool } from "#database/pg";
+import { fromMediaColumn } from "#controllers/upload.controller";
 
 export interface Notification {
     notification_id: number;
@@ -40,7 +41,7 @@ const mapNotification = (row: Record<string, unknown>): Notification => ({
         quantity: Number(row.product_quantity),
         unit: String(row.product_unit),
         status: String(row.product_status),
-        image: row.product_image === null ? null : String(row.product_image),
+        image: row.product_image === null ? null : fromMediaColumn(String(row.product_image)),
     },
     title: String(row.title),
     message: String(row.message),
@@ -49,8 +50,8 @@ const mapNotification = (row: Record<string, unknown>): Notification => ({
 });
 
 export const NotificationModel = {
-    findForUser(recipientId: number): Notification[] {
-        const rows = db.prepare(`
+    async findForUser(recipientId: number): Promise<Notification[]> {
+        const { rows } = await pool.query(`
                 SELECT n.notification_id, n.sender_id, n.recipient_id, n.product_id,
                    n.title, n.message, n.is_read, n.created_at,
                    s.first_name || ' ' || s.last_name AS sender_name,
@@ -63,29 +64,29 @@ export const NotificationModel = {
                    p.available_quantity AS product_quantity,
                    p.unit_measurement AS product_unit,
                    p.status AS product_status,
-                   (SELECT pi.image_url FROM product_images pi
+                   (SELECT pi.image_key FROM product_images pi
                     WHERE pi.product_id = p.product_id
                     ORDER BY pi.display_order LIMIT 1) AS product_image
                 FROM notifications n
                 JOIN users r ON r.user_id = n.recipient_id
                 LEFT JOIN users s ON s.user_id = n.sender_id
                 LEFT JOIN products p ON p.product_id = n.product_id
-                WHERE n.recipient_id = @recipientId
+                WHERE n.recipient_id = $1
                 ORDER BY n.created_at DESC, n.notification_id DESC
-        `).all({ recipientId }) as Record<string, unknown>[];
+        `, [recipientId]);
         return rows.map(mapNotification);
     },
 
-    create(input: {
+    async create(input: {
         recipientId: number;
         senderId: number;
         productId: number | null;
         title: string;
         message: string;
-    }): void {
-        db.prepare(`
+    }): Promise<void> {
+        await pool.query(`
             INSERT INTO notifications (recipient_id, sender_id, product_id, title, message)
-            VALUES (@recipientId, @senderId, @productId, @title, @message)
-        `).run(input);
+            VALUES ($1, $2, $3, $4, $5)
+        `, [input.recipientId, input.senderId, input.productId, input.title, input.message]);
     },
 };

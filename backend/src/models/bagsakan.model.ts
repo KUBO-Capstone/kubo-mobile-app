@@ -1,4 +1,4 @@
-import { db } from "#config/database";
+import { isRowId, pool } from "#database/pg";
 
 export interface BagsakanCenter {
     center_id: number;
@@ -35,19 +35,18 @@ function mapCenter(row: Record<string, unknown>): BagsakanCenter {
 }
 
 export const BagsakanModel = {
-    findAll(query = ''): BagsakanCenter[] {
+    async findAll(query = ''): Promise<BagsakanCenter[]> {
         const normalizedQuery = query.trim().toLowerCase();
-        const where = normalizedQuery
-            ? `WHERE LOWER(c.location_name) LIKE @query OR LOWER(a.city_municipality) LIKE @query`
-            : '';
-        const rows = db.prepare(`${centerQuery} ${where} ORDER BY c.location_name`).all({
-            query: `%${normalizedQuery}%`,
-        }) as Record<string, unknown>[];
+        const { rows } = normalizedQuery
+            ? await pool.query(`${centerQuery} WHERE LOWER(c.location_name) LIKE $1 OR LOWER(a.city_municipality) LIKE $1 ORDER BY c.location_name`,
+                [`%${normalizedQuery}%`])
+            : await pool.query(`${centerQuery} ORDER BY c.location_name`);
         return rows.map(mapCenter);
     },
 
-    findById(centerId: number): BagsakanCenter | undefined {
-        const row = db.prepare(`${centerQuery} WHERE c.center_id = ?`).get(centerId) as Record<string, unknown> | undefined;
-        return row ? mapCenter(row) : undefined;
+    async findById(centerId: number): Promise<BagsakanCenter | undefined> {
+        if (!isRowId(centerId)) return undefined;
+        const { rows } = await pool.query(`${centerQuery} WHERE c.center_id = $1`, [centerId]);
+        return rows[0] ? mapCenter(rows[0]) : undefined;
     },
 };

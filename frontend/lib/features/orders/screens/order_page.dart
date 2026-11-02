@@ -233,8 +233,9 @@ class _OrderPageState extends State<OrderPage> {
               ),
             ] else ...[
               _Row('Method', 'Courier'),
-              _Row('Courier', order.courierName ?? 'Not booked yet'),
-              _Row('Tracking no.', order.trackingNumber ?? '—'),
+              // Left blank when shipping if the seller shares them in the chat.
+              _Row('Courier', order.courierName ?? (order.status == OrderStatus.pending ? 'Not booked yet' : 'See chat')),
+              _Row('Tracking no.', order.trackingNumber ?? (order.status == OrderStatus.pending ? '—' : 'See chat')),
             ],
           ],
         ),

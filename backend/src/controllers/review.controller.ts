@@ -4,6 +4,7 @@ import { buyerReviewTags, ReviewModel, sellerReviewTags } from "#models/review.m
 import { NotificationModel } from "#models/notification.model";
 import { UserModel } from "#models/user.model";
 import { authUserId } from "#middleware/auth.middleware";
+import { isUniqueViolation } from "#database/pg";
 
 const maxCommentLength = 1000;
 const sellerTags = new Set<string>(sellerReviewTags);
@@ -16,7 +17,7 @@ const readId = (value: unknown): number | undefined => {
 
 // POST /orders/:id/review - either party rates the other once the order is
 // delivered. Mounted behind requireAuth with the other order routes.
-export const createReview = (req: Request, res: Response): void => {
+export const createReview = async (req: Request, res: Response): Promise<void> => {
     const reviewerId = authUserId(res);
     const orderId = readId(req.params.id);
     if (!orderId) {
@@ -34,7 +35,7 @@ export const createReview = (req: Request, res: Response): void => {
         return;
     }
 
-    const order = OrderModel.findById(orderId);
+    const order = await OrderModel.findById(orderId);
     if (!order) {
         res.status(404).json({ success: false, message: 'Order not found' });
         return;
@@ -58,7 +59,7 @@ export const createReview = (req: Request, res: Response): void => {
     }
     const tags = [...new Set(rawTags as string[])];
 
-    if (ReviewModel.findByOrderAndReviewer(orderId, reviewerId)) {
+    if (await ReviewModel.findByOrderAndReviewer(orderId, reviewerId)) {
         res.status(409).json({ success: false, message: 'You already reviewed this order' });
         return;
     }
@@ -66,10 +67,10 @@ export const createReview = (req: Request, res: Response): void => {
     const revieweeId = isBuyer ? order.seller_id : order.buyer_id;
     let review;
     try {
-        review = ReviewModel.create({ order_id: orderId, reviewer_id: reviewerId, reviewee_id: revieweeId, rating, comment, tags });
+        review = await ReviewModel.create({ order_id: orderId, reviewer_id: reviewerId, reviewee_id: revieweeId, rating, comment, tags });
     } catch (error) {
         // Two taps racing past the check above hit the unique index instead.
-        if (error instanceof Error && error.message.includes('UNIQUE')) {
+        if (isUniqueViolation(error)) {
             res.status(409).json({ success: false, message: 'You already reviewed this order' });
             return;
         }
@@ -80,7 +81,7 @@ export const createReview = (req: Request, res: Response): void => {
     // than failing the request.
     const snippet = comment.length > 80 ? `${comment.slice(0, 77)}...` : comment;
     try {
-        NotificationModel.create({
+        await NotificationModel.create({
             recipientId: revieweeId,
             senderId: reviewerId,
             productId: order.product_id,
@@ -94,15 +95,15 @@ export const createReview = (req: Request, res: Response): void => {
 };
 
 // GET /users/:id/reviews - public, like the profile it sits on.
-export const getUserReviews = (req: Request, res: Response): void => {
+export const getUserReviews = async (req: Request, res: Response): Promise<void> => {
     const userId = readId(req.params.id);
     if (!userId) {
         res.status(400).json({ success: false, message: 'Invalid user ID format' });
         return;
     }
-    if (!UserModel.findById(userId)) {
+    if (!(await UserModel.findById(userId))) {
         res.status(404).json({ success: false, message: 'User not found' });
         return;
     }
-    res.json({ success: true, data: { summary: ReviewModel.summaryFor(userId), reviews: ReviewModel.findForUser(userId) } });
+    res.json({ success: true, data: { summary: await ReviewModel.summaryFor(userId), reviews: await ReviewModel.findForUser(userId) } });
 };

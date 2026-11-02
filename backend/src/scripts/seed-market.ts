@@ -1,4 +1,4 @@
-import { db } from '#config/database';
+import { withTransaction } from '#database/pg';
 import { REGION_CENTROIDS } from '#market/market-areas';
 
 // Market Watch placeholder data, in the same shape the DA Bantay Presyo
@@ -110,58 +110,86 @@ function unitHash(key: string): number {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export function seedMarketWatch(): { products: number; prices: number } {
-    const findByKey = db.prepare(`SELECT market_product_id FROM market_products WHERE external_key = ?`);
-    const findByName = db.prepare(`SELECT market_product_id FROM market_products WHERE name = ?`);
-    const upsertByName = db.prepare(`
-        INSERT INTO market_products (name, classification, product_groups, unit_measurement, dti_srp, crop_keywords, external_key)
-        VALUES (@name, @classification, @groups, @unit, @dtiSrp, @keywords, @externalKey)
-        ON CONFLICT(name) DO UPDATE SET
-            classification = excluded.classification,
-            product_groups = excluded.product_groups,
-            unit_measurement = excluded.unit_measurement,
-            dti_srp = excluded.dti_srp,
-            crop_keywords = excluded.crop_keywords,
-            external_key = excluded.external_key
-    `);
-    // The importer got here first and owns the row (and its name); the seed
-    // only contributes the SRP and the friendlier keywords.
-    const updateImported = db.prepare(`
-        UPDATE market_products SET classification = @classification, product_groups = @groups, dti_srp = @dtiSrp, crop_keywords = @keywords
-        WHERE market_product_id = @id
-    `);
-    const hasRealRows = db.prepare(`
-        SELECT 1 FROM market_prices WHERE market_product_id = ? AND region = ? AND source <> 'seed' LIMIT 1
-    `);
-    // WHERE on the conflict branch: never overwrite a row the importer wrote.
-    const upsertPrice = db.prepare(`
-        INSERT INTO market_prices (market_product_id, region, region_name, area_type, province_city, latitude, longitude, avg_price, lowest_price, highest_price, sample_size, recorded_at, source)
-        VALUES (@productId, @region, @regionName, @areaType, @provinceCity, @latitude, @longitude, @avg, @lowest, @highest, @sampleSize, @recordedAt, 'seed')
-        ON CONFLICT(market_product_id, region, province_city, recorded_at) DO UPDATE SET
-            region_name = excluded.region_name,
-            area_type = excluded.area_type,
-            latitude = excluded.latitude,
-            longitude = excluded.longitude,
-            avg_price = excluded.avg_price,
-            lowest_price = excluded.lowest_price,
-            highest_price = excluded.highest_price,
-            sample_size = excluded.sample_size
-        WHERE market_prices.source = 'seed'
-    `);
-    // Old seed snapshots (earlier dates, monthly rows from before the DA
-    // importer) would otherwise accumulate; the seed owns only its 4 weeks.
-    const deleteOtherSeedRows = db.prepare(`
-        DELETE FROM market_prices WHERE market_product_id = ? AND source = 'seed' AND recorded_at NOT IN (SELECT value FROM json_each(?))
-    `);
+type ProductFields = {
+    name: string;
+    classification: string;
+    groups: string;
+    unit: string;
+    dtiSrp: number | null;
+    keywords: string;
+    externalKey: string | null;
+};
 
+type PriceFields = {
+    productId: number;
+    region: string;
+    regionName: string;
+    areaType: 'region' | 'market';
+    provinceCity: string;
+    latitude: number | null;
+    longitude: number | null;
+    avg: number;
+    lowest: number;
+    highest: number;
+    sampleSize: number;
+    recordedAt: string;
+};
+
+export async function seedMarketWatch(): Promise<{ products: number; prices: number }> {
     const dates = snapshotDates();
     const latest = dates[dates.length - 1];
     const regions = [...new Map(areas.map((a) => [a.region, a])).values()];
     let priceRows = 0;
 
-    const run = db.transaction(() => {
+    await withTransaction(async (client) => {
+        const findByKey = async (externalKey: string) =>
+            (await client.query(`SELECT market_product_id FROM market_products WHERE external_key = $1`, [externalKey])).rows[0] as { market_product_id: number } | undefined;
+        const findByName = async (name: string) =>
+            (await client.query(`SELECT market_product_id FROM market_products WHERE name = $1`, [name])).rows[0] as { market_product_id: number } | undefined;
+        const upsertByName = (f: ProductFields) => client.query(`
+            INSERT INTO market_products (name, classification, product_groups, unit_measurement, dti_srp, crop_keywords, external_key)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (name) DO UPDATE SET
+                classification = EXCLUDED.classification,
+                product_groups = EXCLUDED.product_groups,
+                unit_measurement = EXCLUDED.unit_measurement,
+                dti_srp = EXCLUDED.dti_srp,
+                crop_keywords = EXCLUDED.crop_keywords,
+                external_key = EXCLUDED.external_key
+        `, [f.name, f.classification, f.groups, f.unit, f.dtiSrp, f.keywords, f.externalKey]);
+        // The importer got here first and owns the row (and its name); the seed
+        // only contributes the SRP and the friendlier keywords.
+        const updateImported = (f: ProductFields, id: number) => client.query(`
+            UPDATE market_products SET classification = $1, product_groups = $2, dti_srp = $3, crop_keywords = $4
+            WHERE market_product_id = $5
+        `, [f.classification, f.groups, f.dtiSrp, f.keywords, id]);
+        const hasRealRows = async (productId: number, region: string) => ((await client.query(`
+            SELECT 1 FROM market_prices WHERE market_product_id = $1 AND region = $2 AND source <> 'seed' LIMIT 1
+        `, [productId, region])).rowCount ?? 0) > 0;
+        // WHERE on the conflict branch: never overwrite a row the importer wrote.
+        const upsertPrice = (p: PriceFields) => client.query(`
+            INSERT INTO market_prices (market_product_id, region, region_name, area_type, province_city, latitude, longitude, avg_price, lowest_price, highest_price, sample_size, recorded_at, source)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'seed')
+            ON CONFLICT (market_product_id, region, province_city, recorded_at) DO UPDATE SET
+                region_name = EXCLUDED.region_name,
+                area_type = EXCLUDED.area_type,
+                latitude = EXCLUDED.latitude,
+                longitude = EXCLUDED.longitude,
+                avg_price = EXCLUDED.avg_price,
+                lowest_price = EXCLUDED.lowest_price,
+                highest_price = EXCLUDED.highest_price,
+                sample_size = EXCLUDED.sample_size
+            WHERE market_prices.source = 'seed'
+        `, [p.productId, p.region, p.regionName, p.areaType, p.provinceCity, p.latitude, p.longitude,
+            p.avg, p.lowest, p.highest, p.sampleSize, p.recordedAt]);
+        // Old seed snapshots (earlier dates, monthly rows from before the DA
+        // importer) would otherwise accumulate; the seed owns only its 4 weeks.
+        const deleteOtherSeedRows = (productId: number) => client.query(`
+            DELETE FROM market_prices WHERE market_product_id = $1 AND source = 'seed' AND recorded_at <> ALL($2::date[])
+        `, [productId, dates]);
+
         for (const product of products) {
-            const fields = {
+            const fields: ProductFields = {
                 name: product.name,
                 classification: product.classification,
                 groups: product.groups.join(', '),
@@ -170,17 +198,17 @@ export function seedMarketWatch(): { products: number; prices: number } {
                 keywords: product.keywords.join(','),
                 externalKey: product.externalKey,
             };
-            const imported = product.externalKey ? (findByKey.get(product.externalKey) as { market_product_id: number } | undefined) : undefined;
-            if (imported && !findByName.get(product.name)) {
-                updateImported.run({ ...fields, id: imported.market_product_id });
+            const imported = product.externalKey ? await findByKey(product.externalKey) : undefined;
+            if (imported && !(await findByName(product.name))) {
+                await updateImported(fields, imported.market_product_id);
             } else {
-                upsertByName.run(fields);
+                await upsertByName(fields);
             }
-            const { market_product_id: productId } = (imported ?? findByName.get(product.name)) as { market_product_id: number };
-            deleteOtherSeedRows.run(productId, JSON.stringify(dates));
+            const { market_product_id: productId } = (imported ?? (await findByName(product.name)))!;
+            await deleteOtherSeedRows(productId);
 
             for (const regionSeed of regions) {
-                if (hasRealRows.get(productId, regionSeed.region)) continue;
+                if (await hasRealRows(productId, regionSeed.region)) continue;
                 const regionAreas = areas.filter((a) => a.region === regionSeed.region);
                 const centroid = REGION_CENTROIDS[regionSeed.region];
 
@@ -194,7 +222,7 @@ export function seedMarketWatch(): { products: number; prices: number } {
                         return { area, avg: round2(avg), lowest: round2(avg * (1 - spread)), highest: round2(avg * (1 + spread)) };
                     });
 
-                    upsertPrice.run({
+                    await upsertPrice({
                         productId,
                         region: regionSeed.region,
                         regionName: regionSeed.regionName,
@@ -212,7 +240,7 @@ export function seedMarketWatch(): { products: number; prices: number } {
 
                     if (date !== latest) continue;
                     for (const { area, avg, lowest, highest } of areaPrices) {
-                        upsertPrice.run({
+                        await upsertPrice({
                             productId,
                             region: area.region,
                             regionName: area.regionName,
@@ -232,7 +260,6 @@ export function seedMarketWatch(): { products: number; prices: number } {
             }
         }
     });
-    run();
 
     return { products: products.length, prices: priceRows };
 }

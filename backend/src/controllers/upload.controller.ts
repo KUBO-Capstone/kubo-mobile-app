@@ -6,9 +6,10 @@ import multer from "multer";
 import { requireEnv, s3 } from "#config/aws";
 
 // Photos (listing images and profile pictures) live in the S3 bucket named by
-// S3_BUCKET, under products/ and profiles/. The database stores each one as
-// its plain S3 URL, https://<bucket>.s3.<region>.amazonaws.com/<key>, which a
-// private bucket will not serve. So every JSON response swaps it for a URL
+// S3_BUCKET, under products/ and profiles/. The app handles each one as its
+// plain S3 URL, https://<bucket>.s3.<region>.amazonaws.com/<key> (the
+// database column keeps just the key, see toMediaColumn), which a private
+// bucket will not serve. So every JSON response swaps it for a URL
 // the app can load (viewableMediaUrl, applied by middleware/media.middleware.ts),
 // and requests that send one of those back are mapped to the stored form
 // with toStoredMediaUrl. See docs/media_storage.md for the bucket setup.
@@ -61,6 +62,21 @@ export const mediaKeyOf = (url: string, folder?: MediaFolder): string | undefine
 export const toStoredMediaUrl = (url: string, folder: MediaFolder): string | undefined => {
     const key = mediaKeyOf(url, folder);
     return key ? mediaUrlForKey(key) : undefined;
+};
+
+// The database columns (product_images.image_key, users.profile_photo_key)
+// hold the object key rather than the URL, so a bucket or region change is
+// not a data migration. Anything else, such as seed data's absolute URLs, is
+// kept whole. Models convert at the boundary; everything above them works
+// with stored URLs.
+
+/** What a media column stores for a stored photo URL. */
+export const toMediaColumn = (storedUrl: string): string => mediaKeyOf(storedUrl) ?? storedUrl;
+
+/** The stored photo URL for a media column value. */
+export const fromMediaColumn = (value: string): string => {
+    const origin = s3Origin();
+    return origin && keyPattern.test(value) ? `${origin}/${value}` : value;
 };
 
 /**

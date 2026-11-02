@@ -1,7 +1,7 @@
-import { db } from "#config/database";
+import { isRowId, pool, Queryable, withTransaction } from "#database/pg";
 import { ConversationModel } from "#models/conversation.model";
 
-// Mirrors the CHECK constraint on negotiations.status in config/database.ts.
+// Mirrors the CHECK constraint on negotiations.status in database/migrations.
 // The status also encodes whose turn it is: 'pending' means the buyer moved
 // last and the seller must respond; 'countered' means the seller moved last
 // and the buyer must respond. A counter overwrites the price on the same row.
@@ -64,8 +64,8 @@ function mapNegotiation(row: Record<string, unknown>): Negotiation {
         unit_measurement: String(row.unit_measurement),
         base_price: Number(row.base_price),
         product_status: String(row.product_status),
-        allows_meetup: Boolean(Number(row.allows_meetup ?? 1)),
-        allows_delivery: Boolean(Number(row.allows_delivery ?? 1)),
+        allows_meetup: row.allows_meetup !== false,
+        allows_delivery: row.allows_delivery !== false,
         accepted_by: row.accepted_by === null || row.accepted_by === undefined ? null : Number(row.accepted_by),
         buyer_name: String(row.buyer_name),
         seller_name: String(row.seller_name),
@@ -73,74 +73,85 @@ function mapNegotiation(row: Record<string, unknown>): Negotiation {
 }
 
 export const NegotiationModel = {
-    findById(negotiationId: number): Negotiation | undefined {
-        const row = db.prepare(`${negotiationQuery} WHERE n.negotiation_id = ?`).get(negotiationId) as Record<string, unknown> | undefined;
-        return row ? mapNegotiation(row) : undefined;
+    async findById(negotiationId: number, q: Queryable = pool): Promise<Negotiation | undefined> {
+        if (!isRowId(negotiationId)) return undefined;
+        const { rows } = await q.query(`${negotiationQuery} WHERE n.negotiation_id = $1`, [negotiationId]);
+        return rows[0] ? mapNegotiation(rows[0]) : undefined;
     },
 
     // Every negotiation the user is a party to, newest first. `role` narrows
     // to one side so the app can render "received" and "sent" tabs.
-    findForUser(userId: number, role?: 'buyer' | 'seller', status?: NegotiationStatus): Negotiation[] {
+    async findForUser(userId: number, role?: 'buyer' | 'seller', status?: NegotiationStatus): Promise<Negotiation[]> {
         const conditions = role === 'buyer'
-            ? ['n.buyer_id = @userId']
+            ? ['n.buyer_id = $1']
             : role === 'seller'
-                ? ['n.seller_id = @userId']
-                : ['(n.buyer_id = @userId OR n.seller_id = @userId)'];
-        if (status) conditions.push('n.status = @status');
-        const rows = db.prepare(`${negotiationQuery} WHERE ${conditions.join(' AND ')} ORDER BY n.negotiation_id DESC`)
-            .all({ userId, status }) as Record<string, unknown>[];
+                ? ['n.seller_id = $1']
+                : ['(n.buyer_id = $1 OR n.seller_id = $1)'];
+        const params: unknown[] = [userId];
+        if (status) {
+            params.push(status);
+            conditions.push(`n.status = $${params.length}`);
+        }
+        const { rows } = await pool.query(`${negotiationQuery} WHERE ${conditions.join(' AND ')} ORDER BY n.negotiation_id DESC`, params);
         return rows.map(mapNegotiation);
     },
 
     // A buyer holds at most one open offer per listing; the controller turns
-    // a hit here into a 409.
-    findOpenForBuyer(buyerId: number, productId: number): Negotiation | undefined {
-        const row = db.prepare(`${negotiationQuery} WHERE n.buyer_id = ? AND n.product_id = ? AND n.status IN ('pending', 'countered')`)
-            .get(buyerId, productId) as Record<string, unknown> | undefined;
-        return row ? mapNegotiation(row) : undefined;
+    // a hit here into a 409 (and uq_negotiations_open_offer catches a race).
+    async findOpenForBuyer(buyerId: number, productId: number): Promise<Negotiation | undefined> {
+        const { rows } = await pool.query(`${negotiationQuery} WHERE n.buyer_id = $1 AND n.product_id = $2 AND n.status IN ('pending', 'countered')`,
+            [buyerId, productId]);
+        return rows[0] ? mapNegotiation(rows[0]) : undefined;
     },
 
     // An offer always lives inside the buyer/seller thread for that listing
     // (negotiations.conversation_id is NOT NULL), so the chat screen can show
-    // it as the first message the way Carousell does.
-    create(input: NegotiationInput): Negotiation {
-        const insert = db.transaction(() => {
-            const conversationId = ConversationModel.findOrCreate(input.buyer_id, input.seller_id, input.product_id);
+    // it as the first message the way Carousell does. Read back inside the
+    // transaction, so the offer event records these terms even if the seller
+    // counters the moment it commits.
+    async create(input: NegotiationInput): Promise<Negotiation> {
+        return withTransaction(async (client) => {
+            const conversationId = await ConversationModel.findOrCreate(input.buyer_id, input.seller_id, input.product_id, client);
 
-            const result = db.prepare(`
+            const { rows: [row] } = await client.query(`
                 INSERT INTO negotiations (conversation_id, product_id, buyer_id, seller_id, offered_price, offered_quantity)
-                VALUES (@conversation_id, @product_id, @buyer_id, @seller_id, @offered_price, @offered_quantity)
-            `).run({ ...input, conversation_id: conversationId });
-            return Number(result.lastInsertRowid);
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING negotiation_id
+            `, [conversationId, input.product_id, input.buyer_id, input.seller_id, input.offered_price, input.offered_quantity]);
+            return (await NegotiationModel.findById(Number(row.negotiation_id), client)) as Negotiation;
         });
-        return NegotiationModel.findById(insert()) as Negotiation;
     },
 
     // Accept/decline only move the status (an accept also records who did
-    // it); a counter also rewrites the terms.
-    update(negotiationId: number, changes: { status: NegotiationStatus; offered_price?: number; offered_quantity?: number; accepted_by?: number }): Negotiation | undefined {
-        db.prepare(`
-            UPDATE negotiations
-            SET status = @status,
-                offered_price = COALESCE(@offered_price, offered_price),
-                offered_quantity = COALESCE(@offered_quantity, offered_quantity),
-                accepted_by = COALESCE(@accepted_by, accepted_by)
-            WHERE negotiation_id = @negotiationId
-        `).run({
-            negotiationId,
-            status: changes.status,
-            offered_price: changes.offered_price ?? null,
-            offered_quantity: changes.offered_quantity ?? null,
-            accepted_by: changes.accepted_by ?? null,
+    // it); a counter also rewrites the terms. Applies only while the offer is
+    // still exactly what the caller checked: same status and same terms. The
+    // status alone is not enough, since a counter and a counter back return
+    // it to the same status with other terms. Undefined means the offer
+    // changed meanwhile and nothing was written. The result is read while
+    // the row is still locked, so it is this change and not a later one.
+    async update(
+        negotiationId: number,
+        expected: Pick<Negotiation, 'status' | 'offered_price' | 'offered_quantity'>,
+        changes: { status: NegotiationStatus; offered_price?: number; offered_quantity?: number; accepted_by?: number },
+    ): Promise<Negotiation | undefined> {
+        return withTransaction(async (client) => {
+            const { rowCount } = await client.query(`
+                UPDATE negotiations
+                SET status = $3,
+                    offered_price = COALESCE($4, offered_price),
+                    offered_quantity = COALESCE($5, offered_quantity),
+                    accepted_by = COALESCE($6, accepted_by)
+                WHERE negotiation_id = $1 AND status = $2 AND offered_price = $7 AND offered_quantity = $8
+            `, [negotiationId, expected.status, changes.status, changes.offered_price ?? null, changes.offered_quantity ?? null,
+                changes.accepted_by ?? null, expected.offered_price, expected.offered_quantity]);
+            return rowCount ? NegotiationModel.findById(negotiationId, client) : undefined;
         });
-        return NegotiationModel.findById(negotiationId);
     },
 
     // Records that one side has seen the "deal closed" screen. Only the
     // first call counts, so a second device does not move the timestamp.
-    markCelebrated(negotiationId: number, side: 'buyer' | 'seller'): void {
+    async markCelebrated(negotiationId: number, side: 'buyer' | 'seller'): Promise<void> {
         const column = side === 'buyer' ? 'buyer_celebrated_at' : 'seller_celebrated_at';
-        db.prepare(`UPDATE negotiations SET ${column} = COALESCE(${column}, ?) WHERE negotiation_id = ?`)
-            .run(new Date().toISOString(), negotiationId);
+        await pool.query(`UPDATE negotiations SET ${column} = COALESCE(${column}, now()) WHERE negotiation_id = $1`, [negotiationId]);
     },
 };

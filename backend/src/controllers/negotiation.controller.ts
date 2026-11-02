@@ -4,6 +4,7 @@ import { ProductModel } from "#models/product.model";
 import { MessageType } from "#models/message.model";
 import { authUserId } from "#middleware/auth.middleware";
 import { sendChatMessage } from "#services/chat.service";
+import { isUniqueViolation } from "#database/pg";
 
 // Mounted behind requireAuth: the acting user is always authUserId(res).
 
@@ -49,17 +50,23 @@ const recordOfferEvent = async (negotiation: Negotiation, actorId: number, type:
     }
 };
 
-export const getNegotiations = (req: Request, res: Response): void => {
+// The other party acted between our read and our write, so the offer is no
+// longer in the state this request was checked against.
+const changedMeanwhile = (res: Response): void => {
+    res.status(409).json({ success: false, message: 'This offer was just updated. Refresh to see the latest.' });
+};
+
+export const getNegotiations = async (req: Request, res: Response): Promise<void> => {
     const userId = authUserId(res);
     const role = req.query.role === 'buyer' || req.query.role === 'seller' ? req.query.role : undefined;
     const status = typeof req.query.status === 'string' && statuses.has(req.query.status)
         ? (req.query.status as NegotiationStatus)
         : undefined;
-    res.json({ success: true, data: NegotiationModel.findForUser(userId, role, status) });
+    res.json({ success: true, data: await NegotiationModel.findForUser(userId, role, status) });
 };
 
-export const getNegotiation = (req: Request, res: Response): void => {
-    const negotiation = NegotiationModel.findById(Number(req.params.id));
+export const getNegotiation = async (req: Request, res: Response): Promise<void> => {
+    const negotiation = await NegotiationModel.findById(Number(req.params.id));
     if (!negotiation) {
         res.status(404).json({ success: false, message: 'Offer not found' });
         return;
@@ -83,7 +90,7 @@ export const createNegotiation = async (req: Request, res: Response): Promise<vo
         return;
     }
 
-    const product = ProductModel.findById(productId);
+    const product = await ProductModel.findById(productId);
     if (!product) {
         res.status(404).json({ success: false, message: 'Listing not found' });
         return;
@@ -100,18 +107,29 @@ export const createNegotiation = async (req: Request, res: Response): Promise<vo
         res.status(400).json({ success: false, message: `Only ${product.available_quantity} ${product.unit_measurement} available` });
         return;
     }
-    if (NegotiationModel.findOpenForBuyer(buyerId, productId)) {
-        res.status(409).json({ success: false, message: 'You already have an open offer on this listing' });
+    const alreadyOpen = () => res.status(409).json({ success: false, message: 'You already have an open offer on this listing' });
+    if (await NegotiationModel.findOpenForBuyer(buyerId, productId)) {
+        alreadyOpen();
         return;
     }
 
-    const negotiation = NegotiationModel.create({
-        product_id: productId,
-        buyer_id: buyerId,
-        seller_id: product.seller_id,
-        offered_price: offeredPrice,
-        offered_quantity: offeredQuantity,
-    });
+    let negotiation: Negotiation;
+    try {
+        negotiation = await NegotiationModel.create({
+            product_id: productId,
+            buyer_id: buyerId,
+            seller_id: product.seller_id,
+            offered_price: offeredPrice,
+            offered_quantity: offeredQuantity,
+        });
+    } catch (error) {
+        // A second tap that raced past the check above.
+        if (isUniqueViolation(error, 'uq_negotiations_open_offer')) {
+            alreadyOpen();
+            return;
+        }
+        throw error;
+    }
     await recordOfferEvent(negotiation, buyerId, 'offer');
     res.status(201).json({ success: true, data: negotiation });
 };
@@ -127,7 +145,7 @@ export const respondToNegotiation = async (req: Request, res: Response): Promise
         return;
     }
 
-    const negotiation = NegotiationModel.findById(Number(req.params.id));
+    const negotiation = await NegotiationModel.findById(Number(req.params.id));
     if (!negotiation) {
         res.status(404).json({ success: false, message: 'Offer not found' });
         return;
@@ -147,7 +165,11 @@ export const respondToNegotiation = async (req: Request, res: Response): Promise
     const isMyTurn = awaitingSeller ? isSeller : isBuyer;
 
     if (action === 'decline') {
-        const declined = NegotiationModel.update(negotiation.negotiation_id, { status: 'declined' }) as Negotiation;
+        const declined = await NegotiationModel.update(negotiation.negotiation_id, negotiation, { status: 'declined' });
+        if (!declined) {
+            changedMeanwhile(res);
+            return;
+        }
         await recordOfferEvent(declined, userId, 'declined');
         res.json({ success: true, data: declined });
         return;
@@ -157,7 +179,11 @@ export const respondToNegotiation = async (req: Request, res: Response): Promise
         return;
     }
     if (action === 'accept') {
-        const accepted = NegotiationModel.update(negotiation.negotiation_id, { status: 'accepted', accepted_by: userId }) as Negotiation;
+        const accepted = await NegotiationModel.update(negotiation.negotiation_id, negotiation, { status: 'accepted', accepted_by: userId });
+        if (!accepted) {
+            changedMeanwhile(res);
+            return;
+        }
         await recordOfferEvent(accepted, userId, 'accepted');
         res.json({ success: true, data: accepted });
         return;
@@ -170,25 +196,29 @@ export const respondToNegotiation = async (req: Request, res: Response): Promise
         res.status(400).json({ success: false, message: 'A counter needs a positive offered_price (and optionally offered_quantity)' });
         return;
     }
-    const product = ProductModel.findById(negotiation.product_id);
+    const product = await ProductModel.findById(negotiation.product_id);
     if (product && offeredQuantity > product.available_quantity) {
         res.status(400).json({ success: false, message: `Only ${product.available_quantity} ${product.unit_measurement} available` });
         return;
     }
-    const updated = NegotiationModel.update(negotiation.negotiation_id, {
+    const updated = await NegotiationModel.update(negotiation.negotiation_id, negotiation, {
         status: isSeller ? 'countered' : 'pending',
         offered_price: offeredPrice,
         offered_quantity: offeredQuantity,
-    }) as Negotiation;
+    });
+    if (!updated) {
+        changedMeanwhile(res);
+        return;
+    }
     await recordOfferEvent(updated, userId, 'counter');
     res.json({ success: true, data: updated });
 };
 
 // The app calls this once it has shown the caller the "deal closed" screen
 // for an accepted offer, so each side sees it exactly once.
-export const markNegotiationCelebrated = (req: Request, res: Response): void => {
+export const markNegotiationCelebrated = async (req: Request, res: Response): Promise<void> => {
     const userId = authUserId(res);
-    const negotiation = NegotiationModel.findById(Number(req.params.id));
+    const negotiation = await NegotiationModel.findById(Number(req.params.id));
     if (!negotiation) {
         res.status(404).json({ success: false, message: 'Offer not found' });
         return;
@@ -202,6 +232,6 @@ export const markNegotiationCelebrated = (req: Request, res: Response): void => 
         res.status(409).json({ success: false, message: 'Only an accepted offer can be celebrated' });
         return;
     }
-    NegotiationModel.markCelebrated(negotiation.negotiation_id, isBuyer ? 'buyer' : 'seller');
+    await NegotiationModel.markCelebrated(negotiation.negotiation_id, isBuyer ? 'buyer' : 'seller');
     res.json({ success: true, data: { negotiation_id: negotiation.negotiation_id, celebrated: true } });
 };

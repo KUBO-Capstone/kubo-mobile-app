@@ -1,4 +1,5 @@
-import { db } from "#config/database";
+import { pool } from "#database/pg";
+import { fromMediaColumn } from "#controllers/upload.controller";
 
 // Quick tags a reviewer can pick, by who is being reviewed. Stored as keys;
 // the app owns the labels.
@@ -43,10 +44,10 @@ export interface ReviewInput {
 const reviewQuery = `
     SELECT r.*,
            u.first_name || ' ' || u.last_name AS reviewer_name,
-           u.profile_photo_url AS reviewer_photo_url,
+           u.profile_photo_key AS reviewer_photo_url,
            CASE WHEN o.buyer_id = r.reviewer_id THEN 'buyer' ELSE 'seller' END AS reviewer_role,
            oi.product_id, p.crop_name,
-           (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.display_order LIMIT 1) AS product_image
+           (SELECT pi.image_key FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.display_order LIMIT 1) AS product_image
     FROM reviews r
     JOIN users u ON u.user_id = r.reviewer_id
     JOIN orders o ON o.order_id = r.order_id
@@ -54,14 +55,9 @@ const reviewQuery = `
     JOIN products p ON p.product_id = oi.product_id
 `;
 
-const parseTags = (value: unknown): string[] => {
-    try {
-        const parsed = JSON.parse(String(value ?? '[]'));
-        return Array.isArray(parsed) ? parsed.filter((tag): tag is string => typeof tag === 'string') : [];
-    } catch {
-        return [];
-    }
-};
+// reviews.tags is jsonb, so node-postgres hands over the parsed array.
+const parseTags = (value: unknown): string[] =>
+    Array.isArray(value) ? value.filter((tag): tag is string => typeof tag === 'string') : [];
 
 function mapReview(row: Record<string, unknown>): Review {
     return {
@@ -70,35 +66,40 @@ function mapReview(row: Record<string, unknown>): Review {
         reviewer_id: Number(row.reviewer_id),
         reviewee_id: Number(row.reviewee_id),
         reviewer_name: String(row.reviewer_name),
-        reviewer_photo_url: row.reviewer_photo_url ? String(row.reviewer_photo_url) : null,
+        reviewer_photo_url: row.reviewer_photo_url ? fromMediaColumn(String(row.reviewer_photo_url)) : null,
         reviewer_role: row.reviewer_role === 'seller' ? 'seller' : 'buyer',
         rating: Number(row.rating),
         comment: row.comment ? String(row.comment) : '',
         tags: parseTags(row.tags),
         product_id: Number(row.product_id),
         crop_name: String(row.crop_name),
-        product_image: row.product_image ? String(row.product_image) : null,
+        product_image: row.product_image ? fromMediaColumn(String(row.product_image)) : null,
         created_at: String(row.created_at),
     };
 }
 
 export const ReviewModel = {
     // Newest first: what the profile Reviews tab lists.
-    findForUser(revieweeId: number): Review[] {
-        const rows = db.prepare(`${reviewQuery} WHERE r.reviewee_id = ? ORDER BY r.created_at DESC, r.review_id DESC`)
-            .all(revieweeId) as Record<string, unknown>[];
+    async findForUser(revieweeId: number): Promise<Review[]> {
+        const { rows } = await pool.query(`${reviewQuery} WHERE r.reviewee_id = $1 ORDER BY r.created_at DESC, r.review_id DESC`, [revieweeId]);
         return rows.map(mapReview);
     },
 
-    findByOrderAndReviewer(orderId: number, reviewerId: number): Review | undefined {
-        const row = db.prepare(`${reviewQuery} WHERE r.order_id = ? AND r.reviewer_id = ?`)
-            .get(orderId, reviewerId) as Record<string, unknown> | undefined;
-        return row ? mapReview(row) : undefined;
+    async findByOrderAndReviewer(orderId: number, reviewerId: number): Promise<Review | undefined> {
+        const { rows } = await pool.query(`${reviewQuery} WHERE r.order_id = $1 AND r.reviewer_id = $2`, [orderId, reviewerId]);
+        return rows[0] ? mapReview(rows[0]) : undefined;
     },
 
-    summaryFor(userId: number): RatingSummary {
-        const rows = db.prepare(`SELECT rating, COUNT(*) AS total FROM reviews WHERE reviewee_id = ? GROUP BY rating`)
-            .all(userId) as { rating: number; total: number }[];
+    // Both sides' reviews of each order, in one query for an order list.
+    async findForOrders(orderIds: number[]): Promise<Review[]> {
+        if (orderIds.length === 0) return [];
+        const { rows } = await pool.query(`${reviewQuery} WHERE r.order_id = ANY($1::int[])`, [orderIds]);
+        return rows.map(mapReview);
+    },
+
+    async summaryFor(userId: number): Promise<RatingSummary> {
+        const { rows } = await pool.query<{ rating: number; total: number }>(
+            `SELECT rating, COUNT(*) AS total FROM reviews WHERE reviewee_id = $1 GROUP BY rating`, [userId]);
         const breakdown: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
         let count = 0;
         let sum = 0;
@@ -110,12 +111,15 @@ export const ReviewModel = {
         return { average: count === 0 ? null : Math.round((sum / count) * 10) / 10, count, breakdown };
     },
 
-    create(input: ReviewInput): Review {
-        const result = db.prepare(`
+    // tags is sent as JSON text: node-postgres would turn a JS array into a
+    // Postgres array literal, which jsonb does not accept.
+    async create(input: ReviewInput): Promise<Review> {
+        const { rows: [created] } = await pool.query(`
             INSERT INTO reviews (order_id, reviewer_id, reviewee_id, rating, comment, tags)
-            VALUES (@order_id, @reviewer_id, @reviewee_id, @rating, @comment, @tags)
-        `).run({ ...input, tags: JSON.stringify(input.tags) });
-        const row = db.prepare(`${reviewQuery} WHERE r.review_id = ?`).get(Number(result.lastInsertRowid)) as Record<string, unknown>;
-        return mapReview(row);
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING review_id
+        `, [input.order_id, input.reviewer_id, input.reviewee_id, input.rating, input.comment, JSON.stringify(input.tags)]);
+        const { rows } = await pool.query(`${reviewQuery} WHERE r.review_id = $1`, [created.review_id]);
+        return mapReview(rows[0]);
     },
 };

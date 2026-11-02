@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+import 'dotenv/config'; // must stay first: database/pg reads PG* when imported
 import { importMarketPrices } from '#market/market-import';
 
 // Manual run of the DA Bantay Presyo import. The server schedules the same
@@ -6,7 +6,6 @@ import { importMarketPrices } from '#market/market-import';
 // quick check on one region:
 //   npm run import:market
 //   npm run import:market -- --regions=NCR,Region III --categories=7,9
-dotenv.config();
 
 const arg = (name: string): string | undefined =>
     process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);

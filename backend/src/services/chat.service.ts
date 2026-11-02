@@ -9,12 +9,12 @@ export type ChatMessage = StoredMessage & { sender_name: string };
 
 // Names are looked up at read time rather than copied into DynamoDB, so an
 // anonymized sender shows as "Deleted User" everywhere at once.
-function withSenderNames(messages: StoredMessage[]): ChatMessage[] {
+async function withSenderNames(messages: StoredMessage[]): Promise<ChatMessage[]> {
     const names = new Map<number, string>();
-    for (const id of new Set(messages.map((m) => m.sender_id))) {
-        const user = UserModel.findById(id);
+    await Promise.all([...new Set(messages.map((m) => m.sender_id))].map(async (id) => {
+        const user = await UserModel.findById(id);
         names.set(id, user ? `${user.first_name} ${user.last_name}` : 'Deleted User');
-    }
+    }));
     return messages.map((m) => ({ ...m, sender_name: names.get(m.sender_id) ?? 'Deleted User' }));
 }
 
@@ -35,16 +35,16 @@ function notificationTitle(message: StoredMessage): string {
 // connected the push is simply lost; clients catch up with
 // GET /conversations/:id/messages?after=<message_id>.
 export async function sendChatMessage(input: NewMessage): Promise<ChatMessage> {
-    const parties = ConversationModel.parties(input.conversation_id);
+    const parties = await ConversationModel.parties(input.conversation_id);
     if (!parties) throw new Error(`Conversation ${input.conversation_id} does not exist`);
 
     const stored = await MessageModel.create(input);
-    ConversationModel.recordLastMessage(input.conversation_id, stored);
+    await ConversationModel.recordLastMessage(input.conversation_id, stored);
 
     const recipientId = parties.buyer_id === input.sender_id ? parties.seller_id : parties.buyer_id;
-    
+
     try {
-        NotificationModel.create({
+        await NotificationModel.create({
             recipientId,
             senderId: input.sender_id,
             productId: parties.product_id,
@@ -55,7 +55,7 @@ export async function sendChatMessage(input: NewMessage): Promise<ChatMessage> {
         console.error('Failed to create chat notification', error);
     }
 
-    const [message] = withSenderNames([stored]);
+    const [message] = await withSenderNames([stored]);
     emitToUsers([parties.buyer_id, parties.seller_id], 'message:new', message);
     return message;
 }

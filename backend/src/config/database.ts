@@ -1,3 +1,7 @@
+// LEGACY: the app runs on PostgreSQL (database/pg.ts, schema in
+// database/migrations). Nothing in the server imports this file any more;
+// only the one-off scripts migrate-local-to-s3.ts and
+// migrate-messages-to-dynamo.ts still read the old db.sqlite through it.
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';

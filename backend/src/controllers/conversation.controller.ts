@@ -13,14 +13,14 @@ const readId = (value: unknown): number | undefined => {
 };
 
 // Loads the thread and checks the caller is one of its two parties.
-const loadOwnConversation = (req: Request, res: Response): ConversationSummary | undefined => {
+const loadOwnConversation = async (req: Request, res: Response): Promise<ConversationSummary | undefined> => {
     const userId = authUserId(res);
     const conversationId = readId(req.params.id);
     if (!conversationId) {
         res.status(400).json({ success: false, message: 'Invalid conversation id' });
         return undefined;
     }
-    const conversation = ConversationModel.findById(conversationId, userId);
+    const conversation = await ConversationModel.findById(conversationId, userId);
     if (!conversation) {
         res.status(404).json({ success: false, message: 'Conversation not found' });
         return undefined;
@@ -33,13 +33,13 @@ const loadOwnConversation = (req: Request, res: Response): ConversationSummary |
 };
 
 // Inbox for the signed-in user.
-export const getConversations = (req: Request, res: Response): void => {
-    res.json({ success: true, data: ConversationModel.findForUser(authUserId(res)) });
+export const getConversations = async (req: Request, res: Response): Promise<void> => {
+    res.json({ success: true, data: await ConversationModel.findForUser(authUserId(res)) });
 };
 
 // Thread header data (product, parties, current offer) for the chat screen.
-export const getConversation = (req: Request, res: Response): void => {
-    const conversation = loadOwnConversation(req, res);
+export const getConversation = async (req: Request, res: Response): Promise<void> => {
+    const conversation = await loadOwnConversation(req, res);
     if (!conversation) return;
     res.json({ success: true, data: conversation });
 };
@@ -47,14 +47,14 @@ export const getConversation = (req: Request, res: Response): void => {
 // Buyer opens (or reopens) a thread on a listing without making an offer -
 // the Message button. Sellers never start threads: a listing's thread is
 // always keyed by the buyer who reached out.
-export const createConversation = (req: Request, res: Response): void => {
+export const createConversation = async (req: Request, res: Response): Promise<void> => {
     const buyerId = authUserId(res);
     const productId = readId(req.body.product_id);
     if (!productId) {
         res.status(400).json({ success: false, message: 'product_id is required' });
         return;
     }
-    const product = ProductModel.findById(productId);
+    const product = await ProductModel.findById(productId);
     if (!product || product.status === 'delisted') {
         res.status(404).json({ success: false, message: 'Listing not found' });
         return;
@@ -63,14 +63,14 @@ export const createConversation = (req: Request, res: Response): void => {
         res.status(400).json({ success: false, message: 'You cannot message yourself about your own listing' });
         return;
     }
-    const conversationId = ConversationModel.findOrCreate(buyerId, product.seller_id, productId);
-    res.status(201).json({ success: true, data: ConversationModel.findById(conversationId, buyerId) });
+    const conversationId = await ConversationModel.findOrCreate(buyerId, product.seller_id, productId);
+    res.status(201).json({ success: true, data: await ConversationModel.findById(conversationId, buyerId) });
 };
 
 // ?after=<message_id> returns only newer messages; the app uses it to catch
 // up on whatever it missed while its socket was disconnected.
 export const getMessages = async (req: Request, res: Response): Promise<void> => {
-    const conversation = loadOwnConversation(req, res);
+    const conversation = await loadOwnConversation(req, res);
     if (!conversation) return;
     const after = req.query.after;
     if (after !== undefined && (typeof after !== 'string' || !isMessageId(after))) {
@@ -81,7 +81,7 @@ export const getMessages = async (req: Request, res: Response): Promise<void> =>
 };
 
 export const sendMessage = async (req: Request, res: Response): Promise<void> => {
-    const conversation = loadOwnConversation(req, res);
+    const conversation = await loadOwnConversation(req, res);
     if (!conversation) return;
     const content = typeof req.body.content === 'string' ? req.body.content.trim() : '';
     if (!content) {
@@ -101,9 +101,9 @@ export const sendMessage = async (req: Request, res: Response): Promise<void> =>
 };
 
 // Clears the unread dot for the caller.
-export const markConversationRead = (req: Request, res: Response): void => {
-    const conversation = loadOwnConversation(req, res);
+export const markConversationRead = async (req: Request, res: Response): Promise<void> => {
+    const conversation = await loadOwnConversation(req, res);
     if (!conversation) return;
-    const updated = ConversationModel.markRead(conversation.conversation_id, authUserId(res));
+    const updated = await ConversationModel.markRead(conversation.conversation_id, authUserId(res));
     res.json({ success: true, data: { conversation_id: conversation.conversation_id, marked_read: updated } });
 };

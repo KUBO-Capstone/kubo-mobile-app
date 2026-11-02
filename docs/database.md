@@ -25,7 +25,7 @@ DynamoDB and S3 in one go.
 | Command | |
 |---|---|
 | `npm run db:migrate` | Applies the migrations the database does not have yet. Safe to run again. |
-| `npm run seed` | Adds the demo accounts, listings, bagsakan centers and Market Watch prices. Safe to run again. |
+| `npm run seed` | Adds the bagsakan centers and the Market Watch reference prices. No accounts or listings: those come from the app. Safe to run again. |
 | `npm run db:reset -- --yes` | **Deletes every row**, migrates, then seeds. Without `--yes` it only tells you which database it would wipe. On the shared RDS this wipes everyone's data. |
 
 The server checks on startup that every migration has been applied. If one

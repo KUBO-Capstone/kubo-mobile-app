@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -18,6 +20,7 @@ import '../../../shared/widgets/kubo_save_button.dart';
 import '../../chat/screens/chat_page.dart';
 import '../../login/services/auth_service.dart';
 import '../../saved/providers/saved_listings_controller.dart';
+import '../../shell/providers/app_shell_controller.dart';
 
 /// Detail screen for a single listing item selected from a card grid.
 ///
@@ -36,12 +39,17 @@ class ListingPage extends StatefulWidget {
 
 class _ListingPageState extends State<ListingPage> {
   late final ListingPageController _controller;
+  late final StreamSubscription<void> _listingsChanged;
 
   @override
   void initState() {
     super.initState();
     _controller = ListingPageController(listing: widget.listing);
     _controller.loadMarketReference();
+    // The card this opened from may be behind on stock; show what is left now,
+    // and again whenever a deal takes stock or gives it back.
+    _controller.refresh();
+    _listingsChanged = AppShellController.instance.listingsChanged.listen((_) => _controller.refresh());
   }
 
   // Seller-only: edit, mark sold out / restore, or remove.
@@ -75,11 +83,13 @@ class _ListingPageState extends State<ListingPage> {
     final offer = await showMakeOfferDialog(context, listing);
     if (offer == null || !context.mounted) return;
     // The offer is the first message of the thread; land the buyer in it.
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ChatPage(conversationId: offer.conversationId),
       ),
     );
+    // The offer may have been accepted in there, which takes stock.
+    _controller.refresh();
   }
 
   // Opens (or creates) the buyer's thread on this listing without an offer.
@@ -102,9 +112,10 @@ class _ListingPageState extends State<ListingPage> {
     try {
       final thread = await service.openConversation(productId: productId);
       if (!context.mounted) return;
-      Navigator.of(context).push(
+      await Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => ChatPage(conversationId: thread.id)),
       );
+      _controller.refresh();
     } catch (error) {
       messenger.showSnackBar(
         SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
@@ -125,6 +136,7 @@ class _ListingPageState extends State<ListingPage> {
 
   @override
   void dispose() {
+    _listingsChanged.cancel();
     _controller.dispose();
     super.dispose();
   }

@@ -84,8 +84,10 @@ const conversationQuery = `
     JOIN users b ON b.user_id = c.buyer_id
     JOIN users s ON s.user_id = c.seller_id
     JOIN products p ON p.product_id = c.product_id
+    -- The seller's farm address, or the one they registered with: the same
+    -- place the listing shows (sellerPlaceJoins in product.model.ts).
     LEFT JOIN farmer_profiles fp ON fp.farmer_id = c.seller_id
-    LEFT JOIN addresses a ON a.address_id = fp.address_id
+    LEFT JOIN addresses a ON a.address_id = COALESCE(fp.address_id, s.preferred_address_id)
     LEFT JOIN negotiations n ON n.negotiation_id = (
         SELECT negotiation_id FROM negotiations WHERE conversation_id = c.conversation_id ORDER BY negotiation_id DESC LIMIT 1
     )

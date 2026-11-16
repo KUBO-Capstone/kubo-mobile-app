@@ -1,10 +1,12 @@
 import { Request, Response } from "express";
 import { ProfilePrivacy, User, UserModel } from "#models/user.model";
+import { FollowModel } from "#models/follow.model";
 import { deleteStoredImage } from "#controllers/upload.controller";
 import { signToken } from "#utils/token";
 import { authUserId } from "#middleware/auth.middleware";
 import { verifyPassword } from "#utils/password";
 import { isUniqueViolation } from "#database/pg";
+import { queuePlaceLookups } from "#services/geocoding.service";
 
 export const getUsers = async (req: Request, res: Response): Promise<void> => {
     const users = await UserModel.findAll();
@@ -106,8 +108,37 @@ export const getProfile = async (req: Request<{ id: string }>, res: Response): P
         res.status(404).json({ success: false, message: 'User not found' });
         return;
     }
-    res.json({ success: true, data: publicUser(user, req.authUserId) });
+    // The follow counts are public even on a private profile, like the name.
+    res.json({ success: true, data: { ...publicUser(user, req.authUserId), ...(await FollowModel.summary(userId, req.authUserId)) } });
 };
+
+// POST follows, DELETE unfollows; both answer with the profile's new counts
+// so the app can show them without reloading the profile.
+const setFollowing = (following: boolean) => async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+    const followerId = authUserId(res);
+    const followeeId = Number(req.params.id);
+    if (!Number.isInteger(followeeId) || followeeId <= 0) {
+        res.status(400).json({ success: false, message: 'Invalid user ID format' });
+        return;
+    }
+    if (followeeId === followerId) {
+        res.status(400).json({ success: false, message: 'You cannot follow yourself' });
+        return;
+    }
+    if (!(await UserModel.isActive(followeeId))) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+    }
+    if (following) {
+        await FollowModel.follow(followerId, followeeId);
+    } else {
+        await FollowModel.unfollow(followerId, followeeId);
+    }
+    res.json({ success: true, data: await FollowModel.summary(followeeId, followerId) });
+};
+
+export const followUser = setFollowing(true);
+export const unfollowUser = setFollowing(false);
 
 export const updateProfile = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const userId = Number(req.params.id);
@@ -251,6 +282,8 @@ export const addFarmAddress = async (req: Request<{ id: string }>, res: Response
         }
 
         const addressId = await UserModel.setFarmAddress(userId, address);
+        // The seller's listings may now be in a town the map has no point for.
+        queuePlaceLookups();
         res.status(201).json({ success: true, data: { addressId } });
     } catch (error) {
         console.error("Error setting farm address:", error);
@@ -273,8 +306,9 @@ export const addUserAddress = async (req: Request<{ id: string }>, res: Response
             return res.status(400).json({ success: false, message: addressTooLongMessage });
         }
         const addressId = await UserModel.setPreferredAddress(userId, address);
-        
-        res.status(201).json({ 
+        queuePlaceLookups();
+
+        res.status(201).json({
             success: true,
             data: publicUser(await UserModel.findProfile(userId)),
             message: "Address updated successfully",
@@ -306,6 +340,7 @@ export const updateUserAddress = async (req: Request<{ id: string }>, res: Respo
         res.status(404).json({ success: false, message: 'Address not found' });
         return;
     }
+    queuePlaceLookups();
     res.json({ success: true, data: await UserModel.findProfile(userId) });
 };
 
@@ -320,5 +355,6 @@ export const choosePreferredAddress = async (req: Request<{ id: string }>, res: 
         res.status(404).json({ success: false, message: 'Address not found' });
         return;
     }
+    queuePlaceLookups();
     res.json({ success: true, data: await UserModel.findProfile(userId) });
 };

@@ -101,6 +101,7 @@ class _OfferBubble extends StatelessWidget {
       MessageType.counter => 'Counter offer',
       MessageType.accepted => 'Offer accepted',
       MessageType.declined => 'Offer declined',
+      MessageType.cancelled => 'Deal cancelled',
       MessageType.text || MessageType.order => '',
     };
     final terms = price == null

@@ -158,6 +158,33 @@ class _OfferControl extends StatelessWidget {
     onRespond(NegotiationAction.counter, price: terms.price, quantity: terms.quantity);
   }
 
+  // Calling off an agreed deal lets the other person down, so ask first.
+  Future<void> _cancelDeal(BuildContext context) async {
+    final quantity = '${formatAmount(conversation.offeredQuantity ?? 0)} ${conversation.unit}';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancel this deal?'),
+        content: Text(
+          'The $quantity set aside for it goes back on the listing, and '
+          '${conversation.counterpartyName(userId)} will be told the deal is off.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep deal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Cancel deal'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) onRespond(NegotiationAction.cancel);
+  }
+
   @override
   Widget build(BuildContext context) {
     final thread = conversation;
@@ -252,31 +279,37 @@ class _OfferControl extends StatelessWidget {
       );
     }
 
-    // Accepted, not yet ordered: the buyer's move.
+    // Accepted, not yet ordered: the buyer's move. The listing is holding
+    // the quantity for this deal, so either side can still call it off.
     if (thread.isAwaitingOrder) {
-      if (thread.canPlaceOrder(userId)) {
-        return Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Offer accepted · $termsLabel',
-                style: const TextStyle(color: AppColors.gray, fontSize: 12),
-              ),
-            ),
-            _SmallButton(label: 'Arrange pickup', filled: true, onTap: busy ? null : onPlaceOrder),
-          ],
-        );
-      }
-      return Text(
-        'Offer accepted · waiting for ${thread.buyerName} to arrange pickup or delivery',
-        style: const TextStyle(color: AppColors.gray, fontSize: 12),
+      final canOrder = thread.canPlaceOrder(userId);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            canOrder
+                ? 'Offer accepted · $termsLabel'
+                : 'Offer accepted · waiting for ${thread.buyerName} to arrange pickup or delivery',
+            style: const TextStyle(color: AppColors.gray, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (canOrder) ...[
+                _SmallButton(label: 'Arrange pickup', filled: true, onTap: busy ? null : onPlaceOrder),
+                const SizedBox(width: 8),
+              ],
+              _SmallButton(label: 'Cancel deal', onTap: busy ? null : () => _cancelDeal(context)),
+            ],
+          ),
+        ],
       );
     }
 
     // Closed or no offer yet.
     final String? closedLabel = switch (status) {
       NegotiationStatus.accepted => 'Offer accepted · $termsLabel',
-      NegotiationStatus.declined => 'Last offer declined',
+      NegotiationStatus.declined => thread.isDealCancelled ? 'Last deal cancelled' : 'Last offer declined',
       _ => null,
     };
     if (thread.canMakeOffer(userId)) {

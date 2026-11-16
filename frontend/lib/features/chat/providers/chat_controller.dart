@@ -6,6 +6,7 @@ import '../../../shared/data/chat_socket.dart';
 import '../../../shared/data/message_service.dart';
 import '../../../shared/data/negotiation_service.dart';
 import '../../login/services/auth_service.dart';
+import '../../shell/providers/app_shell_controller.dart';
 
 /// State for one conversation thread: the header (listing, parties, current
 /// offer), the messages, and the offer actions.
@@ -83,6 +84,8 @@ class ChatController extends ChangeNotifier {
       unawaited(_messages.markRead(conversationId: conversationId).catchError((_) {}));
     }
     if (fresh.any((m) => m.type != MessageType.text)) {
+      // An accepted or cancelled deal changes what is left on the listing.
+      AppShellController.instance.notifyListingsChanged();
       try {
         conversation = await _messages.fetchConversation(conversationId: conversationId);
         if (!_disposed) notifyListeners();
@@ -213,6 +216,9 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
     try {
       await call();
+      // Accepting takes the quantity off the listing and cancelling puts it
+      // back, so every feed showing the listing reloads.
+      AppShellController.instance.notifyListingsChanged();
       await refresh(silent: true);
       return null;
     } catch (error) {

@@ -22,12 +22,15 @@ const readId = (value: unknown): number | undefined => {
 const readText = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
 // Why the listing cannot take this order, or undefined if it can.
-// OrderModel.create checks the same things again in its stock update.
-const listingProblem = (product: ProductListing | undefined, method: string, quantity: number): string | undefined => {
+// OrderModel.create checks the same things again inside its transaction.
+// `stockHeld` is true when the accepted offer already took its quantity off
+// the listing; only an offer accepted before holds existed still needs the
+// stock to be there now.
+const listingProblem = (product: ProductListing | undefined, method: string, quantity: number, stockHeld: boolean): string | undefined => {
     if (!product || product.status === 'delisted') return 'This listing has been removed';
     if (method === 'meetup' && !product.allows_meetup) return 'This seller does not offer bagsakan center pickup for this listing';
     if (method === 'courier' && !product.allows_delivery) return 'This seller does not offer courier delivery for this listing';
-    if (quantity > product.available_quantity) return `Only ${product.available_quantity} ${product.unit_measurement} left on this listing`;
+    if (!stockHeld && quantity > product.available_quantity) return `Only ${product.available_quantity} ${product.unit_measurement} left on this listing`;
     return undefined;
 };
 
@@ -132,7 +135,8 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         return;
     }
 
-    const problem = listingProblem(await ProductModel.findById(negotiation.product_id), method, negotiation.offered_quantity);
+    const stockHeld = negotiation.reserved_quantity !== null;
+    const problem = listingProblem(await ProductModel.findById(negotiation.product_id), method, negotiation.offered_quantity, stockHeld);
     if (problem) {
         res.status(409).json({ success: false, message: problem });
         return;
@@ -172,9 +176,15 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         throw error;
     }
     if (!order) {
-        // The listing changed after the check above: another order took the
-        // stock, or the seller delisted it or turned this method off.
-        const changed = listingProblem(await ProductModel.findById(negotiation.product_id), method, negotiation.offered_quantity);
+        // Something moved after the checks above: the other side cancelled
+        // the deal, or the seller delisted the listing or turned this method
+        // off (or, for an offer from before stock holds, the stock went).
+        const latest = await NegotiationModel.findById(negotiationId);
+        if (latest?.status !== 'accepted') {
+            res.status(409).json({ success: false, message: 'This deal was just cancelled' });
+            return;
+        }
+        const changed = listingProblem(await ProductModel.findById(negotiation.product_id), method, negotiation.offered_quantity, stockHeld);
         res.status(409).json({ success: false, message: changed ?? 'This listing just changed. Refresh and try again.' });
         return;
     }

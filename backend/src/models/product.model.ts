@@ -54,22 +54,50 @@ export interface ProductListing extends ProductDetails {
     seller_review_count: number;
 }
 
+// Where a seller's produce is. `u` is the seller's users row; `a` comes out as
+// their farm address when they have a farmer profile, otherwise the address
+// they registered with, and `pc` as the looked-up point for that town (see
+// services/geocoding.service.ts). Exported so every query that shows a
+// seller's location places them the same way.
+export const sellerPlaceJoins = `
+    LEFT JOIN farmer_profiles fp ON fp.farmer_id = u.user_id
+    LEFT JOIN addresses a ON a.address_id = COALESCE(fp.address_id, u.preferred_address_id)
+    LEFT JOIN place_coordinates pc ON pc.city = lower(btrim(a.city_municipality))
+                                  AND pc.province = lower(btrim(a.province))
+`;
+
+// A farm address is plotted where it is. A seller without one is plotted at
+// their town's point, never at the coordinates of their own address.
+const hasFarmPoint = `fp.farmer_id IS NOT NULL AND a.latitude IS NOT NULL AND a.longitude IS NOT NULL`;
+
 // Exported so other models (saved listings) can list products in exactly the
 // shape the explore grid gets; keep the two in step.
 export const listingQuery = `
     SELECT p.*, u.first_name || ' ' || u.last_name AS seller_name,
            COALESCE(a.city_municipality, 'Philippines') AS location_label,
            COALESCE(a.region, 'NCR') AS region_label,
-           a.latitude AS latitude,
-           a.longitude AS longitude,
+           CASE WHEN ${hasFarmPoint} THEN a.latitude ELSE pc.latitude END AS latitude,
+           CASE WHEN ${hasFarmPoint} THEN a.longitude ELSE pc.longitude END AS longitude,
            ARRAY(SELECT pi.image_key FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.display_order) AS images,
            (SELECT ROUND(AVG(r.rating), 1) FROM reviews r WHERE r.reviewee_id = p.seller_id) AS seller_rating,
            (SELECT COUNT(*) FROM reviews r WHERE r.reviewee_id = p.seller_id) AS seller_review_count
     FROM products p
     JOIN users u ON u.user_id = p.seller_id
-    LEFT JOIN farmer_profiles fp ON fp.farmer_id = p.seller_id
-    LEFT JOIN addresses a ON a.address_id = fp.address_id
+    ${sellerPlaceJoins}
 `;
+
+// One line of search help: a listing title, a town or a seller that has
+// listings up right now, so picking it always finds something.
+export interface ListingSuggestion {
+    text: string;
+    type: 'listing' | 'place' | 'seller';
+    listing_count: number;
+    // Cover photo of the newest matching listing; only listing rows have one.
+    image: string | null;
+}
+
+// LIKE treats % and _ as wildcards; typed text has to match them literally.
+const likePattern = (text: string): string => `%${text.replace(/[\\%_]/g, '\\$&')}%`;
 
 export function mapListing(row: Record<string, unknown>): ProductListing {
     return {
@@ -101,6 +129,15 @@ export function mapListing(row: Record<string, unknown>): ProductListing {
     };
 }
 
+function toSuggestion(row: Record<string, unknown>, type: ListingSuggestion['type']): ListingSuggestion {
+    return {
+        text: String(row.text),
+        type,
+        listing_count: Number(row.listing_count),
+        image: typeof row.image === 'string' && row.image ? fromMediaColumn(row.image) : null,
+    };
+}
+
 // One statement for the whole list; display_order follows the array.
 const insertImages = async (q: Queryable, productId: number, images: string[]): Promise<void> => {
     if (images.length === 0) return;
@@ -119,7 +156,7 @@ export const ProductModel = {
         const conditions = [includeUnavailable ? `p.status IN ('available', 'out of stock')` : `p.status = 'available'`];
         const params: unknown[] = [];
         if (normalizedQuery) {
-            params.push(`%${normalizedQuery}%`);
+            params.push(likePattern(normalizedQuery));
             const n = `$${params.length}`;
             conditions.push(`(LOWER(p.crop_name) LIKE ${n} OR LOWER(u.first_name || ' ' || u.last_name) LIKE ${n} OR LOWER(a.city_municipality) LIKE ${n})`);
         }
@@ -137,6 +174,103 @@ export const ProductModel = {
         if (!isRowId(productId)) return undefined;
         const { rows } = await pool.query(`${listingQuery} WHERE p.product_id = $1`, [productId]);
         return rows[0] ? mapListing(rows[0]) : undefined;
+    },
+
+    // Search help drawn from the listings that are up right now. With text,
+    // the titles, towns and sellers matching it (the same three things
+    // findAll searches), titles that start with it first. Without, the most
+    // listed produce, for the search page before anything is typed.
+    async suggest(query: string, limit: number): Promise<ListingSuggestion[]> {
+        const text = query.trim().toLowerCase();
+        const cover = `(SELECT pi.image_key FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.display_order LIMIT 1)`;
+        const listings = (match: string, params: unknown[]) => pool.query(`
+            SELECT MIN(btrim(p.crop_name)) AS text, COUNT(*) AS listing_count,
+                   (ARRAY_AGG(${cover} ORDER BY p.created_at DESC))[1] AS image
+            FROM products p
+            WHERE p.status = 'available' ${match}
+            GROUP BY lower(btrim(p.crop_name))
+            ORDER BY COUNT(*) DESC, MAX(p.created_at) DESC
+            LIMIT $1
+        `, params);
+
+        if (!text) {
+            const { rows } = await listings('', [limit]);
+            return rows.map((row) => toSuggestion(row, 'listing'));
+        }
+
+        const pattern = likePattern(text);
+        const [titles, places, sellers] = await Promise.all([
+            listings(`AND lower(p.crop_name) LIKE $2`, [limit, pattern]),
+            pool.query(`
+                SELECT MIN(btrim(a.city_municipality)) AS text, COUNT(*) AS listing_count
+                FROM products p
+                JOIN users u ON u.user_id = p.seller_id
+                ${sellerPlaceJoins}
+                WHERE p.status = 'available' AND lower(a.city_municipality) LIKE $2
+                GROUP BY lower(btrim(a.city_municipality))
+                ORDER BY COUNT(*) DESC
+                LIMIT $1
+            `, [limit, pattern]),
+            pool.query(`
+                SELECT u.first_name || ' ' || u.last_name AS text, COUNT(*) AS listing_count
+                FROM products p
+                JOIN users u ON u.user_id = p.seller_id
+                WHERE p.status = 'available' AND lower(u.first_name || ' ' || u.last_name) LIKE $2
+                GROUP BY u.user_id
+                ORDER BY COUNT(*) DESC
+                LIMIT $1
+            `, [limit, pattern]),
+        ]);
+
+        const typeOrder = { listing: 0, place: 1, seller: 2 };
+        const startsWithText = (suggestion: ListingSuggestion) => suggestion.text.toLowerCase().startsWith(text);
+        const ranked = [
+            ...titles.rows.map((row) => toSuggestion(row, 'listing')),
+            ...places.rows.map((row) => toSuggestion(row, 'place')),
+            ...sellers.rows.map((row) => toSuggestion(row, 'seller')),
+        ].sort((x, y) =>
+            Number(startsWithText(y)) - Number(startsWithText(x))
+            || typeOrder[x.type] - typeOrder[y.type]
+            || y.listing_count - x.listing_count
+            || x.text.localeCompare(y.text));
+
+        // A town and a listing can share a name; the search they run is the same.
+        const seen = new Set<string>();
+        return ranked.filter((suggestion) => {
+            const key = suggestion.text.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        }).slice(0, limit);
+    },
+
+    // Takes `quantity` off a listing, inside the caller's transaction. A
+    // listing that reaches zero reads 'out of stock', which is what drops it
+    // out of explore; that is the only way stock changes a status. False,
+    // with nothing written, when the listing was removed or has less than
+    // that left.
+    async takeStock(q: Queryable, productId: number, quantity: number): Promise<boolean> {
+        const { rowCount } = await q.query(`
+            UPDATE products
+            SET available_quantity = available_quantity - $2,
+                status = CASE WHEN available_quantity - $2 <= 0 AND status = 'available' THEN 'out of stock' ELSE status END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE product_id = $1 AND available_quantity >= $2 AND status <> 'delisted'
+        `, [productId, quantity]);
+        return (rowCount ?? 0) > 0;
+    },
+
+    // Puts `quantity` back, inside the caller's transaction. A listing that
+    // was sold out only because nothing was left becomes available again;
+    // one the seller archived by hand (stock still above zero) is left alone.
+    async returnStock(q: Queryable, productId: number, quantity: number): Promise<void> {
+        await q.query(`
+            UPDATE products
+            SET status = CASE WHEN available_quantity = 0 AND status = 'out of stock' THEN 'available' ELSE status END,
+                available_quantity = available_quantity + $2,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE product_id = $1
+        `, [productId, quantity]);
     },
 
     async create(input: ProductInput, images: string[]): Promise<ProductListing> {

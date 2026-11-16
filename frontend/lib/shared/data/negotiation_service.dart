@@ -9,7 +9,9 @@ import 'api_request.dart';
 ///
 /// The status doubles as a turn marker: [pending] waits on the seller,
 /// [countered] waits on the buyer. A counter rewrites the price on the same
-/// negotiation rather than creating a new one.
+/// negotiation rather than creating a new one. Accepting takes the offer's
+/// quantity off the listing; [declined] also covers an accepted offer that
+/// was cancelled before it was ordered.
 enum NegotiationStatus {
   pending,
   countered,
@@ -111,8 +113,10 @@ class NegotiationRecord {
   double get total => offeredPrice * offeredQuantity;
 }
 
-/// Actions accepted by `PATCH /api/negotiations/:id`.
-enum NegotiationAction { accept, decline, counter }
+/// Actions accepted by `PATCH /api/negotiations/:id`. [cancel] calls off an
+/// accepted offer that has not been ordered yet, which puts the quantity it
+/// was holding back on the listing.
+enum NegotiationAction { accept, decline, counter, cancel }
 
 /// HTTP client for the negotiation endpoints. The acting user is whoever the
 /// token says is signed in.

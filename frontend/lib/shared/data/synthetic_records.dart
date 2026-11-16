@@ -1,20 +1,6 @@
 import 'api_request.dart';
 import 'listing_options.dart';
 
-/// Shared synthetic search suggestion used by the mock search experience.
-class SyntheticSearchSuggestion {
-  const SyntheticSearchSuggestion({
-    required this.name,
-    required this.imageAssetPath,
-  });
-
-  /// Label shown under the suggestion image.
-  final String name;
-
-  /// Image asset rendered in the suggestion card.
-  final String imageAssetPath;
-}
-
 /// Synthetic notification shown while the notification API is unavailable.
 class SyntheticNotificationRecord {
   const SyntheticNotificationRecord({
@@ -244,43 +230,6 @@ class SyntheticListingRecord {
   bool isOwnedBy(int? userId) =>
       userId != null && sellerId != null && sellerId == userId;
 }
-
-/// Synthetic suggestions shown in the Search page.
-final List<SyntheticSearchSuggestion> syntheticSearchSuggestions =
-    <SyntheticSearchSuggestion>[
-      const SyntheticSearchSuggestion(
-        name: 'Coconut sa Caybiga',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-      ),
-      const SyntheticSearchSuggestion(
-        name: 'Strawberry in Baguio',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-      ),
-      const SyntheticSearchSuggestion(
-        name: 'Rice',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-      ),
-      const SyntheticSearchSuggestion(
-        name: 'Kamote',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-      ),
-      const SyntheticSearchSuggestion(
-        name: 'Mangoes',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-      ),
-      const SyntheticSearchSuggestion(
-        name: 'Eggplant',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-      ),
-      const SyntheticSearchSuggestion(
-        name: 'Banana',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-      ),
-      const SyntheticSearchSuggestion(
-        name: 'Tomatoes',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-      ),
-    ];
 
 /// Explore listings shown on the home/explore page.
 final List<SyntheticListingRecord>

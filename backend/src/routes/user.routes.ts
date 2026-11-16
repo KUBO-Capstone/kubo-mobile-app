@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getUsers, createUser, addUserAddress, addFarmAddress, getProfile, updateProfile, uploadProfilePhoto, deleteProfilePhoto, changePassword, updateUserAddress, choosePreferredAddress } from "#controllers/user.controller";
+import { getUsers, createUser, addUserAddress, addFarmAddress, getProfile, updateProfile, uploadProfilePhoto, deleteProfilePhoto, changePassword, updateUserAddress, choosePreferredAddress, followUser, unfollowUser } from "#controllers/user.controller";
 import { getUserReviews } from "#controllers/review.controller";
 import { getEarnings } from "#controllers/earnings.controller";
 import { attachAuth, requireAuth, requireOwner } from "#middleware/auth.middleware";
@@ -22,6 +22,9 @@ router.get('/', requireAuth, getUsers);
 router.post('/', createUser);
 router.get('/:id/profile', attachAuth, getProfile);
 router.patch('/:id/profile', requireAuth, requireOwner, updateProfile);
+// The signed-in user follows or unfollows :id.
+router.post('/:id/follow', requireAuth, followUser);
+router.delete('/:id/follow', requireAuth, unfollowUser);
 router.get('/:id/reviews', getUserReviews);
 router.get('/:id/earnings', requireAuth, requireOwner, getEarnings);
 router.post('/:id/profile/photo', requireAuth, requireOwner, receiveProfilePhoto, uploadProfilePhoto);

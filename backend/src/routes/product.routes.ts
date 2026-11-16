@@ -6,6 +6,7 @@ import {
     deleteProduct,
     getProduct,
     getProducts,
+    getSuggestions,
     maxListingImages,
     updateProduct,
     uploadProductImages,
@@ -26,6 +27,8 @@ const receiveListingImages = receiveImages({
 const router = Router();
 // Browsing is public; changing a listing needs the seller's token.
 router.get('/', getProducts);
+// Before /:id, or "suggestions" would be read as a listing id.
+router.get('/suggestions', getSuggestions);
 router.get('/:id', getProduct);
 router.post('/images', requireAuth, receiveListingImages, uploadProductImages);
 router.post('/', requireAuth, createProduct);

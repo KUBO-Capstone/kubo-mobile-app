@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -16,6 +18,7 @@ import '../../explore/models/location_result.dart';
 import '../../explore/widgets/location_filter_sheet.dart';
 import '../../explore/widgets/listings_map.dart';
 import '../../explore/widgets/map_result_cards.dart';
+import '../../shell/providers/app_shell_controller.dart';
 
 /// Search results page with list/map toggles over the matching listings.
 class SearchResultsPage extends StatefulWidget {
@@ -41,6 +44,7 @@ class SearchResultsPage extends StatefulWidget {
 class _SearchResultsPageState extends State<SearchResultsPage> {
   late final TextEditingController _searchController;
   late final ListingService _listingService;
+  late final StreamSubscription<void> _listingsChanged;
   List<SyntheticListingRecord> _listings = const <SyntheticListingRecord>[];
 
   /// Location and radius used to narrow the current search results.
@@ -76,17 +80,22 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
             ? ExplorePage.defaultLocationLabel
             : widget.initialLocationLabel;
     _loadListings();
+    // Stock moved on some listing; results that sold out drop off.
+    _listingsChanged = AppShellController.instance.listingsChanged.listen((_) => _loadListings(quiet: true));
   }
 
   @override
   void dispose() {
+    _listingsChanged.cancel();
     _searchController.dispose();
     _listingService.dispose();
     super.dispose();
   }
 
-  Future<void> _loadListings() async {
-    if (mounted && !_isLoading) setState(() => _isLoading = true);
+  /// [quiet] reloads behind the results already on screen: no placeholder
+  /// cards, and a failure leaves them as they are.
+  Future<void> _loadListings({bool quiet = false}) async {
+    if (mounted && !_isLoading && !quiet) setState(() => _isLoading = true);
     final query = _query;
     try {
       final listings = await _listingService.fetchListings(query: query);
@@ -100,7 +109,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
       }
     } catch (error) {
       debugPrint('Search listing fetch failed: $error');
-      if (mounted && query == _query) {
+      if (mounted && query == _query && !quiet) {
         setState(() {
           _listings = const <SyntheticListingRecord>[];
           _loadError = 'Could not reach the Kubo server. Try again.';

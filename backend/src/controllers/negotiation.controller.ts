@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Negotiation, NegotiationModel, NegotiationStatus, OPEN_STATUSES } from "#models/negotiation.model";
-import { ProductModel } from "#models/product.model";
+import { ProductListing, ProductModel } from "#models/product.model";
 import { MessageType } from "#models/message.model";
 import { authUserId } from "#middleware/auth.middleware";
 import { sendChatMessage } from "#services/chat.service";
@@ -9,7 +9,7 @@ import { isUniqueViolation } from "#database/pg";
 // Mounted behind requireAuth: the acting user is always authUserId(res).
 
 const statuses = new Set<string>(['pending', 'countered', 'accepted', 'declined']);
-const actions = new Set<string>(['accept', 'decline', 'counter']);
+const actions = new Set<string>(['accept', 'decline', 'counter', 'cancel']);
 
 const positiveNumber = (value: unknown): number | undefined => {
     const n = Number(value);
@@ -34,6 +34,7 @@ const recordOfferEvent = async (negotiation: Negotiation, actorId: number, type:
     const content = type === 'offer' ? `Offered ${terms}`
         : type === 'counter' ? `Countered ${terms}`
         : type === 'accepted' ? `Accepted the offer of ${terms}`
+        : type === 'cancelled' ? `Cancelled the deal for ${terms}`
         : `Declined the offer of ${terms}`;
     try {
         await sendChatMessage({
@@ -54,6 +55,15 @@ const recordOfferEvent = async (negotiation: Negotiation, actorId: number, type:
 // longer in the state this request was checked against.
 const changedMeanwhile = (res: Response): void => {
     res.status(409).json({ success: false, message: 'This offer was just updated. Refresh to see the latest.' });
+};
+
+// Why the listing cannot cover an offer someone tried to accept. Accepting
+// takes the quantity off the listing, and other accepted offers may have
+// taken stock since this one was made.
+const cannotCover = (product: ProductListing | undefined): string => {
+    if (!product || product.status === 'delisted') return 'This listing has been removed, so the offer can no longer be accepted';
+    if (product.available_quantity <= 0) return 'Nothing is left on this listing, so the offer can no longer be accepted';
+    return `Only ${formatAmount(product.available_quantity)} ${product.unit_measurement} left on this listing. Counter with a smaller quantity instead.`;
 };
 
 export const getNegotiations = async (req: Request, res: Response): Promise<void> => {
@@ -136,12 +146,13 @@ export const createNegotiation = async (req: Request, res: Response): Promise<vo
 
 // Either party moves the negotiation along. Who may do what depends on whose
 // turn it is: 'pending' waits on the seller, 'countered' waits on the buyer.
-// Declining is allowed from either side at any point while the offer is open.
+// Declining is allowed from either side at any point while the offer is open,
+// and cancelling from either side once it is accepted, until it is ordered.
 export const respondToNegotiation = async (req: Request, res: Response): Promise<void> => {
     const userId = authUserId(res);
     const action = typeof req.body.action === 'string' ? req.body.action : '';
     if (!actions.has(action)) {
-        res.status(400).json({ success: false, message: 'An action of accept, decline, or counter is required' });
+        res.status(400).json({ success: false, message: 'An action of accept, decline, counter, or cancel is required' });
         return;
     }
 
@@ -156,6 +167,33 @@ export const respondToNegotiation = async (req: Request, res: Response): Promise
         res.status(403).json({ success: false, message: 'You are not part of this offer' });
         return;
     }
+
+    // Calls off an accepted deal that has no order yet; the stock it was
+    // holding goes back on the listing.
+    if (action === 'cancel') {
+        if (negotiation.status !== 'accepted') {
+            res.status(409).json({
+                success: false,
+                message: OPEN_STATUSES.includes(negotiation.status)
+                    ? 'This offer has not been accepted yet. Decline it instead.'
+                    : `This offer was already ${negotiation.status}`,
+            });
+            return;
+        }
+        const cancelled = await NegotiationModel.cancelDeal(negotiation.negotiation_id);
+        if (cancelled.refused === 'ordered') {
+            res.status(409).json({ success: false, message: 'This deal already has an order. Cancel the order instead.' });
+            return;
+        }
+        if (cancelled.refused) {
+            changedMeanwhile(res);
+            return;
+        }
+        await recordOfferEvent(cancelled.negotiation, userId, 'cancelled');
+        res.json({ success: true, data: cancelled.negotiation });
+        return;
+    }
+
     if (!OPEN_STATUSES.includes(negotiation.status)) {
         res.status(409).json({ success: false, message: `This offer was already ${negotiation.status}` });
         return;
@@ -179,13 +217,18 @@ export const respondToNegotiation = async (req: Request, res: Response): Promise
         return;
     }
     if (action === 'accept') {
-        const accepted = await NegotiationModel.update(negotiation.negotiation_id, negotiation, { status: 'accepted', accepted_by: userId });
-        if (!accepted) {
+        // Accepting takes the agreed quantity off the listing there and then.
+        const accepted = await NegotiationModel.accept(negotiation.negotiation_id, negotiation, userId);
+        if (accepted.refused === 'unavailable') {
+            res.status(409).json({ success: false, message: cannotCover(await ProductModel.findById(negotiation.product_id)) });
+            return;
+        }
+        if (accepted.refused) {
             changedMeanwhile(res);
             return;
         }
-        await recordOfferEvent(accepted, userId, 'accepted');
-        res.json({ success: true, data: accepted });
+        await recordOfferEvent(accepted.negotiation, userId, 'accepted');
+        res.json({ success: true, data: accepted.negotiation });
         return;
     }
 

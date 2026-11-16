@@ -60,11 +60,77 @@ class ListingSubmission {
       };
 }
 
+/// What a search suggestion points at.
+enum SuggestionType {
+  /// A listing title; the default for anything unrecognised.
+  listing,
+
+  /// A town with listings in it.
+  place,
+
+  /// A seller with listings up.
+  seller;
+
+  static SuggestionType parse(String? raw) => SuggestionType.values.firstWhere(
+        (type) => type.name == raw,
+        orElse: () => SuggestionType.listing,
+      );
+}
+
+/// One line of search help from `GET /api/products/suggestions`. Every
+/// suggestion comes from listings that are up right now, so searching for
+/// [text] always finds something.
+class ListingSuggestion {
+  const ListingSuggestion({
+    required this.text,
+    required this.type,
+    this.listingCount = 1,
+    this.imageUrl,
+  });
+
+  factory ListingSuggestion.fromJson(Map<String, dynamic> json) {
+    return ListingSuggestion(
+      text: json['text']?.toString() ?? '',
+      type: SuggestionType.parse(json['type']?.toString()),
+      listingCount: (json['listing_count'] as num?)?.toInt() ?? 1,
+      imageUrl: resolveMediaUrl(json['image']?.toString()),
+    );
+  }
+
+  /// What tapping the suggestion searches for.
+  final String text;
+  final SuggestionType type;
+
+  /// How many listings the search will find.
+  final int listingCount;
+
+  /// Cover photo of the newest matching listing; only listing rows have one.
+  final String? imageUrl;
+}
+
 class ListingService {
   ListingService({http.Client? client}) : _client = client ?? apiClient();
 
   String get _baseUrl => ApiConfig.baseUrl;
   final http.Client _client;
+
+  /// Search help. With [query], what matches the text typed so far (listing
+  /// titles, towns, sellers); without, the most listed produce.
+  Future<List<ListingSuggestion>> fetchSuggestions({String query = '', int? limit}) async {
+    final queryParameters = <String, String>{
+      if (query.trim().isNotEmpty) 'q': query.trim(),
+      if (limit != null) 'limit': '$limit',
+    };
+    final uri = Uri.parse('$_baseUrl/products/suggestions').replace(
+      queryParameters: queryParameters.isEmpty ? null : queryParameters,
+    );
+    final response = await sendRequest(() => _client.get(uri));
+    return (readData(response) as List<dynamic>)
+        .whereType<Map<String, dynamic>>()
+        .map(ListingSuggestion.fromJson)
+        .where((suggestion) => suggestion.text.isNotEmpty)
+        .toList(growable: false);
+  }
 
   /// [includeUnavailable] also returns the seller's sold-out listings; only
   /// the owner's profile tab asks for them.
@@ -132,11 +198,21 @@ class ListingService {
   }
 
   /// Seller edits the whole listing, photos included.
+  ///
+  /// [quantityWhenOpened] is the stock the form started with. Stock moves
+  /// while the form is open (accepting an offer takes its quantity off the
+  /// listing), so the quantity is only sent when the seller changed it;
+  /// otherwise saving a new price would put back stock that has been sold.
   Future<SyntheticListingRecord> updateListing({
     required int productId,
     required ListingSubmission listing,
+    double? quantityWhenOpened,
   }) {
-    return _patch(productId, listing.toJson());
+    final body = listing.toJson();
+    if (quantityWhenOpened != null && listing.quantity == quantityWhenOpened) {
+      body.remove('available_quantity');
+    }
+    return _patch(productId, body);
   }
 
   /// Marks the listing sold out ([soldOut] true) or available again.

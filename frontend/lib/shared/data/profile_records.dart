@@ -1,6 +1,7 @@
-import 'synthetic_records.dart';
-
-/// Synthetic profile metadata shared by own-account and visitor profile views.
+/// What a profile page shows about an account, own or visited. Built by
+/// `ProfilePageController.profile` from the account's data; a text field the
+/// account has not filled in is an empty string, and the page decides what
+/// to show in its place.
 class SyntheticProfileRecord {
   const SyntheticProfileRecord({
     required this.displayName,
@@ -27,10 +28,10 @@ class SyntheticProfileRecord {
   /// Name shown in the profile header.
   final String displayName;
 
-  /// Handle shown under the profile name.
+  /// Handle shown under the profile name; empty when the account hides it.
   final String username;
 
-  /// City or region label shown in the about section.
+  /// City or region label shown in the about section; empty when unknown.
   final String locationLabel;
 
   /// Optional business identity shown in the profile details.
@@ -42,16 +43,16 @@ class SyntheticProfileRecord {
   /// Privacy toggles for the profile visibility breakdown.
   final Map<String, bool> profilePrivacy;
 
-  /// Short about text displayed in the about tab.
+  /// The account's bio; empty until they write one.
   final String about;
 
-  /// Human-readable join date label.
+  /// Date the account was created, e.g. "03/14/2026"; empty when unknown.
   final String joinedLabel;
 
-  /// Number of followed accounts shown in the profile summary.
+  /// How many accounts this one follows.
   final int followingCount;
 
-  /// Number of followers shown in the profile summary.
+  /// How many accounts follow this one.
   final int followersCount;
 
   /// Number of listings shown in the profile summary.
@@ -65,71 +66,3 @@ class SyntheticProfileRecord {
 
   final String photoUrl;
 }
-
-/// Synthetic profile shown in the own-account and visitor profile pages.
-const syntheticProfileRecord = SyntheticProfileRecord(
-  displayName: 'Display Name',
-  username: '@username',
-  locationLabel: 'Caloocan',
-  businessName: 'Green Valley Farm',
-  businessType: 'Vegetable supplier',
-  profilePrivacy: <String, bool>{
-    'public_profile': true,
-    'show_bio': true,
-    'show_contact_number': true,
-    'show_location': true,
-  },
-  about:
-      'So don\'t call me baby, Unless you mean it, Don\'t tell me you need me, If you don\'t believe it, So let me know the truth, Before I dive right into you',
-  joinedLabel: 'June 2025',
-  followingCount: 33,
-  followersCount: 20,
-  listingCount: 3,
-  reviewScore: 5.0,
-  reviewCount: 5,
-  photoUrl: '',
-);
-
-/// Synthetic listings surfaced in the profile listings tab.
-final List<SyntheticListingRecord> syntheticProfileListings =
-    <SyntheticListingRecord>[
-      const SyntheticListingRecord(
-        id: 'profile-listing-0',
-        title: 'Product name placeholder product name placeholder',
-        price: 'PHP XX,XXX',
-        locationLabel: 'Caybiga',
-        regionLabel: 'NCR',
-        sellerLabel: 'Username',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-        description: 'Placeholder description for a profile listing.',
-        date: 'Posted today',
-        numLikes: 12,
-        groups: <String>['vegetables'],
-      ),
-      const SyntheticListingRecord(
-        id: 'profile-listing-1',
-        title: 'Product name placeholder product name placeholder',
-        price: 'PHP XX,XXX',
-        locationLabel: 'Caybiga',
-        regionLabel: 'NCR',
-        sellerLabel: 'Username',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-        description: 'Placeholder description for a profile listing.',
-        date: 'Posted 2 days ago',
-        numLikes: 18,
-        groups: <String>['fruits'],
-      ),
-      const SyntheticListingRecord(
-        id: 'profile-listing-2',
-        title: 'Product name placeholder product name placeholder',
-        price: 'PHP XX,XXX',
-        locationLabel: 'Caybiga',
-        regionLabel: 'NCR',
-        sellerLabel: 'Username',
-        imageAssetPath: 'assets/images/Placeholder_img.png',
-        description: 'Placeholder description for a profile listing.',
-        date: 'Posted 4 days ago',
-        numLikes: 22,
-        groups: <String>['grains'],
-      ),
-    ];

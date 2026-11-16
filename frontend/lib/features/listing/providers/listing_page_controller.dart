@@ -1,10 +1,15 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../shared/data/listing_service.dart';
 import '../../../shared/data/market_service.dart';
 import '../../../shared/data/synthetic_records.dart';
 
 class ListingPageController extends ChangeNotifier {
-  ListingPageController({required SyntheticListingRecord listing}) : _listing = listing;
+  ListingPageController({
+    required SyntheticListingRecord listing,
+    ListingService? listings,
+  })  : _listing = listing,
+        _listings = listings ?? ListingService();
 
   SyntheticListingRecord _listing;
 
@@ -13,8 +18,10 @@ class ListingPageController extends ChangeNotifier {
   bool _changed = false;
 
   int _currentImageIndex = 0;
+  bool _disposed = false;
 
   final MarketService _market = MarketService();
+  final ListingService _listings;
 
   /// Market Watch reference for this crop in the seller's region; null when
   /// nothing matched (mock rows, unknown crops, server down).
@@ -34,6 +41,24 @@ class ListingPageController extends ChangeNotifier {
       marketReference = null;
     }
     notifyListeners();
+  }
+
+  /// Fetches the listing again. The page opens on the copy its card already
+  /// had, which can be behind: accepting an offer takes its quantity off the
+  /// listing, and a listing with nothing left reads sold out. Called when
+  /// the page opens, when it comes back from a chat, and whenever a deal on
+  /// any listing moves. A failure keeps what is on screen.
+  Future<void> refresh() async {
+    final productId = _listing.productId;
+    if (productId == null) return;
+    try {
+      final latest = await _listings.fetchListing(productId);
+      if (_disposed) return;
+      _listing = latest;
+      notifyListeners();
+    } catch (error) {
+      debugPrint('Listing refresh failed: $error');
+    }
   }
 
   SyntheticListingRecord get listing => _listing;
@@ -59,8 +84,15 @@ class ListingPageController extends ChangeNotifier {
   int get currentImageIndex => _currentImageIndex;
 
   @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  @override
   void dispose() {
+    _disposed = true;
     _market.dispose();
+    _listings.dispose();
     super.dispose();
   }
 

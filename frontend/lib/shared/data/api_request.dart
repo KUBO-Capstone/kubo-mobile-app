@@ -18,6 +18,24 @@ const Duration apiTimeout = Duration(seconds: 15);
 /// and clears it on logout; [apiClient] reads it on every request.
 abstract final class ApiSession {
   static String? token;
+
+  static final StreamController<void> _expired = StreamController<void>.broadcast();
+
+  /// Fires once when the server refuses the token the app is using: it ran
+  /// out, or the account is gone. The app answers by signing the user out
+  /// (see `KuboApp`), since a session kept from an earlier launch can no
+  /// longer be assumed to be good.
+  static Stream<void> get expired => _expired.stream;
+
+  /// Called by [apiClient] when a request sent with [rejected] came back as
+  /// an invalid-token 401. Ignored when the app has moved on to another
+  /// token (a new login) or already signed out, so several requests failing
+  /// together report it once.
+  static void reportRejected(String rejected) {
+    if (token != rejected) return;
+    token = null;
+    _expired.add(null);
+  }
 }
 
 /// The default client for every API service: stamps `Authorization: Bearer`
@@ -31,10 +49,19 @@ class _AuthorizedClient extends http.BaseClient {
   final http.Client _inner;
 
   @override
-  Future<http.StreamedResponse> send(http.BaseRequest request) {
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final token = ApiSession.token;
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
-    return _inner.send(request);
+    final response = await _inner.send(request);
+    // Only the server's "this token is no good" (RFC 6750) ends the session.
+    // Other 401s, such as a wrong current password, are for the screen that
+    // made the request.
+    if (token != null &&
+        response.statusCode == 401 &&
+        (response.headers['www-authenticate'] ?? '').contains('invalid_token')) {
+      ApiSession.reportRejected(token);
+    }
+    return response;
   }
 
   @override

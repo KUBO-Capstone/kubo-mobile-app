@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/market_service.dart';
+import '../../../shared/widgets/kubo_map_controls.dart';
 import 'market_price_table.dart';
 
 /// Map view of a product's area prices (PPA 4–6): a region dropdown, one
@@ -119,6 +120,11 @@ class _MarketPriceMapState extends State<MarketPriceMap> {
                                     maxZoom: 11,
                                   )
                                 : null,
+                            // Pan and zoom only; the map never rotates.
+                            interactionOptions: kuboMapInteraction,
+                            minZoom: kuboMapMinZoom,
+                            maxZoom: kuboMapMaxZoom,
+                            cameraConstraint: kuboMapBounds,
                           ),
                           children: [
                             TileLayer(
@@ -164,6 +170,13 @@ class _MarketPriceMapState extends State<MarketPriceMap> {
                           ],
                         ),
                 ),
+                // Top right, clear of the summary card along the bottom.
+                if (points.isNotEmpty)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: KuboMapZoomControls(controller: _mapController),
+                  ),
                 if (widget.infoCard != null)
                   Positioned(
                     left: 12,

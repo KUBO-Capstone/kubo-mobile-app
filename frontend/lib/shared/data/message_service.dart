@@ -11,7 +11,8 @@ import 'order_service.dart';
 ///
 /// [text] is a typed message; the rest are events the server writes so the
 /// thread is also the deal's history: offer events when an offer is made,
-/// countered, accepted or declined, and [order] when the order behind an
+/// countered, accepted or declined, [cancelled] when an accepted offer is
+/// called off before it is ordered, and [order] when the order behind an
 /// accepted offer is placed, shipped, picked up or cancelled.
 enum MessageType {
   text,
@@ -19,6 +20,7 @@ enum MessageType {
   counter,
   accepted,
   declined,
+  cancelled,
   order;
 
   static MessageType parse(String? raw) => MessageType.values.firstWhere(
@@ -239,9 +241,15 @@ class ConversationRecord {
       isBuyer(userId) && !hasOpenOffer && !canPlaceOrder(userId) && isProductAvailable;
 
   /// Accepted and not yet ordered: the buyer's next step is to arrange
-  /// pickup or delivery.
+  /// pickup or delivery. The listing is holding the agreed quantity for
+  /// this deal, and either side can still call it off.
   bool get isAwaitingOrder =>
       negotiationStatus == NegotiationStatus.accepted && orderId == null;
+
+  /// The latest offer was accepted and then cancelled before it was
+  /// ordered (a declined offer was never accepted by anyone).
+  bool get isDealCancelled =>
+      negotiationStatus == NegotiationStatus.declined && acceptedBy != null;
 
   bool canPlaceOrder(int userId) => isBuyer(userId) && isAwaitingOrder;
 

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../shared/data/order_service.dart';
 import '../../login/services/auth_service.dart';
+import '../../shell/providers/app_shell_controller.dart';
 
 /// One order's detail page: the record plus the ship / deliver / cancel
 /// actions, whichever the signed-in user's side and the status allow.
@@ -60,6 +61,8 @@ class OrderController extends ChangeNotifier {
         trackingNumber: trackingNumber,
       );
       changed = true;
+      // A cancelled order puts its quantity back on the listing.
+      if (action == OrderAction.cancel) AppShellController.instance.notifyListingsChanged();
       return null;
     } catch (error) {
       return error.toString().replaceFirst('Exception: ', '');

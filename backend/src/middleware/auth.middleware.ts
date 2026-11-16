@@ -15,6 +15,11 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
     const [scheme, token] = header.split(' ');
     const payload = scheme === 'Bearer' && token ? verifyToken(token) : undefined;
     if (!payload || !(await UserModel.isActive(payload.sub))) {
+        // The standard way (RFC 6750) to say "this token is no good" rather
+        // than "you may not do this". The app keeps its session between
+        // launches and signs the user out when it sees this, and only this:
+        // other 401s (a wrong current password, say) leave the session alone.
+        res.set('WWW-Authenticate', 'Bearer error="invalid_token"');
         res.status(401).json({ success: false, message: 'Your session has expired. Please log in again.' });
         return;
     }

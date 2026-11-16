@@ -341,7 +341,11 @@ class _CreateListingPageState extends State<CreateListingPage> {
     final existing = widget.existing;
     return existing == null
         ? _service.createListing(submission)
-        : _service.updateListing(productId: existing.productId!, listing: submission);
+        : _service.updateListing(
+            productId: existing.productId!,
+            listing: submission,
+            quantityWhenOpened: existing.availableQuantity,
+          );
   }
 
   bool _ensureSignedIn() {

@@ -1,5 +1,6 @@
 import { isRowId, pool, Queryable, withTransaction } from "#database/pg";
 import { fromMediaColumn } from "#controllers/upload.controller";
+import { ProductModel } from "#models/product.model";
 
 // Mirrors the CHECK constraints on orders.order_status / delivery_method in
 // database/migrations. 'in transit' covers both methods: for a courier order
@@ -143,23 +144,39 @@ export const OrderModel = {
         return rows.map(mapOrder);
     },
 
-    // Takes the quantity off the listing and writes the order and its single
-    // item in one transaction. A listing that hits zero is marked
-    // 'out of stock' so it drops out of explore; cancel() puts it back.
-    // Undefined, with nothing written, when the listing can no longer take
-    // the order: another order took the stock, or the seller delisted it or
-    // turned the chosen delivery method off after the controller checked.
+    // Writes the order and its single item in one transaction. The quantity
+    // came off the listing when the offer was accepted (see
+    // NegotiationModel.accept), so placing the order only hands that held
+    // stock over to the order; from here on cancel() is what returns it.
+    // An offer accepted before holds existed holds nothing, and its stock is
+    // taken now instead. Undefined, with nothing written, when the order can
+    // no longer go through: the deal was cancelled, the seller delisted the
+    // listing or turned the chosen delivery method off after the controller
+    // checked, or (old offers only) the stock is gone.
     async create(input: OrderInput): Promise<Order | undefined> {
         const orderId = await withTransaction(async (client) => {
-            const stock = await client.query(`
-                UPDATE products
-                SET available_quantity = available_quantity - $2,
-                    status = CASE WHEN available_quantity - $2 <= 0 AND status = 'available' THEN 'out of stock' ELSE status END,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE product_id = $1 AND available_quantity >= $2 AND status <> 'delisted'
-                  AND CASE WHEN $3 = 'meetup' THEN allows_meetup ELSE allows_delivery END
-            `, [input.product_id, input.quantity, input.delivery_method]);
-            if (!stock.rowCount) return undefined;
+            // Locked so cancelling the deal and ordering it cannot both win.
+            const { rows: [deal] } = await client.query(`
+                SELECT reserved_quantity FROM negotiations
+                WHERE negotiation_id = $1 AND status = 'accepted'
+                FOR UPDATE
+            `, [input.negotiation_id]);
+            if (!deal) return undefined;
+
+            // Locked too, so the listing cannot change under the order.
+            const { rowCount: canHandOver } = await client.query(`
+                SELECT 1 FROM products
+                WHERE product_id = $1 AND status <> 'delisted'
+                  AND CASE WHEN $2 = 'meetup' THEN allows_meetup ELSE allows_delivery END
+                FOR UPDATE
+            `, [input.product_id, input.delivery_method]);
+            if (!canHandOver) return undefined;
+
+            if (deal.reserved_quantity === null) {
+                if (!(await ProductModel.takeStock(client, input.product_id, input.quantity))) return undefined;
+            } else {
+                await client.query(`UPDATE negotiations SET reserved_quantity = NULL WHERE negotiation_id = $1`, [input.negotiation_id]);
+            }
 
             // Totals are worked out in numeric, not JS floats, so 2.5 x 33.33 is 83.33.
             const { rows: [order] } = await client.query(`
@@ -196,10 +213,11 @@ export const OrderModel = {
         return (await moveStatus(pool, orderId, 'in transit', 'delivered')) ? OrderModel.findById(orderId) : undefined;
     },
 
-    // Gives the reserved quantity back to the listing. A listing that was
-    // sold out purely because of this order becomes available again; one the
-    // seller archived by hand (quantity still > 0) is left alone. Undefined
-    // if the order was no longer pending, so stock is never returned twice.
+    // Gives the order's quantity back to the listing. A listing that was
+    // sold out purely because nothing was left becomes available again; one
+    // the seller archived by hand (quantity still > 0) is left alone.
+    // Undefined if the order was no longer pending, so stock is never
+    // returned twice.
     async cancel(orderId: number): Promise<Order | undefined> {
         const moved = await withTransaction(async (client) => {
             if (!(await moveStatus(client, orderId, 'pending', 'cancelled'))) return false;

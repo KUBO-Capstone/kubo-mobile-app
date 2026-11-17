@@ -67,6 +67,9 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   /// Counts the loads started, so an answer can tell it is the newest.
   int _loadRequest = 0;
 
+  /// A listing changed while a search was in flight; reload once it is done.
+  bool _reloadPending = false;
+
   bool _isListView = true;
 
   /// Collapses the map to a strip, same control as the explore tab.
@@ -98,9 +101,13 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   /// [quiet] reloads behind the results already on screen: no placeholder
   /// cards, and a failure leaves them as they are.
   Future<void> _loadListings({bool quiet = false}) async {
-    // A search already in flight will bring the same fresh results; a quiet
-    // reload on top of it would only take its place as the newest request.
-    if (quiet && _isLoading) return;
+    // A search is already in flight, and it may have read the listings from
+    // before whatever just changed. Starting another now would only cut it
+    // off, so the reload waits and runs once that search is done.
+    if (quiet && _isLoading) {
+      _reloadPending = true;
+      return;
+    }
     if (mounted && !_isLoading && !quiet) setState(() => _isLoading = true);
     final query = _query;
     // Two loads for the same words can overlap (a retry, a quiet reload), so
@@ -125,6 +132,13 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
           _loadError = 'Could not reach the Kubo server. Try again.';
           _isLoading = false;
         });
+      }
+    } finally {
+      // Only the newest load runs the waiting reload; an older one finishing
+      // late leaves it to the load that overtook it.
+      if (mounted && request == _loadRequest && _reloadPending) {
+        _reloadPending = false;
+        _loadListings(quiet: true);
       }
     }
   }

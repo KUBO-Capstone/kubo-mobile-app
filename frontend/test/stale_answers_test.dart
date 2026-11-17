@@ -9,6 +9,7 @@ import 'package:frontend/features/login/services/auth_service.dart';
 import 'package:frontend/features/profile/providers/profile_page_controller.dart';
 import 'package:frontend/features/search/providers/search_page_controller.dart';
 import 'package:frontend/features/search/screens/search_results_page.dart';
+import 'package:frontend/features/shell/providers/app_shell_controller.dart';
 import 'package:frontend/shared/data/api_request.dart';
 import 'package:frontend/shared/data/listing_service.dart';
 import 'package:frontend/shared/data/session_store.dart';
@@ -230,6 +231,108 @@ void main() {
 
       expect(find.byType(KuboListingCard), findsOneWidget);
       expect(find.textContaining('No listings match'), findsNothing);
+    });
+
+    testWidgets('a listing change during a search is reloaded once the search is done', (tester) async {
+      final answers = <Completer<Object?>>[];
+      final api = FakeApi({
+        'GET /products': (_) {
+          answers.add(Completer<Object?>());
+          return answers.last.future;
+        },
+      });
+      await api.run(() async {
+        await tester.pumpWidget(const MaterialApp(home: SearchResultsPage(query: 'sitaw')));
+        await tester.pump();
+        expect(answers, hasLength(1));
+
+        // Stock moves while the search is still out: nothing new is sent yet.
+        AppShellController.instance.notifyListingsChanged();
+        AppShellController.instance.notifyListingsChanged();
+        await tester.pump();
+        expect(answers, hasLength(1));
+
+        // The search answers with what it read before the change...
+        answers[0].complete([_listingJson(1, name: 'Sitaw fresh', quantity: 10)]);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byType(KuboListingCard), findsOneWidget);
+        // ...and one reload follows, for both changes.
+        expect(answers, hasLength(2));
+
+        // The listing sold out in the meantime and drops off.
+        answers[1].complete(<dynamic>[]);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+      });
+
+      expect(answers, hasLength(2));
+      expect(find.byType(KuboListingCard), findsNothing);
+    });
+
+    testWidgets('the waiting reload runs after a failed search too, and only once', (tester) async {
+      final answers = <Completer<Object?>>[];
+      final api = FakeApi({
+        'GET /products': (_) {
+          answers.add(Completer<Object?>());
+          return answers.last.future;
+        },
+      });
+      await api.run(() async {
+        await tester.pumpWidget(const MaterialApp(home: SearchResultsPage(query: 'sitaw')));
+        await tester.pump();
+        AppShellController.instance.notifyListingsChanged();
+        await tester.pump();
+
+        answers[0].complete(FakeApi.refused(500, 'Server error'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(answers, hasLength(2));
+
+        answers[1].complete([_listingJson(1, name: 'Sitaw fresh')]);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+      });
+
+      expect(answers, hasLength(2));
+      expect(find.byType(KuboListingCard), findsOneWidget);
+      expect(find.textContaining('Could not reach the Kubo server'), findsNothing);
+    });
+
+    testWidgets('a superseded search does not run the waiting reload; the newest one does', (tester) async {
+      final answers = <Completer<Object?>>[];
+      final api = FakeApi({
+        'GET /products': (_) {
+          answers.add(Completer<Object?>());
+          return answers.last.future;
+        },
+      });
+      await api.run(() async {
+        await tester.pumpWidget(const MaterialApp(home: SearchResultsPage(query: 'sitaw')));
+        await tester.pump();
+        AppShellController.instance.notifyListingsChanged();
+        await tester.pump();
+
+        // A second search goes out, then the first one answers late.
+        await tester.showKeyboard(find.byType(TextField));
+        await tester.testTextInput.receiveAction(TextInputAction.search);
+        await tester.pump();
+        expect(answers, hasLength(2));
+        answers[0].complete([_listingJson(1, name: 'Stale')]);
+        await tester.pump();
+        expect(answers, hasLength(2), reason: 'the overtaken search leaves the reload to the newest one');
+
+        answers[1].complete([_listingJson(1, name: 'Sitaw fresh')]);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(answers, hasLength(3));
+        answers[2].complete([_listingJson(1, name: 'Sitaw after change')]);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+      });
+
+      expect(find.text('Sitaw after change'), findsOneWidget);
+      expect(find.text('Stale'), findsNothing);
     });
 
     testWidgets('a slow first failure does not wipe the results of a later search', (tester) async {

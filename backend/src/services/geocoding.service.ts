@@ -89,8 +89,21 @@ const regionNames = (region: string): string[] => {
     return [...(official ? [official] : []), ...(OSM_REGION_NAMES[label] ?? [])].map(fold);
 };
 
-// "Baguio, Cordillera Administrative Region, 2600, Philippines" -> "baguio"
-const localityOf = (candidate: Candidate): string => fold(candidate.name.split(',')[0].trim());
+// A town's name without what varies between lists: "CITY OF MAKATI",
+// "Bacoor City" and "BALAGTAS (BIGAA)" become "MAKATI", "Bacoor", "BALAGTAS".
+const plainTownName = (name: string): string => name
+    .replace(/\s*\(.*?\)\s*/g, ' ')
+    .replace(/^city of\s+/i, '')
+    .replace(/\s+city$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+// A name reduced the same way on both sides of a comparison, so "Baguio
+// City" in a result matches an address that says "BAGUIO", and the reverse.
+const comparableTownName = (name: string): string => fold(plainTownName(name) || name.trim());
+
+// "Baguio City, Cordillera Administrative Region, 2600, Philippines" -> "baguio"
+const localityOf = (candidate: Candidate): string => comparableTownName(candidate.name.split(',')[0]);
 
 /**
  * How a town is asked for. Addresses name towns the way the PSGC lists do,
@@ -100,12 +113,7 @@ const localityOf = (candidate: Candidate): string => fold(candidate.name.split('
  */
 export function spellingsOf(place: Place): { area: string; cities: string[] } {
     const area = place.province || (/^(ncr|national capital region)\b/i.test(place.region) ? 'Metro Manila' : '');
-    const plain = place.city
-        .replace(/\s*\(.*?\)\s*/g, ' ')
-        .replace(/^city of\s+/i, '')
-        .replace(/\s+city$/i, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+    const plain = plainTownName(place.city);
     const cities = plain && plain.toLowerCase() !== place.city.toLowerCase() ? [place.city, plain] : [place.city];
     return { area, cities };
 }
@@ -172,12 +180,12 @@ export async function lookUpPlace(place: Place): Promise<PlacePoint | null> {
 
     const centre = regionCentre(place.region);
     const regions = regionNames(place.region);
-    const wantedLocalities = cities.map(fold);
+    const wantedLocality = comparableTownName(place.city);
     if (area && centre && regions.length > 0) {
         for (const city of cities) {
             const towns = (await search(`${city}, Philippines`)).filter((candidate) =>
                 isTown(candidate)
-                && wantedLocalities.includes(localityOf(candidate))
+                && localityOf(candidate) === wantedLocality
                 && regions.some((region) => fold(candidate.name).includes(region))
                 && kmBetween(centre, candidate) <= MAX_KM_FROM_REGION_CENTRE);
             if (towns.length === 1) return toPoint(towns[0]);

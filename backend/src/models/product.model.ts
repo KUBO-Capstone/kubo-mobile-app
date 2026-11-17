@@ -262,7 +262,7 @@ export const ProductModel = {
             SET available_quantity = available_quantity - $2,
                 status = CASE WHEN available_quantity - $2 <= 0 AND status = 'available' THEN 'out of stock' ELSE status END,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE product_id = $1 AND available_quantity >= $2 AND status <> 'delisted'
+            WHERE product_id = $1 AND available_quantity >= $2 AND status = 'available'
         `, [productId, quantity]);
         return (rowCount ?? 0) > 0;
     },

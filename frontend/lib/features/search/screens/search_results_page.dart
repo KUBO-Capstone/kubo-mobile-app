@@ -64,6 +64,9 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   /// A search is in flight; the grid shows placeholder cards meanwhile.
   bool _isLoading = true;
 
+  /// Counts the loads started, so an answer can tell it is the newest.
+  int _loadRequest = 0;
+
   bool _isListView = true;
 
   /// Collapses the map to a strip, same control as the explore tab.
@@ -95,12 +98,19 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   /// [quiet] reloads behind the results already on screen: no placeholder
   /// cards, and a failure leaves them as they are.
   Future<void> _loadListings({bool quiet = false}) async {
+    // A search already in flight will bring the same fresh results; a quiet
+    // reload on top of it would only take its place as the newest request.
+    if (quiet && _isLoading) return;
     if (mounted && !_isLoading && !quiet) setState(() => _isLoading = true);
     final query = _query;
+    // Two loads for the same words can overlap (a retry, a quiet reload), so
+    // the query alone does not say which answer is the newest.
+    final request = ++_loadRequest;
+    bool isLatest() => mounted && request == _loadRequest && query == _query;
     try {
       final listings = await _listingService.fetchListings(query: query);
       // A newer search may have been submitted while this one was in flight.
-      if (mounted && query == _query) {
+      if (isLatest()) {
         setState(() {
           _listings = listings;
           _loadError = null;
@@ -109,7 +119,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
       }
     } catch (error) {
       debugPrint('Search listing fetch failed: $error');
-      if (mounted && query == _query && !quiet) {
+      if (isLatest() && !quiet) {
         setState(() {
           _listings = const <SyntheticListingRecord>[];
           _loadError = 'Could not reach the Kubo server. Try again.';

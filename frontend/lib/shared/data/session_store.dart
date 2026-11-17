@@ -36,8 +36,16 @@ class SecureSessionStore implements SessionStore {
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
   );
 
+  // Storage calls take turns, in the order they were made: a save still on
+  // its way can never land after the clear() that followed it and bring a
+  // signed-out session back. One line for the whole app, because the storage
+  // underneath is one per app whatever instance asks.
+  static final CallLine _calls = CallLine();
+
   @override
-  Future<SavedSession?> read() async {
+  Future<SavedSession?> read() => _calls.add(_read);
+
+  Future<SavedSession?> _read() async {
     final raw = await _storage.read(key: _key);
     if (raw == null || raw.isEmpty) return null;
     try {
@@ -55,14 +63,28 @@ class SecureSessionStore implements SessionStore {
 
   @override
   Future<void> write(SavedSession session) {
-    return _storage.write(
-      key: _key,
-      value: jsonEncode({'token': session.token, 'user': session.user}),
-    );
+    // Encoded now, so what is saved is the session as it was when asked.
+    final value = jsonEncode({'token': session.token, 'user': session.user});
+    return _calls.add(() => _storage.write(key: _key, value: value));
   }
 
   @override
-  Future<void> clear() => _storage.delete(key: _key);
+  Future<void> clear() => _calls.add(() => _storage.delete(key: _key));
+}
+
+/// Runs asynchronous calls one at a time, in the order they were added.
+class CallLine {
+  Future<void> _last = Future<void>.value();
+
+  /// Starts [call] once every call added before it has finished, whether it
+  /// succeeded or not. The returned future carries [call]'s own result or
+  /// error; a failure is the caller's to handle and does not hold up the
+  /// calls behind it.
+  Future<T> add<T>(Future<T> Function() call) {
+    final result = _last.then((_) => call());
+    _last = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
+  }
 }
 
 /// Session kept only for the life of the process.

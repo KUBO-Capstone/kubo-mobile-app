@@ -20,6 +20,10 @@ class ListingPageController extends ChangeNotifier {
   int _currentImageIndex = 0;
   bool _disposed = false;
 
+  /// Goes up each time [_listing] is about to be set, so an answer that was
+  /// asked for earlier can tell it has been overtaken.
+  int _listingGeneration = 0;
+
   final MarketService _market = MarketService();
   final ListingService _listings;
 
@@ -51,9 +55,12 @@ class ListingPageController extends ChangeNotifier {
   Future<void> refresh() async {
     final productId = _listing.productId;
     if (productId == null) return;
+    final generation = ++_listingGeneration;
     try {
       final latest = await _listings.fetchListing(productId);
-      if (_disposed) return;
+      // Something newer set the listing while this was in flight: a later
+      // refresh, or the record a seller's edit came back with.
+      if (_disposed || generation != _listingGeneration) return;
       _listing = latest;
       notifyListeners();
     } catch (error) {
@@ -67,6 +74,8 @@ class ListingPageController extends ChangeNotifier {
 
   /// Swaps in the record returned by the server after a seller action.
   void replaceListing(SyntheticListingRecord listing) {
+    // A refresh started before the edit would put the old listing back.
+    _listingGeneration++;
     _listing = listing;
     _changed = true;
     notifyListeners();

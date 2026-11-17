@@ -18,11 +18,10 @@ abstract final class ApiConfig {
 
   /// Base URL every service should use when building request URIs.
   static String get baseUrl {
-    // if (configuredBaseUrl.isNotEmpty) return configuredBaseUrl;
-    // final isAndroidDevice =
-    //     !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-    // return isAndroidDevice ? _androidEmulatorBaseUrl : _loopbackBaseUrl;
-    return _loopbackBaseUrl;
+    if (configuredBaseUrl.isNotEmpty) return configuredBaseUrl;
+    final isAndroidDevice =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    return isAndroidDevice ? _androidEmulatorBaseUrl : _loopbackBaseUrl;
   }
 
   /// Socket.IO shares the server's port but lives at the root, not under /api.

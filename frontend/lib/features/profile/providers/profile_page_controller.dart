@@ -132,7 +132,12 @@ class ProfilePageController extends ChangeNotifier {
     final user = isOwnProfile ? AuthService.currentUser : null;
 
     String field(String key) => (loaded?[key] ?? user?[key])?.toString().trim() ?? '';
-    int count(String key) => (loaded?[key] as num?)?.toInt() ?? 0;
+    // Like field(): the signed-in user's saved row stands in until (or in
+    // case) the profile loads, so their own counts survive a failed fetch.
+    int count(String key) {
+      final value = loaded?[key] ?? user?[key];
+      return value is num ? value.toInt() : 0;
+    }
 
     final name = '${field('first_name')} ${field('last_name')}'.trim();
     final displayName = name.isNotEmpty
@@ -142,8 +147,9 @@ class ProfilePageController extends ChangeNotifier {
             : (visitor?.displayName ?? 'Kubo member');
 
     // The town of the preferred address, when the profile carries addresses
-    // (only the owner's does); otherwise the location typed on the profile,
-    // or the one the listing showed.
+    // (a visited profile that hides its location has had them taken out, see
+    // loadProfile); otherwise the location typed on the profile, or the one
+    // the listing showed.
     final addresses = (loaded?['addresses'] as List?)?.whereType<Map>().toList() ?? const <Map>[];
     final preferredId = loaded?['preferred_address_id'];
     final address = addresses.cast<Map<String, dynamic>>().firstWhere(
@@ -208,12 +214,13 @@ class ProfilePageController extends ChangeNotifier {
     if (AuthService.currentUserId == null) return 'Log in to follow sellers.';
     if (isFollowBusy) return null;
 
-    final before = _loadedProfile;
-    final follow = !isFollowing;
-    final followers = (before?['followers_count'] as num?)?.toInt() ?? 0;
+    final wasFollowing = isFollowing;
+    final follow = !wasFollowing;
+    final followers = (_loadedProfile?['followers_count'] as num?)?.toInt() ?? 0;
     isFollowBusy = true;
+    _followChanges++;
     _loadedProfile = {
-      ...?before,
+      ...?_loadedProfile,
       'is_following': follow,
       'followers_count': follow ? followers + 1 : (followers > 0 ? followers - 1 : 0),
     };
@@ -223,10 +230,13 @@ class ProfilePageController extends ChangeNotifier {
       _loadedProfile = {...?_loadedProfile, ...counts};
       return null;
     } catch (error) {
-      _loadedProfile = before;
+      // Only the two values this changed go back; anything else that loaded
+      // meanwhile stays.
+      _loadedProfile = {...?_loadedProfile, 'is_following': wasFollowing, 'followers_count': followers};
       return error.toString().replaceFirst('Exception: ', '');
     } finally {
       isFollowBusy = false;
+      _followChanges++;
       notifyListeners();
     }
   }
@@ -234,13 +244,43 @@ class ProfilePageController extends ChangeNotifier {
   Future<void> loadProfile() async {
     final userId = _subjectUserId;
     if (userId == null) return;
+    final followChangesAtStart = _followChanges;
     try {
-      _loadedProfile = await _profileService.fetchProfile(userId);
+      var fetched = await _profileService.fetchProfile(userId);
+      // A follow or unfollow started or landed while this was in flight, so
+      // the server may have answered from before it. Everything else in the
+      // answer is still taken; the follow state on screen is the newer one.
+      final current = _loadedProfile;
+      if (current != null && (isFollowBusy || followChangesAtStart != _followChanges)) {
+        fetched = {
+          ...fetched,
+          for (final key in _followFields)
+            if (current.containsKey(key)) key: current[key],
+        };
+      }
+      _loadedProfile = isOwnProfile ? fetched : _withoutHiddenLocation(fetched);
       if (isOwnProfile) AuthService.updateCurrentUser(_loadedProfile!);
       notifyListeners();
     } catch (_) {
       // The cached login profile remains visible while the network is unavailable.
     }
+  }
+
+  static const List<String> _followFields = <String>['is_following', 'followers_count', 'following_count'];
+
+  /// Goes up when a follow or unfollow starts and again when it lands, so a
+  /// profile load can tell one happened while it was in flight.
+  int _followChanges = 0;
+
+  // Someone else's profile with "show location" off: their addresses say
+  // where they are as plainly as the location line does, so neither is kept
+  // for the page to build a location from.
+  Map<String, dynamic> _withoutHiddenLocation(Map<String, dynamic> profile) {
+    if (_normalizePrivacy(profile['profile_privacy'])['show_location'] != false) return profile;
+    return Map<String, dynamic>.of(profile)
+      ..remove('addresses')
+      ..remove('preferred_address_id')
+      ..remove('location');
   }
 
   /// Takes the profile an edit screen returned. Those answers carry what was

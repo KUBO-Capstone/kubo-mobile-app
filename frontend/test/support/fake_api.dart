@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -11,7 +12,8 @@ final Uint8List transparentPixel = base64Decode(
 );
 
 /// What one API route answers with: the `data` of a 200, or a full response.
-typedef FakeRoute = Object? Function(http.Request request);
+/// A route may return a future to hold its answer back until a test lets go.
+typedef FakeRoute = FutureOr<Object?> Function(http.Request request);
 
 /// An in-memory stand-in for the Kubo API, for `http.runWithClient`.
 ///
@@ -40,7 +42,7 @@ class FakeApi {
     if (route == null) {
       return _json(404, {'success': false, 'message': 'Not found'});
     }
-    final answer = route(request);
+    final answer = await route(request);
     if (answer is http.Response) return answer;
     return _json(200, {'success': true, 'data': answer});
   }

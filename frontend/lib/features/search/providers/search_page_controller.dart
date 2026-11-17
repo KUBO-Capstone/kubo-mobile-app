@@ -47,6 +47,7 @@ class SearchPageController extends ChangeNotifier {
 
   Timer? _typing;
   bool _disposed = false;
+  int _popularRequest = 0;
 
   /// Unmodifiable recent search history.
   List<String> get recentSearches => List<String>.unmodifiable(_recentSearches);
@@ -103,12 +104,17 @@ class SearchPageController extends ChangeNotifier {
 
   /// Fetches the popular produce. A failed refresh keeps what was shown.
   Future<void> loadPopular() async {
+    // Reloads can overlap (every change to a listing asks for one). Only the
+    // newest request may touch the state, whichever order the answers come in.
+    final request = ++_popularRequest;
     try {
       final suggestions = await _service.fetchSuggestions();
+      if (request != _popularRequest) return;
       popular = suggestions;
       popularFailed = false;
     } catch (error) {
       debugPrint('Popular searches fetch failed: $error');
+      if (request != _popularRequest) return;
       popularFailed = popular.isEmpty;
     }
     isLoadingPopular = false;

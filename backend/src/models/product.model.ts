@@ -97,7 +97,11 @@ export interface ListingSuggestion {
 }
 
 // LIKE treats % and _ as wildcards; typed text has to match them literally.
-const likePattern = (text: string): string => `%${text.replace(/[\\%_]/g, '\\$&')}%`;
+const escapeLike = (text: string): string => text.replace(/[\\%_]/g, '\\$&');
+const likePattern = (text: string): string => `%${escapeLike(text)}%`;
+
+/** An edit that would leave a listing's status at odds with its stock. */
+export class StockRuleError extends Error {}
 
 export function mapListing(row: Record<string, unknown>): ProductListing {
     return {
@@ -183,24 +187,27 @@ export const ProductModel = {
     async suggest(query: string, limit: number): Promise<ListingSuggestion[]> {
         const text = query.trim().toLowerCase();
         const cover = `(SELECT pi.image_key FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.display_order LIMIT 1)`;
-        const listings = (match: string, params: unknown[]) => pool.query(`
+        // `prefixFirst` goes ahead of the usual ranking, so the rows LIMIT
+        // keeps are the ones the merged list below would put on top.
+        const listings = (match: string, prefixFirst: string, params: unknown[]) => pool.query(`
             SELECT MIN(btrim(p.crop_name)) AS text, COUNT(*) AS listing_count,
                    (ARRAY_AGG(${cover} ORDER BY p.created_at DESC))[1] AS image
             FROM products p
             WHERE p.status = 'available' ${match}
             GROUP BY lower(btrim(p.crop_name))
-            ORDER BY COUNT(*) DESC, MAX(p.created_at) DESC
+            ORDER BY ${prefixFirst} COUNT(*) DESC, MAX(p.created_at) DESC
             LIMIT $1
         `, params);
 
         if (!text) {
-            const { rows } = await listings('', [limit]);
+            const { rows } = await listings('', '', [limit]);
             return rows.map((row) => toSuggestion(row, 'listing'));
         }
 
-        const pattern = likePattern(text);
+        // $2 matches the text anywhere, $3 only at the start.
+        const params = [limit, likePattern(text), `${escapeLike(text)}%`];
         const [titles, places, sellers] = await Promise.all([
-            listings(`AND lower(p.crop_name) LIKE $2`, [limit, pattern]),
+            listings(`AND lower(p.crop_name) LIKE $2`, `(lower(btrim(p.crop_name)) LIKE $3) DESC,`, params),
             pool.query(`
                 SELECT MIN(btrim(a.city_municipality)) AS text, COUNT(*) AS listing_count
                 FROM products p
@@ -208,18 +215,18 @@ export const ProductModel = {
                 ${sellerPlaceJoins}
                 WHERE p.status = 'available' AND lower(a.city_municipality) LIKE $2
                 GROUP BY lower(btrim(a.city_municipality))
-                ORDER BY COUNT(*) DESC
+                ORDER BY (lower(btrim(a.city_municipality)) LIKE $3) DESC, COUNT(*) DESC
                 LIMIT $1
-            `, [limit, pattern]),
+            `, params),
             pool.query(`
                 SELECT u.first_name || ' ' || u.last_name AS text, COUNT(*) AS listing_count
                 FROM products p
                 JOIN users u ON u.user_id = p.seller_id
                 WHERE p.status = 'available' AND lower(u.first_name || ' ' || u.last_name) LIKE $2
                 GROUP BY u.user_id
-                ORDER BY COUNT(*) DESC
+                ORDER BY (lower(u.first_name || ' ' || u.last_name) LIKE $3) DESC, COUNT(*) DESC
                 LIMIT $1
-            `, [limit, pattern]),
+            `, params),
         ]);
 
         const typeOrder = { listing: 0, place: 1, seller: 2 };
@@ -291,15 +298,39 @@ export const ProductModel = {
 
     // Applies only the keys present in changes. A non-null images list
     // replaces the listing's photos in the given order.
+    //
+    // Stock and "sold out" are kept in step here, against the row as it is
+    // once this edit holds its lock, not as the controller read it: an offer
+    // accepted in between has already changed both. A listing edited down to
+    // nothing reads sold out, and one that had run out is back up once it is
+    // restocked. One the seller marked sold out by hand (stock still above
+    // zero) stays that way until they mark it available again, and nothing
+    // can be marked available with no stock: that throws StockRuleError and
+    // writes nothing.
     async update(productId: number, changes: ProductChanges, images?: string[]): Promise<ProductListing | undefined> {
-        const columns = (Object.keys(changes) as (keyof ProductChanges)[]).filter((key) => changes[key] !== undefined);
         await withTransaction(async (client) => {
-            // Runs even for a photo-only edit: it locks the product row, so two
+            // Taken even for a photo-only edit: with the row locked, two
             // edits replacing the photos at once take turns instead of
             // leaving both new photo lists behind.
+            const { rows: [current] } = await client.query(
+                `SELECT available_quantity, status FROM products WHERE product_id = $1 FOR UPDATE`, [productId]);
+            if (!current) return;
+
+            const applied: ProductChanges = { ...changes };
+            const stockBefore = Number(current.available_quantity);
+            const stockAfter = applied.available_quantity ?? stockBefore;
+            if (applied.status === 'available' && stockAfter <= 0) {
+                throw new StockRuleError('Add stock before marking this listing as available');
+            }
+            if (applied.status === undefined && applied.available_quantity !== undefined) {
+                if (stockAfter <= 0 && current.status === 'available') applied.status = 'out of stock';
+                if (stockAfter > 0 && stockBefore <= 0 && current.status === 'out of stock') applied.status = 'available';
+            }
+
+            const columns = (Object.keys(applied) as (keyof ProductChanges)[]).filter((key) => applied[key] !== undefined);
             const assignments = columns.map((column, i) => `${column} = $${i + 2}, `).join('');
             await client.query(`UPDATE products SET ${assignments}updated_at = CURRENT_TIMESTAMP WHERE product_id = $1`,
-                [productId, ...columns.map((column) => changes[column])]);
+                [productId, ...columns.map((column) => applied[column])]);
             if (images) {
                 await client.query(`DELETE FROM product_images WHERE product_id = $1`, [productId]);
                 await insertImages(client, productId, images);

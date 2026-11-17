@@ -1,3 +1,4 @@
+import { DA_REGIONS } from "#market/bantay-presyo";
 import { REGION_CENTROIDS } from "#market/market-areas";
 import { Place, PlaceModel, PlacePoint } from "#models/place.model";
 
@@ -58,12 +59,38 @@ const kmBetween = (a: PlacePoint, b: PlacePoint): number => {
     return 6371 * 2 * Math.asin(Math.sqrt(h));
 };
 
-// "REGION IV-A" and "Region IV-A - CALABARZON" both name REGION_CENTROIDS['Region IV-A'].
-const regionCentre = (region: string): PlacePoint | undefined => {
+// "REGION IV-A" and "Region IV-A - CALABARZON" both mean the short label 'Region IV-A'.
+const regionLabel = (region: string): string | undefined => {
     const wanted = region.split(' - ')[0].trim().toUpperCase();
-    const key = Object.keys(REGION_CENTROIDS).find((name) => name.toUpperCase() === wanted);
-    return key ? REGION_CENTROIDS[key] : undefined;
+    return Object.keys(REGION_CENTROIDS).find((name) => name.toUpperCase() === wanted);
 };
+
+const regionCentre = (region: string): PlacePoint | undefined => {
+    const label = regionLabel(region);
+    return label ? REGION_CENTROIDS[label] : undefined;
+};
+
+// What OpenStreetMap calls a region where that is not the official name,
+// or where it files towns under a region the address lists do not use.
+const OSM_REGION_NAMES: Record<string, string[]> = {
+    'NCR': ['Metro Manila'],
+    'BARMM': ['Bangsamoro'],
+    // The Negros provinces sit under "Negros Island Region" in OpenStreetMap.
+    'Region VI': ['Negros Island Region'],
+    'Region VII': ['Negros Island Region'],
+};
+
+// The names a result's address may show for the region an address is in.
+// Empty when the region is not one we know, which matches nothing.
+const regionNames = (region: string): string[] => {
+    const label = regionLabel(region);
+    if (!label) return [];
+    const official = DA_REGIONS.find((entry) => entry.region === label)?.regionName;
+    return [...(official ? [official] : []), ...(OSM_REGION_NAMES[label] ?? [])].map(fold);
+};
+
+// "Baguio, Cordillera Administrative Region, 2600, Philippines" -> "baguio"
+const localityOf = (candidate: Candidate): string => fold(candidate.name.split(',')[0].trim());
 
 /**
  * How a town is asked for. Addresses name towns the way the PSGC lists do,
@@ -122,8 +149,11 @@ async function search(text: string): Promise<Candidate[]> {
  *     the next, so a match has to name it.
  *  2. The town on its own, for cities OpenStreetMap does not file under a
  *     province (Baguio, Cebu City). Without the province a name can be
- *     shared, so this only counts when exactly one town by that name is in
- *     or near the address's region.
+ *     shared, and a search only returns its first few matches, so one
+ *     result is not proof there is one such town. A result counts only if
+ *     its address names this town and the address's region, it is in or
+ *     near that region, and it is the only one that passes. A San Juan in
+ *     Metro Manila is never taken for the one in Batangas.
  *  3. Failing both, a district or barangay step 1 found in the right
  *     province: still inside the town, just not its centre.
  */
@@ -141,10 +171,15 @@ export async function lookUpPlace(place: Place): Promise<PlacePoint | null> {
     }
 
     const centre = regionCentre(place.region);
-    if (area && centre) {
+    const regions = regionNames(place.region);
+    const wantedLocalities = cities.map(fold);
+    if (area && centre && regions.length > 0) {
         for (const city of cities) {
-            const towns = (await search(`${city}, Philippines`))
-                .filter((candidate) => isTown(candidate) && kmBetween(centre, candidate) <= MAX_KM_FROM_REGION_CENTRE);
+            const towns = (await search(`${city}, Philippines`)).filter((candidate) =>
+                isTown(candidate)
+                && wantedLocalities.includes(localityOf(candidate))
+                && regions.some((region) => fold(candidate.name).includes(region))
+                && kmBetween(centre, candidate) <= MAX_KM_FROM_REGION_CENTRE);
             if (towns.length === 1) return toPoint(towns[0]);
         }
     }
@@ -152,10 +187,19 @@ export async function lookUpPlace(place: Place): Promise<PlacePoint | null> {
     return insideTown ? toPoint(insideTown) : null;
 }
 
+// A pass cut short (Nominatim or the database out of reach) is tried again
+// by itself after these waits, one per failure in a row, then left to the
+// next start, listing or address change.
+const RETRY_DELAYS_MS = [60_000, 5 * 60_000, 15 * 60_000, 30 * 60_000, 60 * 60_000];
+
 let running: Promise<void> | undefined;
 let queuedAgain = false;
+let retryTimer: NodeJS.Timeout | undefined;
+let failuresInARow = 0;
 
-async function resolveUnknownPlaces(log: (line: string) => void): Promise<void> {
+// True when every unknown town was dealt with; false when the pass was cut
+// short and towns are still waiting.
+async function resolveUnknownPlaces(log: (line: string) => void): Promise<boolean> {
     const places = await PlaceModel.findUnresolved();
     for (const place of places) {
         try {
@@ -163,20 +207,35 @@ async function resolveUnknownPlaces(log: (line: string) => void): Promise<void> 
             await PlaceModel.save(place, point);
             log(`Place lookup: ${place.city}${place.province ? `, ${place.province}` : ''} ${point ? `is at ${point.latitude.toFixed(4)}, ${point.longitude.toFixed(4)}` : 'was not found'}`);
         } catch (error) {
-            // Nominatim could not be reached, so the rest would fail the same
-            // way. Everything still unresolved is tried again on the next
-            // start, listing or address change.
+            // Nominatim could not be reached, so the rest would fail the same way.
             log(`Place lookup: could not look up ${place.city} - ${error instanceof Error ? error.message : String(error)}`);
-            return;
+            return false;
         }
     }
+    return true;
+}
+
+// One timer at most, and it only calls queuePlaceLookups, whose own guard
+// keeps passes from overlapping.
+function retryLater(log: (line: string) => void): void {
+    if (retryTimer || failuresInARow >= RETRY_DELAYS_MS.length) return;
+    const wait = RETRY_DELAYS_MS[failuresInARow];
+    failuresInARow += 1;
+    log(`Place lookup: trying again in ${Math.round(wait / 60_000)} min`);
+    retryTimer = setTimeout(() => {
+        retryTimer = undefined;
+        queuePlaceLookups(log);
+    }, wait);
+    // Never the reason the process stays up.
+    retryTimer.unref();
 }
 
 /**
  * Looks up, in the background, every town a listing needs that is not known
  * yet. Returns at once and never throws; call it whenever a listing or an
  * address may have brought in a new town. Calls made while a pass is running
- * fold into one more pass after it.
+ * fold into one more pass after it, and a pass that is cut short retries
+ * itself a few times, further apart each time.
  */
 export function queuePlaceLookups(log: (line: string) => void = console.log): void {
     if (!isEnabled()) return;
@@ -184,13 +243,22 @@ export function queuePlaceLookups(log: (line: string) => void = console.log): vo
         queuedAgain = true;
         return;
     }
+    // This pass stands in for any retry that was waiting.
+    clearTimeout(retryTimer);
+    retryTimer = undefined;
     running = resolveUnknownPlaces(log)
-        .catch((error) => log(`Place lookup: failed - ${error instanceof Error ? error.message : String(error)}`))
-        .finally(() => {
+        .catch((error) => {
+            log(`Place lookup: failed - ${error instanceof Error ? error.message : String(error)}`);
+            return false;
+        })
+        .then((finished) => {
             running = undefined;
+            if (finished) failuresInARow = 0;
             if (queuedAgain) {
                 queuedAgain = false;
                 queuePlaceLookups(log);
+            } else if (!finished) {
+                retryLater(log);
             }
         });
 }

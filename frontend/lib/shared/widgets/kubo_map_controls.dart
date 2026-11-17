@@ -147,8 +147,11 @@ class _KuboMapZoomControlsState extends State<KuboMapZoomControls> with SingleTi
       widget.controller.move(camera.center, target);
       return;
     }
-    _zoom = Tween<double>(begin: camera.zoom, end: target)
-        .animate(CurvedAnimation(parent: _glide, curve: Curves.easeOutCubic));
+    // The curve rides on the tween rather than on a CurvedAnimation, which
+    // would leave one more listener on _glide with every tap.
+    _zoom = _glide.drive(
+      Tween<double>(begin: camera.zoom, end: target).chain(CurveTween(curve: Curves.easeOutCubic)),
+    );
     _glide.forward(from: 0);
   }
 

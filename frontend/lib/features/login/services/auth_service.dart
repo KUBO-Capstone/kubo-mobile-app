@@ -129,8 +129,9 @@ class AuthService {
 
   // Saves the session as it is now. Not waited for: the app carries on with
   // the copy in memory, and a failed save only costs a login next launch.
-  // The store takes writes in the order they are made, so a save can never
-  // land after the logout that follows it; a save after logout is skipped.
+  // The store carries out its calls in the order they are made, so a save
+  // can never land after the logout that follows it; a save after logout is
+  // skipped.
   static void _save() {
     final token = ApiSession.token;
     final user = currentUser;

@@ -119,11 +119,16 @@ class _ListingsMapState extends State<ListingsMap> {
 
   bool get _isProducts => _modeOf(widget) == MapPinMode.products;
 
-  /// Identifies what is on screen, ignoring list instance churn.
+  /// Identifies what is on screen, ignoring list instance churn. A listing
+  /// counts with where it is plotted: the same listings come back from a
+  /// refresh with a point once their town has been looked up, and the camera
+  /// has to move to the pins that appear.
   String _signature(ListingsMap w) {
     final ids =
         _modeOf(w) == MapPinMode.products
-            ? w.listings.map((record) => record.id)
+            ? w.listings.map(
+              (record) => '${record.id}@${record.latitude},${record.longitude}',
+            )
             : w.centers.map((center) => center.id);
     final focus = w.focusLocation;
     final focusKey =

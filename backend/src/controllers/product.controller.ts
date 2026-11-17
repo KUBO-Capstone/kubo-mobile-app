@@ -288,21 +288,10 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
         return;
     }
 
-    // Stock and "sold out" stay in step, the same way they do when offers
-    // take stock: a listing edited down to nothing reads sold out, and one
-    // that ran out is back up as soon as the seller restocks it. A listing
-    // the seller marked sold out by hand (stock still above zero) stays that
-    // way until they mark it available again.
-    const stockAfter = changes.available_quantity ?? product.available_quantity;
-    if (changes.status === 'available' && stockAfter <= 0) {
-        res.status(400).json({ success: false, message: 'Add stock before marking this listing as available' });
-        return;
-    }
-    if (changes.status === undefined && changes.available_quantity !== undefined) {
-        if (stockAfter <= 0 && product.status === 'available') changes.status = 'out of stock';
-        if (stockAfter > 0 && product.available_quantity <= 0 && product.status === 'out of stock') changes.status = 'available';
-    }
-
+    // ProductModel.update keeps "sold out" in step with the stock, and
+    // refuses (StockRuleError, answered as a 400 below) to mark a listing
+    // with nothing left as available. It decides both against the row it has
+    // locked, since `product` above may already be behind an accepted offer.
     try {
         const updated = await ProductModel.update(product.product_id, changes, images);
         if (images) {

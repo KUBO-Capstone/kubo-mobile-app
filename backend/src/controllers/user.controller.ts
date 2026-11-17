@@ -91,7 +91,12 @@ const publicUser = (user: User | undefined, viewerId?: number) => {
         }
         if (privacy.show_bio === false) delete visibleUser.bio;
         if (privacy.show_contact_number === false) delete visibleUser.contact_number;
-        if (privacy.show_location === false) delete visibleUser.location;
+        if (privacy.show_location === false) {
+            // The addresses say where they are just as the typed location does.
+            delete visibleUser.location;
+            delete visibleUser.addresses;
+            delete visibleUser.preferred_address_id;
+        }
         return visibleUser;
     }
     return safeUser;

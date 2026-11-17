@@ -349,7 +349,9 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 34)),
-                if (widget.isOwnProfile && _controller.earnings != null)
+                // Lifetime earnings are the owner's alone: not built at all
+                // for anyone else looking at this profile.
+                if (_controller.isViewingOwnAccount && _controller.earnings != null)
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
@@ -707,6 +709,27 @@ class _ProfilePageState extends State<ProfilePage> {
                   label: 'Reviews',
                   value: _controller.profile.reviewCount.toString(),
                   accent: AppColors.gray,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Public trust signals. Earnings are never among them.
+          Row(
+            children: [
+              Expanded(
+                child: _AnalyticsCard(
+                  label: 'Completed orders',
+                  value: _controller.profile.completedOrders.toString(),
+                  accent: AppColors.green,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _AnalyticsCard(
+                  label: 'Member since',
+                  value: _controller.profile.joinedLabel.isEmpty ? '—' : _controller.profile.joinedLabel,
+                  accent: AppColors.black,
                 ),
               ),
             ],

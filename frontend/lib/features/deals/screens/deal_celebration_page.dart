@@ -7,28 +7,27 @@ import '../../../core/utils/formatters.dart';
 import '../../chat/widgets/counter_offer_dialog.dart' show formatAmount;
 import '../widgets/confetti_burst.dart';
 
-/// What the person chose on the celebration screen; null means "back to chat".
-enum DealCelebrationAction { arrangePickup, viewEarnings }
+/// What the person chose on the celebration screen; null means "later".
+enum DealCelebrationAction { writeReview, viewEarnings }
 
-/// Shown once to each side when an offer is accepted: the buyer is told the
-/// seller said yes, the seller that they just closed a deal and for how much.
+/// Shown once to each side when a deal is really done: after the buyer taps
+/// "Order received", confirming they have the produce in hand. Accepting an
+/// offer only starts the order, so nothing is celebrated then. The screen
+/// leads straight into the review, while the handover is fresh.
 class DealCelebrationPage extends StatefulWidget {
   const DealCelebrationPage({
     super.key,
     required this.isSeller,
-    required this.acceptedByMe,
     required this.counterpartyName,
     required this.cropName,
     required this.quantity,
     required this.unit,
     required this.price,
+    this.canReview = true,
   });
 
   /// Which side of the deal the viewer is on.
   final bool isSeller;
-
-  /// The viewer tapped Accept (the seller on an offer, the buyer on a counter).
-  final bool acceptedByMe;
   final String counterpartyName;
   final String cropName;
   final double quantity;
@@ -36,6 +35,9 @@ class DealCelebrationPage extends StatefulWidget {
 
   /// Agreed price per [unit].
   final double price;
+
+  /// The viewer has not reviewed this order yet; offers "Write a review".
+  final bool canReview;
 
   @override
   State<DealCelebrationPage> createState() => _DealCelebrationPageState();
@@ -53,20 +55,13 @@ class _DealCelebrationPageState extends State<DealCelebrationPage> {
     final seller = widget.isSeller;
     final total = widget.price * widget.quantity;
     final name = widget.counterpartyName;
-    final headline =
-        seller
-            ? 'You just closed a deal!'
-            : widget.acceptedByMe
-            ? "It's a deal with $name!"
-            : '$name accepted your offer!';
-    final subline =
-        seller
-            ? (widget.acceptedByMe ? "You accepted $name's offer." : '$name accepted your counter-offer.')
-            : (widget.acceptedByMe ? "You accepted $name's counter-offer." : 'Your produce is reserved for you.');
-    final nextStep =
-        seller
-            ? '$name will now choose pickup at a bagsakan center or courier delivery. You will see the order in your chat.'
-            : 'Next, choose how to get it: pick up at a bagsakan center or have it delivered.';
+    final headline = 'You just closed a deal!';
+    final subline = seller ? '$name received the produce.' : 'You received your order from $name.';
+    final nextStep = widget.canReview
+        ? (seller
+            ? 'How was dealing with $name? Your review helps other growers.'
+            : 'How was the produce? Your review helps other buyers, and photos of the quality and packaging help most.')
+        : 'Thanks for trading on Kubo.';
 
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -169,24 +164,34 @@ class _DealCelebrationPageState extends State<DealCelebrationPage> {
                       SizedBox(
                         width: double.infinity,
                         height: 52,
-                        child: FilledButton(
-                          onPressed: () => Navigator.of(context).pop(seller ? null : DealCelebrationAction.arrangePickup),
+                        child: FilledButton.icon(
+                          onPressed: () => Navigator.of(context).pop(widget.canReview ? DealCelebrationAction.writeReview : null),
+                          icon: widget.canReview ? const Icon(Icons.rate_review_outlined) : const SizedBox.shrink(),
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.green,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                          child: Text(
-                            seller ? 'Back to chat' : 'Arrange pickup or delivery',
+                          label: Text(
+                            widget.canReview ? 'Write a review' : 'Done',
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                           ),
                         ),
                       ),
                       const SizedBox(height: 4),
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(seller ? DealCelebrationAction.viewEarnings : null),
-                        style: TextButton.styleFrom(foregroundColor: AppColors.green),
-                        child: Text(seller ? 'See lifetime earnings' : 'Back to chat', style: const TextStyle(fontWeight: FontWeight.w700)),
-                      ),
+                      // The earnings shortcut is the seller's own: a buyer never
+                      // sees what the seller has made.
+                      if (seller)
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(DealCelebrationAction.viewEarnings),
+                          style: TextButton.styleFrom(foregroundColor: AppColors.green),
+                          child: const Text('See lifetime earnings', style: TextStyle(fontWeight: FontWeight.w700)),
+                        ),
+                      if (widget.canReview)
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: TextButton.styleFrom(foregroundColor: AppColors.gray),
+                          child: const Text('Maybe later', style: TextStyle(fontWeight: FontWeight.w700)),
+                        ),
                     ],
                   ),
                 ),

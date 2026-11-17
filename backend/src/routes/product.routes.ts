@@ -11,6 +11,7 @@ import {
     updateProduct,
     uploadProductImages,
 } from "#controllers/product.controller";
+import { getProductFulfillment, updateProductFulfillment } from "#controllers/fulfillment.controller";
 
 const receiveListingImages = receiveImages({
     field: 'images',
@@ -30,6 +31,9 @@ router.get('/', getProducts);
 // Before /:id, or "suggestions" would be read as a listing id.
 router.get('/suggestions', getSuggestions);
 router.get('/:id', getProduct);
+// The centers and couriers a buyer can pick on this listing.
+router.get('/:id/fulfillment', getProductFulfillment);
+router.put('/:id/fulfillment', requireAuth, updateProductFulfillment);
 router.post('/images', requireAuth, receiveListingImages, uploadProductImages);
 router.post('/', requireAuth, createProduct);
 router.patch('/:id', requireAuth, updateProduct);

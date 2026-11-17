@@ -183,6 +183,7 @@ class ProfilePageController extends ChangeNotifier {
       listingCount: _listings.length,
       reviewScore: ratingSummary.average ?? 0,
       reviewCount: ratingSummary.count,
+      completedOrders: count('completed_orders'),
       photoUrl: photo.isNotEmpty ? photo : (isOwnProfile ? '' : visitor?.photoUrl ?? ''),
     );
   }
@@ -341,10 +342,21 @@ class ProfilePageController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether the signed-in user is looking at their own account. The only
+  /// case Lifetime Earnings may be loaded or shown in: buyers, guests and
+  /// other sellers never get the figures, from the server or on screen.
+  bool get isViewingOwnAccount {
+    final me = AuthService.currentUserId;
+    return isOwnProfile && me != null && _subjectUserId == me;
+  }
+
   /// Lifetime earnings for the banner on the owner's profile.
   Future<void> loadEarnings() async {
     final userId = AuthService.currentUserId;
-    if (!isOwnProfile || userId == null) return;
+    if (!isViewingOwnAccount || userId == null) {
+      earnings = null;
+      return;
+    }
     try {
       earnings = await _earningsService.fetchEarnings(userId);
       notifyListeners();

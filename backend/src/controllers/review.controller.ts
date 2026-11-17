@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { OrderModel } from "#models/order.model";
-import { buyerReviewTags, ReviewModel, sellerReviewTags } from "#models/review.model";
+import { buyerReviewTags, maxReviewPhotos, ReviewModel, sellerReviewTags } from "#models/review.model";
+import { readStoredImages } from "#controllers/upload.controller";
 import { NotificationModel } from "#models/notification.model";
 import { UserModel } from "#models/user.model";
 import { authUserId } from "#middleware/auth.middleware";
@@ -59,6 +60,23 @@ export const createReview = async (req: Request, res: Response): Promise<void> =
     }
     const tags = [...new Set(rawTags as string[])];
 
+    // Optional photos of the produce or packaging, each one uploaded first
+    // through POST /orders/:id/review/photos.
+    const rawPhotos: unknown = req.body?.photos ?? [];
+    if (!Array.isArray(rawPhotos)) {
+        res.status(400).json({ success: false, message: 'photos must be a list' });
+        return;
+    }
+    if (rawPhotos.length > maxReviewPhotos) {
+        res.status(400).json({ success: false, message: `A review can have up to ${maxReviewPhotos} photos` });
+        return;
+    }
+    const photos = await readStoredImages(rawPhotos, 'reviews');
+    if (!photos) {
+        res.status(400).json({ success: false, message: 'One of the photos was not uploaded. Please add it again.' });
+        return;
+    }
+
     if (await ReviewModel.findByOrderAndReviewer(orderId, reviewerId)) {
         res.status(409).json({ success: false, message: 'You already reviewed this order' });
         return;
@@ -67,7 +85,7 @@ export const createReview = async (req: Request, res: Response): Promise<void> =
     const revieweeId = isBuyer ? order.seller_id : order.buyer_id;
     let review;
     try {
-        review = await ReviewModel.create({ order_id: orderId, reviewer_id: reviewerId, reviewee_id: revieweeId, rating, comment, tags });
+        review = await ReviewModel.create({ order_id: orderId, reviewer_id: reviewerId, reviewee_id: revieweeId, rating, comment, tags, photos });
     } catch (error) {
         // Two taps racing past the check above hit the unique index instead.
         if (isUniqueViolation(error)) {
@@ -92,6 +110,38 @@ export const createReview = async (req: Request, res: Response): Promise<void> =
         console.error(`Could not notify user ${revieweeId} about review ${review.review_id}:`, error);
     }
     res.status(201).json({ success: true, data: review });
+};
+
+// POST /orders/:id/review/photos - stores the photos for a review that is
+// about to be written and returns their paths, in upload order, for the
+// review's photos field. Only the two sides of a delivered order may upload.
+export const uploadReviewPhotos = async (req: Request, res: Response): Promise<void> => {
+    const images: string[] = res.locals.uploadedImages ?? [];
+    if (images.length === 0) {
+        res.status(400).json({ success: false, message: 'Add a JPG, PNG, or WebP photo' });
+        return;
+    }
+    res.status(201).json({ success: true, data: { images } });
+};
+
+// Runs before the upload so nothing reaches S3 for an order the caller has
+// no review to write on.
+export const requireReviewableOrder = async (req: Request, res: Response, next: () => void): Promise<void> => {
+    const userId = authUserId(res);
+    const order = await OrderModel.findById(readId(req.params.id) ?? 0);
+    if (!order) {
+        res.status(404).json({ success: false, message: 'Order not found' });
+        return;
+    }
+    if (order.buyer_id !== userId && order.seller_id !== userId) {
+        res.status(403).json({ success: false, message: 'You are not part of this order' });
+        return;
+    }
+    if (order.order_status !== 'delivered') {
+        res.status(409).json({ success: false, message: 'You can leave a review once the order has been received' });
+        return;
+    }
+    next();
 };
 
 // GET /users/:id/reviews - public, like the profile it sits on.

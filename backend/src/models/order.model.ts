@@ -1,5 +1,5 @@
 import { isRowId, pool, Queryable, withTransaction } from "#database/pg";
-import { fromMediaColumn } from "#controllers/upload.controller";
+import { fromMediaColumn, toMediaColumn } from "#controllers/upload.controller";
 import { ProductModel } from "#models/product.model";
 
 // Mirrors the CHECK constraints on orders.order_status / delivery_method in
@@ -18,6 +18,9 @@ export interface OrderInput {
     negotiated_price: number;
     delivery_method: DeliveryMethod;
     drop_off_center_id: number | null;
+    // The courier agreed in the offer; the seller adds the tracking number
+    // when they hand the parcel over.
+    courier_name?: string | null;
 }
 
 // One order is one accepted negotiation, so it always has exactly one
@@ -45,9 +48,28 @@ export interface Order {
     center_address: string | null;
     courier_name: string | null;
     tracking_number: string | null;
+    // Photos the seller took of the produce as they handed it over.
+    handover_photos: string[];
+    shipped_at: string | null;
     order_date: string;
     updated_at: string;
 }
+
+// Most handover photos one order can carry; matches the upload route's limit.
+export const maxHandoverPhotos = 5;
+
+export interface Handover {
+    courier_name: string | null;
+    tracking_number: string | null;
+    handover_photos: string[];
+}
+
+// orders.handover_photos is jsonb: an array already, or text from an older
+// driver setup.
+const parseStrings = (value: unknown): string[] => {
+    const list = typeof value === 'string' ? (() => { try { return JSON.parse(value); } catch { return []; } })() : value;
+    return Array.isArray(list) ? list.filter((item): item is string => typeof item === 'string') : [];
+};
 
 const orderQuery = `
     SELECT o.*,
@@ -96,6 +118,8 @@ function mapOrder(row: Record<string, unknown>): Order {
         center_address: str(row.center_address),
         courier_name: str(row.courier_name),
         tracking_number: str(row.tracking_number),
+        handover_photos: parseStrings(row.handover_photos).map(fromMediaColumn),
+        shipped_at: str(row.shipped_at),
         order_date: String(row.order_date),
         updated_at: String(row.updated_at),
     };
@@ -177,34 +201,55 @@ export const OrderModel = {
             } else {
                 await client.query(`UPDATE negotiations SET reserved_quantity = NULL WHERE negotiation_id = $1`, [input.negotiation_id]);
             }
-
-            // Totals are worked out in numeric, not JS floats, so 2.5 x 33.33 is 83.33.
-            const { rows: [order] } = await client.query(`
-                INSERT INTO orders (negotiation_id, buyer_id, seller_id, drop_off_center_id, drop_off_location_name, total_amount, delivery_method)
-                VALUES ($1, $2, $3, $4, (SELECT location_name FROM bagsakan_centers WHERE center_id = $4), $5::numeric * $6::numeric, $7)
-                RETURNING order_id
-            `, [input.negotiation_id, input.buyer_id, input.seller_id, input.drop_off_center_id,
-                input.quantity, input.negotiated_price, input.delivery_method]);
-            // order_items keeps the name and unit as they were when ordered.
-            await client.query(`
-                INSERT INTO order_items (order_id, product_id, product_name, unit_measurement, quantity, negotiated_price)
-                SELECT $1::int, product_id, crop_name, unit_measurement, $3::numeric, $4::numeric FROM products WHERE product_id = $2
-            `, [order.order_id, input.product_id, input.quantity, input.negotiated_price]);
-            return Number(order.order_id);
+            return OrderModel.insert(client, input);
         });
         return orderId === undefined ? undefined : OrderModel.findById(orderId);
     },
 
+    // Writes the order and its single item inside the caller's transaction,
+    // which has already dealt with the stock. Accepting an offer whose terms
+    // include how the produce changes hands goes through here straight from
+    // NegotiationModel.accept, so there is no separate "place order" step.
+    async insert(q: Queryable, input: OrderInput): Promise<number> {
+        // Totals are worked out in numeric, not JS floats, so 2.5 x 33.33 is 83.33.
+        const { rows: [order] } = await q.query(`
+            INSERT INTO orders (negotiation_id, buyer_id, seller_id, drop_off_center_id, drop_off_location_name, total_amount, delivery_method, courier_name)
+            VALUES ($1, $2, $3, $4, (SELECT location_name FROM bagsakan_centers WHERE center_id = $4), $5::numeric * $6::numeric, $7, $8)
+            RETURNING order_id
+        `, [input.negotiation_id, input.buyer_id, input.seller_id, input.drop_off_center_id,
+            input.quantity, input.negotiated_price, input.delivery_method, input.courier_name ?? null]);
+        // order_items keeps the name and unit as they were when ordered.
+        await q.query(`
+            INSERT INTO order_items (order_id, product_id, product_name, unit_measurement, quantity, negotiated_price)
+            SELECT $1::int, product_id, crop_name, unit_measurement, $3::numeric, $4::numeric FROM products WHERE product_id = $2
+        `, [order.order_id, input.product_id, input.quantity, input.negotiated_price]);
+        return Number(order.order_id);
+    },
+
+    // Delivered orders the user was on either side of: the public "completed
+    // orders" count on a profile.
+    async countCompleted(userId: number): Promise<number> {
+        if (!isRowId(userId)) return 0;
+        const { rows: [row] } = await pool.query(
+            `SELECT COUNT(*) AS total FROM orders WHERE order_status = 'delivered' AND (buyer_id = $1 OR seller_id = $1)`, [userId]);
+        return Number(row.total);
+    },
+
     // Seller hands a pending order over: marks it in transit and, for a
     // courier order, keeps whichever courier details they gave (both are
-    // optional; they may send them in the chat instead). Undefined if it was
+    // optional; they may send them in the chat instead). A courier agreed in
+    // the offer stays unless the seller names another. Undefined if it was
     // no longer pending.
-    async ship(orderId: number, courier: { courier_name: string | null; tracking_number: string | null } = { courier_name: null, tracking_number: null }): Promise<Order | undefined> {
+    // Undefined if the order was no longer pending. The photos column keeps
+    // object keys, like product_images; it is sent as JSON text so
+    // node-postgres does not turn the array into a Postgres array.
+    async ship(orderId: number, handover: Handover = { courier_name: null, tracking_number: null, handover_photos: [] }): Promise<Order | undefined> {
         const { rowCount } = await pool.query(`
             UPDATE orders
-            SET order_status = 'in transit', courier_name = $2, tracking_number = $3, updated_at = CURRENT_TIMESTAMP
+            SET order_status = 'in transit', courier_name = COALESCE($2, courier_name), tracking_number = $3,
+                handover_photos = $4::jsonb, shipped_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
             WHERE order_id = $1 AND order_status = 'pending'
-        `, [orderId, courier.courier_name, courier.tracking_number]);
+        `, [orderId, handover.courier_name, handover.tracking_number, JSON.stringify(handover.handover_photos.map(toMediaColumn))]);
         return rowCount ? OrderModel.findById(orderId) : undefined;
     },
 

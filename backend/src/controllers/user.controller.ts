@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { ProfilePrivacy, User, UserModel } from "#models/user.model";
 import { FollowModel } from "#models/follow.model";
+import { OrderModel } from "#models/order.model";
 import { deleteStoredImage } from "#controllers/upload.controller";
 import { signToken } from "#utils/token";
 import { authUserId } from "#middleware/auth.middleware";
@@ -113,8 +114,15 @@ export const getProfile = async (req: Request<{ id: string }>, res: Response): P
         res.status(404).json({ success: false, message: 'User not found' });
         return;
     }
-    // The follow counts are public even on a private profile, like the name.
-    res.json({ success: true, data: { ...publicUser(user, req.authUserId), ...(await FollowModel.summary(userId, req.authUserId)) } });
+    // The follow counts and completed orders are public even on a private
+    // profile, like the name: they are what a buyer judges a seller by.
+    // Earnings are not here at all; only GET /users/:id/earnings has them,
+    // and only for the seller themselves.
+    const [follows, completedOrders] = await Promise.all([
+        FollowModel.summary(userId, req.authUserId),
+        OrderModel.countCompleted(userId),
+    ]);
+    res.json({ success: true, data: { ...publicUser(user, req.authUserId), ...follows, completed_orders: completedOrders } });
 };
 
 // POST follows, DELETE unfollows; both answer with the profile's new counts

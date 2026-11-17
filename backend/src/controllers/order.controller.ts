@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
-import { DeliveryMethod, Order, OrderModel, OrderStatus } from "#models/order.model";
+import { DeliveryMethod, maxHandoverPhotos, Order, OrderModel, OrderStatus } from "#models/order.model";
+import { readStoredImages } from "#controllers/upload.controller";
 import { NegotiationModel } from "#models/negotiation.model";
 import { ProductListing, ProductModel } from "#models/product.model";
 import { BagsakanModel } from "#models/bagsakan.model";
@@ -196,6 +197,37 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     res.status(201).json({ success: true, data: await present(order, buyerId) });
 };
 
+// Runs before a handover photo upload, so nothing reaches S3 unless the
+// caller is the seller of an order that has not left their hands yet.
+export const requireShippableOrder = async (req: Request, res: Response, next: () => void): Promise<void> => {
+    const order = await OrderModel.findById(readId(req.params.id) ?? 0);
+    if (!order) {
+        res.status(404).json({ success: false, message: 'Order not found' });
+        return;
+    }
+    if (order.seller_id !== authUserId(res)) {
+        res.status(403).json({ success: false, message: 'Only the seller can add handover photos' });
+        return;
+    }
+    if (order.order_status !== 'pending') {
+        res.status(409).json({ success: false, message: `This order is already ${order.order_status}` });
+        return;
+    }
+    next();
+};
+
+// POST /orders/:id/handover/photos - stores photos of the produce being
+// handed over and returns their paths, in upload order, for the ship
+// action's photos field.
+export const uploadHandoverPhotos = async (_req: Request, res: Response): Promise<void> => {
+    const images: string[] = res.locals.uploadedImages ?? [];
+    if (images.length === 0) {
+        res.status(400).json({ success: false, message: 'Add a JPG, PNG, or WebP photo' });
+        return;
+    }
+    res.status(201).json({ success: true, data: { images } });
+};
+
 // Seller moves it out the door, buyer confirms it arrived, either side can
 // cancel while nothing has moved yet.
 export const updateOrder = async (req: Request, res: Response): Promise<void> => {
@@ -250,20 +282,38 @@ export const updateOrder = async (req: Request, res: Response): Promise<void> =>
             res.status(400).json({ success: false, message: 'courier_name and tracking_number can be at most 100 characters' });
             return;
         }
+        // Optional photos of the produce as handed over, each uploaded first
+        // through POST /orders/:id/handover/photos.
+        const rawPhotos: unknown = req.body.photos ?? [];
+        if (!Array.isArray(rawPhotos)) {
+            res.status(400).json({ success: false, message: 'photos must be a list' });
+            return;
+        }
+        if (rawPhotos.length > maxHandoverPhotos) {
+            res.status(400).json({ success: false, message: `An order can have up to ${maxHandoverPhotos} handover photos` });
+            return;
+        }
+        const photos = await readStoredImages(rawPhotos, 'handovers');
+        if (!photos) {
+            res.status(400).json({ success: false, message: 'One of the photos was not uploaded. Please add it again.' });
+            return;
+        }
         const shipped = await OrderModel.ship(order.order_id, {
             courier_name: courierName || null,
             tracking_number: trackingNumber || null,
+            handover_photos: photos,
         });
         if (!shipped) {
             changedMeanwhile(res);
             return;
         }
+        const photoNote = photos.length === 0 ? '' : ` · ${photos.length} photo${photos.length === 1 ? '' : 's'} on the order`;
         await recordOrderEvent(
             shipped,
             userId,
-            order.delivery_method === 'courier'
+            (order.delivery_method === 'courier'
                 ? `Order #${order.order_id} ${courierName ? `handed to ${courierName}` : 'is on its way'}${trackingNumber ? ` (tracking ${trackingNumber})` : ''}`
-                : `Order #${order.order_id} is ready for pickup at ${shipped.center_name ?? 'the bagsakan center'}`,
+                : `Order #${order.order_id} is ready for pickup at ${shipped.center_name ?? 'the bagsakan center'}`) + photoNote,
         );
         res.json({ success: true, data: await present(shipped, userId) });
         return;

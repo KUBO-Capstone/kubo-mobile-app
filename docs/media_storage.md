@@ -10,6 +10,8 @@ and display do not work without the S3 settings below.**
 |---|---|---|
 | Listing photos | `products/<uuid>.<ext>` | `POST /api/products/images` |
 | Profile pictures | `profiles/<uuid>.<ext>` | `POST /api/users/:id/profile/photo` |
+| Review photos (up to 5 per review) | `reviews/<uuid>.<ext>` | `POST /api/orders/:id/review/photos` |
+| Handover photos (up to 5 per order, taken by the seller when shipping) | `handovers/<uuid>.<ext>` | `POST /api/orders/:id/handover/photos` |
 
 - Uploads are held in memory, checked by their bytes (still JPEG, PNG or
   WebP only; the file name and MIME type the client sends are ignored), then
@@ -51,7 +53,9 @@ not needed.
     "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
     "Resource": [
       "arn:aws:s3:::<bucket>/products/*",
-      "arn:aws:s3:::<bucket>/profiles/*"
+      "arn:aws:s3:::<bucket>/profiles/*",
+      "arn:aws:s3:::<bucket>/reviews/*",
+      "arn:aws:s3:::<bucket>/handovers/*"
     ]
   }]
 }

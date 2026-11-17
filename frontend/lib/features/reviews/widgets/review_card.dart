@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/data/review_service.dart';
+import '../../../shared/widgets/kubo_image.dart';
+import '../../../shared/widgets/kubo_photo_viewer.dart';
 import '../../../shared/widgets/kubo_star_rating.dart';
 
 /// One review on a profile or order: who wrote it and from which side of
@@ -90,6 +92,10 @@ class ReviewCard extends StatelessWidget {
             const SizedBox(height: 12),
             Text(review.comment, style: const TextStyle(color: AppColors.black, fontSize: 14, height: 1.45)),
           ],
+          if (review.photos.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _ReviewPhotos(review: review),
+          ],
           if (showProduct) ...[
             const SizedBox(height: 12),
             Row(
@@ -122,6 +128,66 @@ class ReviewCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// The reviewer's photos as a row of thumbnails; tapping one opens them
+/// full screen, where the reader can swipe and zoom.
+class _ReviewPhotos extends StatefulWidget {
+  const _ReviewPhotos({required this.review});
+
+  final ReviewRecord review;
+
+  @override
+  State<_ReviewPhotos> createState() => _ReviewPhotosState();
+}
+
+class _ReviewPhotosState extends State<_ReviewPhotos> {
+  static const double _size = 72;
+
+  // Tells this review's photos apart from the same review shown elsewhere
+  // in the stack (profile and order page).
+  final Object _gallery = Object();
+
+  void _open(int index, int? decodeWidth) {
+    final photos = widget.review.photos;
+    KuboPhotoViewer.open(
+      context,
+      photos: photos,
+      initialIndex: index,
+      heroTagFor: (i) => KuboPhotoHeroTag(_gallery, i),
+      placeholderFor: (i) => kuboImageProvider(photos[i], decodeWidth: decodeWidth),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final photos = widget.review.photos;
+    final decodeWidth = kuboDecodeWidthFor(context, width: _size, height: _size);
+    return SizedBox(
+      height: _size,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: photos.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) => Semantics(
+          button: true,
+          label: 'Review photo ${index + 1} of ${photos.length}',
+          onTapHint: 'view full screen',
+          excludeSemantics: true,
+          child: GestureDetector(
+            onTap: () => _open(index, decodeWidth),
+            child: Hero(
+              tag: KuboPhotoHeroTag(_gallery, index),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: KuboImage(photos[index], width: _size, height: _size, decodeWidth: decodeWidth),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

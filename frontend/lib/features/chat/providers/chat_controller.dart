@@ -173,20 +173,16 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  /// Buyer opens a new offer on the thread's listing.
-  Future<String?> makeOffer({required double price, required double quantity}) {
-    return _offerAction(() async {
-      final thread = conversation!;
-      await _negotiations.createOffer(
-        productId: thread.productId,
-        price: price,
-        quantity: quantity,
-      );
-    });
-  }
-
-  /// Accept, decline, or counter the current offer.
-  Future<String?> respond(NegotiationAction action, {double? price, double? quantity}) {
+  /// Accept, decline, counter or cancel the current offer. A counter can
+  /// change the handover ([fulfillment]); a seller's decline says why
+  /// ([reason]). New offers go through the offer form instead.
+  Future<String?> respond(
+    NegotiationAction action, {
+    double? price,
+    double? quantity,
+    OfferFulfillment? fulfillment,
+    DeclineReason? reason,
+  }) {
     return _offerAction(() async {
       final negotiationId = conversation!.negotiationId!;
       await _negotiations.respond(
@@ -194,11 +190,14 @@ class ChatController extends ChangeNotifier {
         action: action,
         price: price,
         quantity: quantity,
+        fulfillment: fulfillment,
+        reason: reason,
       );
     });
   }
 
-  /// Records that the "deal closed" screen was shown for [negotiationId].
+  /// Records that the "deal closed" screen (shown once the buyer confirms
+  /// receipt) was shown for [negotiationId].
   /// A failure is ignored: at worst the screen shows once more later.
   Future<void> markCelebrated(int negotiationId) async {
     try {

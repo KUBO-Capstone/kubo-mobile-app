@@ -31,6 +31,11 @@ export interface StoredMessage {
     order_id?: number;
     offer_price?: number;
     offer_quantity?: number;
+    // On offer events: how the produce changes hands under these terms,
+    // e.g. "Pickup at Malolos Kubo Bagsakan Center" or "Lalamove delivery".
+    offer_details?: string;
+    // On 'declined': the seller's reason, one of DECLINE_REASONS.
+    decline_reason?: string;
     sent_at: string;            // ISO 8601, UTC
 }
 

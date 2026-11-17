@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import '../../../shared/data/order_service.dart';
@@ -47,8 +49,13 @@ class OrderController extends ChangeNotifier {
     }
   }
 
+  /// Stores the seller's handover photos and returns their server paths for
+  /// [respond]'s `photos`. Throws when the upload fails.
+  Future<List<String>> uploadHandoverPhotos(List<File> files) =>
+      _service.uploadHandoverPhotos(orderId: orderId, files: files);
+
   /// Returns an error string to show, or null on success.
-  Future<String?> respond(OrderAction action, {String? courierName, String? trackingNumber}) async {
+  Future<String?> respond(OrderAction action, {String? courierName, String? trackingNumber, List<String>? photos}) async {
     final id = userId;
     if (id == null) return 'Log in to update orders.';
     isBusy = true;
@@ -59,6 +66,7 @@ class OrderController extends ChangeNotifier {
         action: action,
         courierName: courierName,
         trackingNumber: trackingNumber,
+        photos: photos,
       );
       changed = true;
       // A cancelled order puts its quantity back on the listing.

@@ -22,6 +22,7 @@ class SyntheticProfileRecord {
     required this.listingCount,
     required this.reviewScore,
     required this.reviewCount,
+    this.completedOrders = 0,
     this.photoUrl = '',
   });
 
@@ -63,6 +64,11 @@ class SyntheticProfileRecord {
 
   /// Review count shown in the reviews tab.
   final int reviewCount;
+
+  /// Orders this account bought or sold that reached the buyer. Public: it
+  /// is a trust signal, unlike the seller's earnings, which never leave
+  /// their own profile.
+  final int completedOrders;
 
   final String photoUrl;
 }

@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../../core/constants/api_config.dart';
 import '../../core/utils/formatters.dart';
@@ -45,6 +47,9 @@ abstract final class ReviewTags {
   }
 }
 
+/// Most photos one review can carry; matches the backend limit.
+const int maxReviewPhotos = 5;
+
 /// Words for each star count, shown while picking a rating.
 const ratingLabels = <int, String>{
   1: 'Poor',
@@ -71,6 +76,7 @@ class ReviewRecord {
     this.reviewerPhotoUrl,
     this.productImage,
     this.createdAt,
+    this.photos = const <String>[],
   });
 
   factory ReviewRecord.fromJson(Map<String, dynamic> json) {
@@ -85,6 +91,11 @@ class ReviewRecord {
       rating: (json['rating'] as num).toInt(),
       comment: json['comment']?.toString() ?? '',
       tags: (json['tags'] as List<dynamic>? ?? const <dynamic>[]).whereType<String>().toList(growable: false),
+      photos: (json['photos'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<String>()
+          .map(resolveMediaUrl)
+          .whereType<String>()
+          .toList(growable: false),
       productId: (json['product_id'] as num?)?.toInt() ?? 0,
       cropName: json['crop_name']?.toString() ?? 'Listing',
       productImage: resolveMediaUrl(json['product_image']?.toString()),
@@ -106,6 +117,10 @@ class ReviewRecord {
 
   /// Keys from [ReviewTags].
   final List<String> tags;
+
+  /// Photos the reviewer attached (the produce, the packaging), as loadable
+  /// URLs. Empty for most reviews.
+  final List<String> photos;
   final int productId;
   final String cropName;
   final String? productImage;
@@ -166,18 +181,42 @@ class ReviewService {
     return UserReviews.fromJson(readData(response) as Map<String, dynamic>);
   }
 
-  /// Rates the other party on a delivered order.
+  /// Stores the photos for a review about to be posted on [orderId] and
+  /// returns their server paths, in the same order, for [submitReview].
+  Future<List<String>> uploadPhotos({required int orderId, required List<File> files}) async {
+    if (files.isEmpty) return const <String>[];
+    final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/orders/$orderId/review/photos'));
+    for (final file in files) {
+      final subtype = switch (file.path.split('.').last.toLowerCase()) {
+        'png' => 'png',
+        'webp' => 'webp',
+        _ => 'jpeg',
+      };
+      request.files.add(await http.MultipartFile.fromPath('photos', file.path, contentType: MediaType('image', subtype)));
+    }
+    // Photos take longer than the usual JSON round trip on rural data.
+    final response = await sendRequest(
+      () async => http.Response.fromStream(await _client.send(request)),
+      timeout: const Duration(seconds: 90),
+    );
+    final data = readData(response) as Map<String, dynamic>;
+    return (data['images'] as List<dynamic>).whereType<String>().toList(growable: false);
+  }
+
+  /// Rates the other party on a delivered order. [photos] are the paths
+  /// [uploadPhotos] returned.
   Future<ReviewRecord> submitReview({
     required int orderId,
     required int rating,
     String comment = '',
     List<String> tags = const <String>[],
+    List<String> photos = const <String>[],
   }) async {
     final response = await sendRequest(
       () => _client.post(
         Uri.parse('$_baseUrl/orders/$orderId/review'),
         headers: const {'Content-Type': 'application/json'},
-        body: jsonEncode({'rating': rating, 'comment': comment.trim(), 'tags': tags}),
+        body: jsonEncode({'rating': rating, 'comment': comment.trim(), 'tags': tags, 'photos': photos}),
       ),
     );
     return ReviewRecord.fromJson(readData(response) as Map<String, dynamic>);

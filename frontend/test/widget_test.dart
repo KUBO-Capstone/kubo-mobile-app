@@ -20,8 +20,22 @@ void main() {
 
     expect(find.text('KUBO'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
-    expect(find.text('Continue with Facebook'), findsOneWidget);
+    expect(find.text('Continue with Facebook'), findsNothing);
     expect(find.text('Continue with Email'), findsOneWidget);
+  });
+
+  // Tests are built without GOOGLE_SERVER_CLIENT_ID, so the button must say
+  // so and stay on the login page instead of opening anything.
+  testWidgets('Google button explains when sign-in is not configured', (WidgetTester tester) async {
+    await tester.pumpWidget(const KuboApp());
+
+    final googleButton = find.text('Continue with Google');
+    await tester.ensureVisible(googleButton);
+    await tester.tap(googleButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Google sign-in is not set up in this version of the app.'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsOneWidget);
   });
 
   // Confirms the create-account flow opens the onboarding page and returns cleanly.

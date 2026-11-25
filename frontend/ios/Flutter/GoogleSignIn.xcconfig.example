@@ -1,0 +1,8 @@
+// Copy to GoogleSignIn.xcconfig (gitignored) and fill in.
+// The iOS OAuth client's ID reversed: for an iOS client ID of
+//   123456789012-abcdefg.apps.googleusercontent.com
+// put
+//   com.googleusercontent.apps.123456789012-abcdefg
+// Info.plist registers it as a URL scheme so Google can hand the user back
+// to the app after they pick an account. See docs/google_sign_in.md.
+GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.YOUR_IOS_CLIENT_ID_PREFIX

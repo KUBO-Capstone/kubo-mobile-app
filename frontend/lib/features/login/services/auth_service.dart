@@ -8,6 +8,9 @@ import '../../../core/constants/api_config.dart';
 import '../../../shared/data/api_request.dart';
 import '../../../shared/data/chat_socket.dart';
 import '../../../shared/data/session_store.dart';
+import 'google_auth.dart';
+
+export 'google_auth.dart' show GoogleSignInCancelled;
 
 /// HTTP client for the backend account and login endpoints, and the keeper
 /// of the signed-in session.
@@ -71,6 +74,9 @@ class AuthService {
     _refreshedAt = null;
     _isRefreshing = false;
     ChatSocket.disconnect();
+    // Not waited for, and harmless for an email account: the next "Continue
+    // with Google" shows the account picker instead of reusing this account.
+    unawaited(GoogleAuth.signOut());
     try {
       await store.clear();
     } catch (error) {
@@ -193,6 +199,16 @@ class AuthService {
       'password': password,
     });
 
+    return _startSession(readData(response) as Map<String, dynamic>);
+  }
+
+  /// Signs in with the Google account the user picks. The server checks
+  /// Google's ID token and answers like [login]: an existing account (found
+  /// by its Google link, or by a verified matching email) or a new one.
+  /// Throws [GoogleSignInCancelled] when the user backs out of the picker.
+  Future<Map<String, dynamic>> loginWithGoogle() async {
+    final idToken = await GoogleAuth.signInForIdToken();
+    final response = await _post('/auth/google', {'id_token': idToken});
     return _startSession(readData(response) as Map<String, dynamic>);
   }
 

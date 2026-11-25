@@ -45,3 +45,6 @@ app.*.map.json
 /android/app/release
 # Widget Preview related
 .widget_preview/
+
+# Build-time settings for --dart-define-from-file (copy dart_defines.example.json)
+/dart_defines.json

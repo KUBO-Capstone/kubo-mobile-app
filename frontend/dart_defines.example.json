@@ -1,0 +1,5 @@
+{
+  "API_BASE_URL": "http://10.0.2.2:3000/api",
+  "GOOGLE_SERVER_CLIENT_ID": "123456789012-webclientxxxxxxxxxxxx.apps.googleusercontent.com",
+  "GOOGLE_IOS_CLIENT_ID": "123456789012-iosclientxxxxxxxxxxxx.apps.googleusercontent.com"
+}

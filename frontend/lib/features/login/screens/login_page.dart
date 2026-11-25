@@ -1,17 +1,55 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
-import 'auth_method_page.dart';
+import '../../../core/widgets/app_svg_icon.dart';
+import '../../shell/screens/app_shell.dart';
+import '../services/auth_service.dart';
+import '../services/google_auth.dart';
 import 'create_account_page.dart';
 import 'email_login_page.dart';
 import '../widgets/kubo_hero_image.dart';
 
 /// Landing page that introduces Kubo and offers sign-in and sign-up entry points.
-class LoginPage extends StatelessWidget {
+class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
   /// Root route used by the app shell to open the login landing screen.
   static const routeName = '/';
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  /// Google sign-in is under way: the button shows a spinner and ignores taps.
+  bool _isGoogleSigningIn = false;
+
+  // Google's account picker, then the backend, then into the app the same
+  // way an email login goes. Backing out of the picker changes nothing.
+  Future<void> _continueWithGoogle() async {
+    if (_isGoogleSigningIn) return;
+    setState(() => _isGoogleSigningIn = true);
+    final authService = AuthService();
+    try {
+      await authService.loginWithGoogle();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(AppShell.route(), (route) => false);
+    } on GoogleSignInCancelled {
+      // The user closed the picker; nothing to say.
+    } on SignInSuperseded {
+      // An email login finished first and has already opened the app.
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    } finally {
+      authService.dispose();
+      if (mounted) setState(() => _isGoogleSigningIn = false);
+    }
+  }
 
   @override
   // Builds the login landing layout with branding, explanation text, and auth options.
@@ -56,18 +94,16 @@ class LoginPage extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 28),
-                          _AuthOptionButton(
-                            label: 'Continue with Google',
-                            icon: _AuthIcon.google,
-                            onPressed: () => _openAuthMethod(context, 'Google'),
-                          ),
-                          const SizedBox(height: 10),
-                          _AuthOptionButton(
-                            label: 'Continue with Facebook',
-                            icon: _AuthIcon.facebook,
-                            onPressed: () => _openAuthMethod(context, 'Facebook'),
-                          ),
-                          const SizedBox(height: 10),
+                          // Android and iOS only; see GoogleAuth.isSupported.
+                          if (GoogleAuth.isSupported) ...[
+                            _AuthOptionButton(
+                              label: 'Continue with Google',
+                              icon: _AuthIcon.google,
+                              isLoading: _isGoogleSigningIn,
+                              onPressed: _continueWithGoogle,
+                            ),
+                            const SizedBox(height: 10),
+                          ],
                           _AuthOptionButton(
                             label: 'Continue with Email',
                             icon: _AuthIcon.email,
@@ -108,19 +144,10 @@ class LoginPage extends StatelessWidget {
       ),
     );
   }
-
-  // Opens the placeholder auth-method screen for the selected provider.
-  void _openAuthMethod(BuildContext context, String methodName) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AuthMethodPage(methodName: methodName),
-      ),
-    );
-  }
 }
 
 /// Internal enum that identifies which provider icon should be rendered.
-enum _AuthIcon { google, facebook, email }
+enum _AuthIcon { google, email }
 
 /// Full-width outlined button used for each third-party or email login action.
 class _AuthOptionButton extends StatelessWidget {
@@ -128,6 +155,7 @@ class _AuthOptionButton extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.onPressed,
+    this.isLoading = false,
   });
 
   /// Label shown in the center of the button.
@@ -139,6 +167,9 @@ class _AuthOptionButton extends StatelessWidget {
   /// Tap callback that launches the selected auth flow.
   final VoidCallback onPressed;
 
+  /// Shows a spinner in place of the icon and ignores taps.
+  final bool isLoading;
+
   @override
   // Renders the branded auth button with an icon and centered label.
   Widget build(BuildContext context) {
@@ -149,15 +180,25 @@ class _AuthOptionButton extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           backgroundColor: AppColors.white,
           foregroundColor: AppColors.black,
+          // Same look while loading; only the icon turns into a spinner.
+          disabledBackgroundColor: AppColors.white,
+          disabledForegroundColor: AppColors.black,
           side: const BorderSide(color: AppColors.border, width: 1.2),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           padding: const EdgeInsets.symmetric(horizontal: 16),
         ),
-        onPressed: onPressed,
+        onPressed: isLoading ? null : onPressed,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _AuthButtonIcon(icon: icon),
+            if (isLoading)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.green),
+              )
+            else
+              _AuthButtonIcon(icon: icon),
             const SizedBox(width: 10),
             Text(
               label,
@@ -186,20 +227,7 @@ class _AuthButtonIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (icon) {
       case _AuthIcon.google:
-        return const Text(
-          'G',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF4285F4),
-          ),
-        );
-      case _AuthIcon.facebook:
-        return const Icon(
-          Icons.facebook,
-          size: 20,
-          color: Color(0xFF1877F2),
-        );
+        return const AppSvgIcon(assetPath: AppIcons.googleLogo, size: 20);
       case _AuthIcon.email:
         return const Icon(
           Icons.email_outlined,

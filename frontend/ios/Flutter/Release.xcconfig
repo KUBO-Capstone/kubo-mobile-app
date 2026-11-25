@@ -1,1 +1,4 @@
 #include "Generated.xcconfig"
+// Sign in with Google: GOOGLE_REVERSED_CLIENT_ID for Info.plist. Optional
+// (#include?) so a checkout without it still builds; copy the .example.
+#include? "GoogleSignIn.xcconfig"

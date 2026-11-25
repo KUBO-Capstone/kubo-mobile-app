@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../shared/data/synthetic_records.dart';
 import '../../listing/screens/create_listing_page.dart';
+import '../../profile/widgets/complete_profile_prompt.dart';
 
 /// Top-level destinations of the bottom bar, left to right. The "+" in the
 /// middle is an action (create a listing), not a destination.
@@ -107,6 +108,8 @@ class AppShellController extends ChangeNotifier {
   /// button) as a full-screen task above the bar. Feeds reload once
   /// something was posted.
   Future<SyntheticListingRecord?> createListing(BuildContext context) async {
+    // An account made with Google has no contact number or address yet.
+    if (!ensureProfileComplete(context, toDo: 'create a listing')) return null;
     final created = await Navigator.of(context, rootNavigator: true).push<SyntheticListingRecord>(
       MaterialPageRoute<SyntheticListingRecord>(
         fullscreenDialog: true,

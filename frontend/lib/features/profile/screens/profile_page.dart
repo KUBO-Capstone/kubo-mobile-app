@@ -111,6 +111,20 @@ class _ProfilePageState extends State<ProfilePage> {
       SavedListingsController.instance.load();
       _orders.load();
       _controller.loadEarnings();
+      AuthService.currentUserListenable.addListener(_handleCurrentUserChanged);
+    }
+  }
+
+  // Own profile: contact details saved from somewhere else (Edit Profile
+  // opened by the "complete your profile" banner) reload this page's copy.
+  // A reload stores the same values back, so it cannot set itself off again.
+  void _handleCurrentUserChanged() {
+    final loaded = _controller.loadedProfile;
+    final user = AuthService.currentUser;
+    if (loaded == null || user == null) return;
+    if (loaded['contact_number'] != user['contact_number'] ||
+        loaded['preferred_address_id'] != user['preferred_address_id']) {
+      _controller.loadProfile();
     }
   }
 
@@ -128,6 +142,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void dispose() {
     _reselected?.cancel();
     _listingsChanged.cancel();
+    if (widget.isOwnProfile) AuthService.currentUserListenable.removeListener(_handleCurrentUserChanged);
     if (widget.isTabRoot) AppShellController.instance.removeListener(_handleShellTabChanged);
     _scroll.dispose();
     _controller.dispose();

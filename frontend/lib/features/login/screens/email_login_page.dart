@@ -39,6 +39,8 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
       await _authService.login(email: email, password: password);
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(AppShell.route(), (route) => false);
+    } on SignInSuperseded {
+      // A Google sign-in finished first and has already opened the app.
     } catch (error) {
       if (mounted) _showMessage(error.toString().replaceFirst('Exception: ', ''));
     } finally {

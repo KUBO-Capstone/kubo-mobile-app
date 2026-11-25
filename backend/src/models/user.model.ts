@@ -1,6 +1,7 @@
-import { isRowId, pool, Queryable, withTransaction } from "#database/pg";
+import { isRowId, isUniqueViolation, pool, Queryable, withTransaction } from "#database/pg";
 import { fromMediaColumn, toMediaColumn } from "#controllers/upload.controller";
 import { hashPassword } from "#utils/password";
+import type { GoogleIdentity, GoogleUserStore } from "#services/google-auth.service";
 
 export type UserRole = 'farmer' | 'consumer' | 'admin';
 
@@ -53,8 +54,9 @@ type NewUser = Omit<User, "user_id" | "created_at" | "is_verified" | "password_h
 };
 
 // users.profile_photo_key holds the S3 object key; the API and the rest of
-// the app work with the photo's stored URL.
-const mapUser = ({ profile_photo_key, ...row }: Record<string, unknown>): User => ({
+// the app work with the photo's stored URL. google_sub never leaves the
+// database: only the Google sign-in queries below read it.
+const mapUser = ({ profile_photo_key, google_sub: _googleSub, ...row }: Record<string, unknown>): User => ({
     ...row,
     profile_photo_url: typeof profile_photo_key === 'string' ? fromMediaColumn(profile_photo_key) : null,
 } as User);
@@ -177,6 +179,47 @@ export const UserModel = {
             return mapUser(rows[0]);
         });
     },
+
+    // Sign in with Google (services/google-auth.service.ts decides which of
+    // these runs). Deleted accounts never match: anonymize_user() clears
+    // google_sub and rewrites the email.
+    google: {
+        findByGoogleSub: async (sub: string): Promise<User | undefined> => {
+            const { rows } = await pool.query('SELECT * FROM users WHERE google_sub = $1 AND deleted_at IS NULL', [sub]);
+            return rows[0] ? mapUser(rows[0]) : undefined;
+        },
+
+        findByEmail: (email: string): Promise<User | undefined> => UserModel.findByEmail(email),
+
+        linkGoogleSub: async (userId: number, sub: string): Promise<boolean> => {
+            try {
+                const { rowCount } = await pool.query(
+                    'UPDATE users SET google_sub = $2 WHERE user_id = $1 AND google_sub IS NULL AND deleted_at IS NULL', [userId, sub]);
+                return (rowCount ?? 0) > 0;
+            } catch (error) {
+                if (isUniqueViolation(error, 'uq_users_google_sub')) return false;
+                throw error;
+            }
+        },
+
+        // No password (an empty hash, which verifyPassword always rejects)
+        // and no contact number or address yet: the user adds those from
+        // Edit Profile, which asks for a contact number on save.
+        createGoogleUser: async (identity: GoogleIdentity): Promise<User | undefined> => {
+            try {
+                const { rows } = await pool.query(`
+                    INSERT INTO users (first_name, last_name, email, password_hash, contact_number, role, location, business_name, business_type, google_sub)
+                    VALUES ($1, $2, $3, '', '', 'consumer', '', '', '', $4)
+                    RETURNING *
+                `, [identity.firstName, identity.lastName, identity.email, identity.sub]);
+                return mapUser(rows[0]);
+            } catch (error) {
+                // Same email or Google account created by a request alongside this one.
+                if (isUniqueViolation(error)) return undefined;
+                throw error;
+            }
+        },
+    } satisfies GoogleUserStore,
 
     // to delete a row
     delete: async (id: number): Promise<boolean> => {

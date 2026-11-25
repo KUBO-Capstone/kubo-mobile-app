@@ -5,6 +5,7 @@ import '../../../shared/data/fulfillment_service.dart';
 import '../../../shared/data/negotiation_service.dart';
 import '../../../shared/data/synthetic_records.dart';
 import '../../login/services/auth_service.dart';
+import '../../profile/widgets/complete_profile_prompt.dart';
 import 'fulfillment_picker.dart';
 
 /// Opens the offer form for [listing] and returns the created negotiation,
@@ -36,6 +37,10 @@ Future<NegotiationRecord?> showMakeOfferDialog(
   }
   if (listing.sellerId == buyerId) {
     messenger.showSnackBar(const SnackBar(content: Text('This is your own listing.')));
+    return Future.value(null);
+  }
+  // An account made with Google has no contact number or address yet.
+  if (!ensureProfileComplete(context, toDo: 'make an offer')) {
     return Future.value(null);
   }
 

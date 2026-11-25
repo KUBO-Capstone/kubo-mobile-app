@@ -22,6 +22,10 @@ abstract final class AppIcons {
   static const clock = 'assets/icons/clock.svg';
   static const flagReport = 'assets/icons/flag-report.svg';
 
+  /// Google's four-colour "G" for the Continue with Google button. Drawn
+  /// untinted: Google's branding rules keep its colours as they are.
+  static const googleLogo = 'assets/icons/google-g.svg';
+
   /// Help guide icon used for the help and support section.
   static const helpGuide = 'assets/icons/help-guide.svg';
 

@@ -12,9 +12,13 @@ Which account a Google sign-in opens (`backend/src/services/google-auth.service.
 1. The account already linked to that Google account, looked up by Google's
    `sub`, stored in `users.google_sub` separately from email.
 2. Otherwise, a Google email that is **not verified** is refused (403).
-3. An existing account with the same email gets linked and opened. If that
-   account is already linked to a *different* Google account, the sign-in is
-   refused (409).
+3. An existing account with the same email gets linked and opened, but only
+   when Google is authoritative for the address: a verified `@gmail.com`, or a
+   Workspace account whose `hd` domain matches the email. For any other
+   address (a Google account registered with a Yahoo email, say) the sign-in
+   is refused (409) and the user logs in with their password instead. It is
+   also refused if the account is already linked to a *different* Google
+   account.
 4. Otherwise, a new account is created. It has no password and no contact
    number or address; the user adds those in Edit Profile.
 
@@ -97,13 +101,14 @@ on a given machine uses that machine's debug SHA-1. Before publishing:
 | `backend/.env` | `GOOGLE_CLIENT_IDS` | Web client ID. Comma-separate several (staging and production). Empty turns Google sign-in off (503) |
 | `frontend/dart_defines.json` | `GOOGLE_SERVER_CLIENT_ID` | The same Web client ID |
 | `frontend/dart_defines.json` | `GOOGLE_IOS_CLIENT_ID` | iOS client ID |
-| `frontend/dart_defines.json` | `API_BASE_URL` | Optional, as before |
+| `frontend/dart_defines.json` | `API_BASE_URL` | Optional, and not in the example. Leave it out to use each platform's default; add it only to point at another server (for example a phone using your LAN IP) |
 | `frontend/ios/Flutter/GoogleSignIn.xcconfig` | `GOOGLE_REVERSED_CLIENT_ID` | Reversed iOS client ID |
 
 Run and build with the file:
 
 ```
 cp frontend/dart_defines.example.json frontend/dart_defines.json   # then edit
+cd frontend
 flutter run --dart-define-from-file=dart_defines.json
 flutter build appbundle --release --dart-define-from-file=dart_defines.json
 ```

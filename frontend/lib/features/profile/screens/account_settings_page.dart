@@ -63,6 +63,18 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     return defaults;
   }
 
+  bool _isSignedInUser(Map<String, dynamic>? user) =>
+      user != null && user['user_id']?.toString() == _user['user_id']?.toString();
+
+  // What goes back to the profile page on the way out: the signed-in user as
+  // it is now, not the copy this page opened with. A session refresh may have
+  // updated it meanwhile, and the profile edit and privacy save above both
+  // write their results to it.
+  Map<String, dynamic> _latestUser() {
+    final current = AuthService.currentUser;
+    return _isSignedInUser(current) ? Map<String, dynamic>.of(current!) : _user;
+  }
+
   Future<void> _editProfile() async {
     final updated = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute<Map<String, dynamic>>(
@@ -89,6 +101,8 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         businessType: (_user['business_type'] ?? '').toString().trim(),
         profilePrivacy: _privacy,
       );
+      // Kept on the signed-in user too, so _latestUser hands it back.
+      if (_isSignedInUser(AuthService.currentUser)) AuthService.updateCurrentUser(updated);
       if (!mounted) return;
       setState(() => _user = updated);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -112,7 +126,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        Navigator.of(context).pop(_user);
+        Navigator.of(context).pop(_latestUser());
       },
       child: Scaffold(
       appBar: AppBar(title: const Text('Account settings')),

@@ -16,6 +16,12 @@ export interface GoogleIdentity {
     sub: string;
     email: string;
     emailVerified: boolean;
+    /**
+     * Google owns the address itself: a verified @gmail.com, or a Workspace
+     * account (`hd`) on its own domain. For any other address Google only
+     * checked it once, so it is no proof the person still controls it.
+     */
+    emailAuthoritative: boolean;
     firstName: string;
     lastName: string;
 }
@@ -43,6 +49,8 @@ export interface GoogleTokenClaims {
     sub?: string;
     email?: string;
     email_verified?: boolean | string;
+    /** Workspace domain; absent for consumer accounts. */
+    hd?: string;
     given_name?: string;
     family_name?: string;
     name?: string;
@@ -90,6 +98,11 @@ export async function verifyGoogleIdToken(
 
     // Older tokens carried "true" as a string.
     const emailVerified = claims?.email_verified === true || claims?.email_verified === 'true';
+    // Google's rule for when it is authoritative for an address:
+    // https://developers.google.com/identity/gsi/web/guides/verify-google-id-token
+    const hostedDomain = typeof claims?.hd === 'string' ? claims.hd.trim().toLowerCase() : '';
+    const emailAuthoritative = emailVerified
+        && (email.endsWith('@gmail.com') || (hostedDomain !== '' && email.endsWith(`@${hostedDomain}`)));
     let firstName = clip(claims?.given_name ?? '', NAME_MAX);
     let lastName = clip(claims?.family_name ?? '', NAME_MAX);
     if (!firstName) {
@@ -99,7 +112,7 @@ export async function verifyGoogleIdToken(
         firstName = clip(first, NAME_MAX);
         if (!lastName) lastName = clip(rest.join(' '), NAME_MAX);
     }
-    return { sub, email, emailVerified, firstName, lastName };
+    return { sub, email, emailVerified, emailAuthoritative, firstName, lastName };
 }
 
 /** Where Google sign-in reads and writes accounts. */
@@ -121,7 +134,10 @@ export interface GoogleUserStore {
  *     creating one with it would let someone claim an address they do not
  *     own, which the real owner's later sign-in would then land in.
  *  3. The account with that email, now linked to this Google account,
- *     unless it is linked to a different Google account already.
+ *     unless it is linked to a different Google account already, or Google
+ *     is not authoritative for the address (see emailAuthoritative). Then
+ *     nothing proves the person owns that account, so they are sent to log
+ *     in with its password instead of being let in.
  *  4. Otherwise a new account.
  */
 export async function resolveGoogleUser(identity: GoogleIdentity, store: GoogleUserStore): Promise<User> {
@@ -141,6 +157,9 @@ export async function resolveGoogleUser(identity: GoogleIdentity, store: GoogleU
 
         const existing = await store.findByEmail(identity.email);
         if (existing) {
+            if (!identity.emailAuthoritative) {
+                throw new GoogleAccountError('An account with this email already exists. Log in with your email and password.', 409);
+            }
             if (await store.linkGoogleSub(existing.user_id, identity.sub)) return existing;
             // A unique-index clash means this Google account was just linked by
             // a request running alongside; the next round finds it by sub.

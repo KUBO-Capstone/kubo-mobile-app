@@ -17,12 +17,19 @@ abstract final class GoogleAuth {
   // initialize() must run exactly once, before anything else is called.
   static Future<void>? _initialized;
 
+  /// Whether this platform has Google sign-in set up: Android and iOS. macOS
+  /// is left out (no URL scheme or keychain entitlement for it), and web,
+  /// Windows and Linux have no `authenticate()` here. The login page hides
+  /// the button elsewhere.
+  static bool get isSupported =>
+      !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
+
   static Future<void> _ensureInitialized() {
     return _initialized ??= GoogleSignIn.instance
         .initialize(
           // Android takes its client from the package name + signing
           // certificate; only iOS needs its own client ID passed in.
-          clientId: _isApple && GoogleAuthConfig.iosClientId.isNotEmpty ? GoogleAuthConfig.iosClientId : null,
+          clientId: _isIOS && GoogleAuthConfig.iosClientId.isNotEmpty ? GoogleAuthConfig.iosClientId : null,
           serverClientId: GoogleAuthConfig.serverClientId,
         )
         .catchError((Object error) {
@@ -32,13 +39,15 @@ abstract final class GoogleAuth {
         });
   }
 
-  static bool get _isApple =>
-      !kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS);
+  static bool get _isIOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   /// Shows Google's account picker and returns the ID token for the chosen
   /// account. Throws [GoogleSignInCancelled] when the user backs out, and an
   /// `Exception` with a message to show for anything else.
   static Future<String> signInForIdToken() async {
+    if (!isSupported) {
+      throw Exception('Google sign-in is not available on this device.');
+    }
     if (!GoogleAuthConfig.isConfigured) {
       debugPrint('Google sign-in: GOOGLE_SERVER_CLIENT_ID was not passed with --dart-define.');
       throw Exception('Google sign-in is not set up in this version of the app.');
@@ -63,7 +72,7 @@ abstract final class GoogleAuth {
   /// account picker again instead of reusing the last account. Never throws:
   /// the app's own session is already gone by the time this runs.
   static Future<void> signOut() async {
-    if (!GoogleAuthConfig.isConfigured) return;
+    if (!isSupported || !GoogleAuthConfig.isConfigured) return;
     try {
       await _ensureInitialized();
       await GoogleSignIn.instance.signOut();

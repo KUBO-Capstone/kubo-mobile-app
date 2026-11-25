@@ -66,6 +66,7 @@ describe("verifyGoogleIdToken", () => {
             sub: "110000000000000000001",
             email: "juan.delacruz@gmail.com",
             emailVerified: true,
+            emailAuthoritative: true,
             firstName: "Juan",
             lastName: "Dela Cruz",
         });
@@ -112,6 +113,16 @@ describe("verifyGoogleIdToken", () => {
     test("rejects a token without sub or email", async () => {
         await assert.rejects(verify(signJwt(claims({ sub: undefined }))), /subject/);
         await assert.rejects(verify(signJwt(claims({ email: undefined }))), /email/);
+    });
+
+    test("Google is authoritative only for verified Gmail, or a Workspace account on its own domain", async () => {
+        const read = (overrides: Record<string, unknown>) => verify(signJwt(claims(overrides)));
+        assert.equal((await read({})).emailAuthoritative, true, "verified @gmail.com");
+        assert.equal((await read({ email: "ana@farm.ph", hd: "farm.ph" })).emailAuthoritative, true, "Workspace on its domain");
+        assert.equal((await read({ email: "ana@farm.ph", hd: "FARM.PH" })).emailAuthoritative, true, "hd case-insensitive");
+        assert.equal((await read({ email: "ana@yahoo.com" })).emailAuthoritative, false, "consumer account, other provider");
+        assert.equal((await read({ email: "ana@yahoo.com", hd: "farm.ph" })).emailAuthoritative, false, "hd for another domain");
+        assert.equal((await read({ email_verified: false })).emailAuthoritative, false, "unverified Gmail");
     });
 
     test("email_verified: only true or \"true\" count", async () => {
@@ -178,7 +189,7 @@ class MemoryStore implements GoogleUserStore {
 }
 
 const identity = (overrides: Partial<GoogleIdentity> = {}): GoogleIdentity => ({
-    sub: "google-sub-1", email: "juan@gmail.com", emailVerified: true, firstName: "Juan", lastName: "Dela Cruz", ...overrides,
+    sub: "google-sub-1", email: "juan@gmail.com", emailVerified: true, emailAuthoritative: true, firstName: "Juan", lastName: "Dela Cruz", ...overrides,
 });
 
 const rejectsWith = (status: number) => (error: unknown) => error instanceof GoogleAccountError && error.status === status;
@@ -225,6 +236,39 @@ describe("resolveGoogleUser", () => {
         assert.equal(existing.google_sub, "google-sub-1");
         assert.equal(existing.password_hash, "scrypt$salt$key", "the password still works");
         assert.equal(store.rows.length, 1);
+    });
+
+    test("existing email account + verified but non-authoritative email: refused, not linked", async () => {
+        const store = new MemoryStore();
+        const existing = store.add("ana@yahoo.com");
+        await assert.rejects(
+            resolveGoogleUser(identity({ email: "ana@yahoo.com", emailAuthoritative: false }), store),
+            (error: unknown) => rejectsWith(409)(error) && /password/.test((error as Error).message),
+        );
+        assert.equal(existing.google_sub, null);
+        assert.equal(store.rows.length, 1);
+    });
+
+    test("existing Workspace account on its own domain: linked", async () => {
+        const store = new MemoryStore();
+        const existing = store.add("ana@farm.ph");
+        const user = await resolveGoogleUser(identity({ email: "ana@farm.ph", emailAuthoritative: true }), store);
+        assert.equal(user.user_id, existing.user_id);
+        assert.equal(existing.google_sub, "google-sub-1");
+    });
+
+    test("non-authoritative email with no existing account: a new account", async () => {
+        const store = new MemoryStore();
+        const user = await resolveGoogleUser(identity({ email: "ana@yahoo.com", emailAuthoritative: false }), store);
+        assert.equal(user.email, "ana@yahoo.com");
+        assert.equal(store.rows.length, 1);
+    });
+
+    test("already linked by sub: opens even when the email is non-authoritative", async () => {
+        const store = new MemoryStore();
+        const existing = store.add("ana@yahoo.com", "google-sub-1");
+        const user = await resolveGoogleUser(identity({ email: "ana@yahoo.com", emailAuthoritative: false }), store);
+        assert.equal(user.user_id, existing.user_id);
     });
 
     test("existing email account + unverified Google email: refused, not linked", async () => {

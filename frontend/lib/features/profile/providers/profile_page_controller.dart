@@ -246,8 +246,13 @@ class ProfilePageController extends ChangeNotifier {
     final userId = _subjectUserId;
     if (userId == null) return;
     final followChangesAtStart = _followChanges;
+    final version = ++_profileVersion;
     try {
       var fetched = await _profileService.fetchProfile(userId);
+      // A newer load started, or a save landed, while this was in flight:
+      // this answer is older than what is on screen (and in the signed-in
+      // user, where a stale copy could lose a just-saved contact number).
+      if (_disposed || version != _profileVersion) return;
       // A follow or unfollow started or landed while this was in flight, so
       // the server may have answered from before it. Everything else in the
       // answer is still taken; the follow state on screen is the newer one.
@@ -269,6 +274,10 @@ class ProfilePageController extends ChangeNotifier {
 
   static const List<String> _followFields = <String>['is_following', 'followers_count', 'following_count'];
 
+  /// Goes up when a profile load starts and when a save lands, so a load
+  /// can tell its answer has been overtaken.
+  int _profileVersion = 0;
+
   /// Goes up when a follow or unfollow starts and again when it lands, so a
   /// profile load can tell one happened while it was in flight.
   int _followChanges = 0;
@@ -288,6 +297,7 @@ class ProfilePageController extends ChangeNotifier {
   /// edited, not always the whole profile (the photo upload has no addresses
   /// or follow counts), so they are laid over what is already known.
   Future<void> setProfile(Map<String, dynamic> profile) async {
+    _profileVersion++;
     _loadedProfile = {...?_loadedProfile, ...profile};
     if (isOwnProfile) AuthService.updateCurrentUser(profile);
     notifyListeners();

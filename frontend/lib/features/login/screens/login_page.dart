@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/app_svg_icon.dart';
 import '../../shell/screens/app_shell.dart';
 import '../services/auth_service.dart';
+import '../services/google_auth.dart';
 import 'create_account_page.dart';
 import 'email_login_page.dart';
 import '../widgets/kubo_hero_image.dart';
@@ -36,6 +37,8 @@ class _LoginPageState extends State<LoginPage> {
       Navigator.of(context).pushAndRemoveUntil(AppShell.route(), (route) => false);
     } on GoogleSignInCancelled {
       // The user closed the picker; nothing to say.
+    } on SignInSuperseded {
+      // An email login finished first and has already opened the app.
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -91,13 +94,16 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                           const SizedBox(height: 28),
-                          _AuthOptionButton(
-                            label: 'Continue with Google',
-                            icon: _AuthIcon.google,
-                            isLoading: _isGoogleSigningIn,
-                            onPressed: _continueWithGoogle,
-                          ),
-                          const SizedBox(height: 10),
+                          // Android and iOS only; see GoogleAuth.isSupported.
+                          if (GoogleAuth.isSupported) ...[
+                            _AuthOptionButton(
+                              label: 'Continue with Google',
+                              icon: _AuthIcon.google,
+                              isLoading: _isGoogleSigningIn,
+                              onPressed: _continueWithGoogle,
+                            ),
+                            const SizedBox(height: 10),
+                          ],
                           _AuthOptionButton(
                             label: 'Continue with Email',
                             icon: _AuthIcon.email,

@@ -30,6 +30,21 @@ class ProfileService {
     return Map<String, dynamic>.from(readData(response) as Map);
   }
 
+  /// The signed-in user follows [userId]. Answers with that profile's new
+  /// `followers_count`, `following_count` and `is_following`.
+  Future<Map<String, dynamic>> follow(int userId) => _setFollowing(userId, following: true);
+
+  /// The signed-in user stops following [userId]; same answer as [follow].
+  Future<Map<String, dynamic>> unfollow(int userId) => _setFollowing(userId, following: false);
+
+  Future<Map<String, dynamic>> _setFollowing(int userId, {required bool following}) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/users/$userId/follow');
+    final response = await sendRequest(
+      () => following ? _client.post(uri, headers: _authHeaders) : _client.delete(uri, headers: _authHeaders),
+    );
+    return Map<String, dynamic>.from(readData(response) as Map);
+  }
+
   Future<Map<String, dynamic>> updateProfile({
     required int userId,
     required String firstName,

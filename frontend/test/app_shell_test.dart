@@ -7,6 +7,8 @@ import 'package:frontend/features/shell/providers/app_shell_controller.dart';
 import 'package:frontend/features/shell/screens/app_shell.dart';
 import 'package:frontend/shared/widgets/kubo_bottom_navigation_bar.dart';
 
+import 'support/fake_api.dart';
+
 /// The item labelled [label] in whichever bottom bar is on screen.
 Finder navItem(String label) => find.descendant(
       of: find.byType(KuboBottomNavigationBar),
@@ -104,8 +106,16 @@ void main() {
   });
 
   testWidgets('tapping the open tab again scrolls it to the top, then focuses search', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: AppShell(initialTab: AppTab.search)));
-    await tester.pumpAndSettle();
+    // Enough popular searches for the page to be taller than the screen.
+    final api = FakeApi({
+      'GET /products/suggestions': (_) => [
+            for (var i = 0; i < 8; i++) {'text': 'Produce $i', 'type': 'listing', 'listing_count': 1, 'image': null},
+          ],
+    });
+    await api.run(() async {
+      await tester.pumpWidget(const MaterialApp(home: AppShell(initialTab: AppTab.search)));
+      await tester.pumpAndSettle();
+    });
 
     final scrollable = find
         .descendant(of: find.byType(CustomScrollView), matching: find.byType(Scrollable))

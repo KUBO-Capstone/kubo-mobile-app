@@ -10,10 +10,21 @@ import 'counter_offer_dialog.dart';
 /// out from the small talk around it. Order events look like offer events
 /// and open the order when tapped.
 class ChatMessageBubble extends StatelessWidget {
-  const ChatMessageBubble({super.key, required this.message, required this.isMine, this.onOpenOrder});
+  const ChatMessageBubble({
+    super.key,
+    required this.message,
+    required this.isMine,
+    this.onOpenOrder,
+    this.superseded = false,
+  });
 
   final MessageRecord message;
   final bool isMine;
+
+  /// An offer or counter whose terms a later counter replaced, or that was
+  /// closed since. Drawn faded and labelled, so the only live offer is the
+  /// one on the card at the top.
+  final bool superseded;
 
   /// Called with the order id when an order event is tapped.
   final void Function(int orderId)? onOpenOrder;
@@ -27,7 +38,7 @@ class ChatMessageBubble extends StatelessWidget {
             onTap: orderId == null || onOpenOrder == null ? null : () => onOpenOrder!(orderId),
           )
         : message.type.isOfferEvent
-            ? _OfferBubble(message: message)
+            ? _OfferBubble(message: message, superseded: superseded)
             : _TextBubble(message: message);
     final avatar = Padding(
       padding: const EdgeInsets.only(bottom: 2),
@@ -88,19 +99,24 @@ class _TextBubble extends StatelessWidget {
 }
 
 class _OfferBubble extends StatelessWidget {
-  const _OfferBubble({required this.message});
+  const _OfferBubble({required this.message, required this.superseded});
 
   final MessageRecord message;
+  final bool superseded;
 
   @override
   Widget build(BuildContext context) {
     final price = message.offerPrice;
     final quantity = message.offerQuantity;
+    final details = message.offerDetails;
+    final reason = message.declineReason;
+    final accent = superseded ? AppColors.gray : AppColors.green;
     final headline = switch (message.type) {
       MessageType.offer => 'Offer',
       MessageType.counter => 'Counter offer',
       MessageType.accepted => 'Offer accepted',
       MessageType.declined => 'Offer declined',
+      MessageType.cancelled => 'Deal cancelled',
       MessageType.text || MessageType.order => '',
     };
     final terms = price == null
@@ -108,33 +124,75 @@ class _OfferBubble extends StatelessWidget {
         : 'PHP ${formatAmount(price)}${quantity == null ? '' : ' × ${formatAmount(quantity)}'}';
     final total = price != null && quantity != null ? price * quantity : null;
 
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 280),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.green, width: 1.2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            headline,
-            style: const TextStyle(color: AppColors.green, fontSize: 11, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            terms,
-            style: const TextStyle(color: AppColors.black, fontSize: 14, fontWeight: FontWeight.w800),
-          ),
-          if (total != null)
-            Text(
-              'Total PHP ${formatAmount(total)}',
-              style: const TextStyle(color: AppColors.gray, fontSize: 11),
+    return Opacity(
+      opacity: superseded ? 0.6 : 1,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 280),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: superseded ? AppColors.softBackground : AppColors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: accent, width: 1.2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  headline,
+                  style: TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.w700),
+                ),
+                if (superseded) ...[
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Replaced',
+                    style: TextStyle(color: AppColors.gray, fontSize: 10, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ],
             ),
-        ],
+            const SizedBox(height: 2),
+            Text(
+              terms,
+              style: TextStyle(
+                color: AppColors.black,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                decoration: superseded ? TextDecoration.lineThrough : null,
+              ),
+            ),
+            if (total != null)
+              Text(
+                'Total PHP ${formatAmount(total)}',
+                style: const TextStyle(color: AppColors.gray, fontSize: 11),
+              ),
+            if ((details ?? '').isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.place_outlined, size: 12, color: accent),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(details!, style: const TextStyle(color: AppColors.black, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ),
+              ),
+            if (message.type == MessageType.declined && reason != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Reason: ${reason.label}',
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

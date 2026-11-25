@@ -11,7 +11,8 @@ import 'order_service.dart';
 ///
 /// [text] is a typed message; the rest are events the server writes so the
 /// thread is also the deal's history: offer events when an offer is made,
-/// countered, accepted or declined, and [order] when the order behind an
+/// countered, accepted or declined, [cancelled] when an accepted offer is
+/// called off before it is ordered, and [order] when the order behind an
 /// accepted offer is placed, shipped, picked up or cancelled.
 enum MessageType {
   text,
@@ -19,6 +20,7 @@ enum MessageType {
   counter,
   accepted,
   declined,
+  cancelled,
   order;
 
   static MessageType parse(String? raw) => MessageType.values.firstWhere(
@@ -44,6 +46,8 @@ class MessageRecord {
     this.orderId,
     this.offerPrice,
     this.offerQuantity,
+    this.offerDetails,
+    this.declineReason,
   });
 
   factory MessageRecord.fromJson(Map<String, dynamic> json) {
@@ -59,6 +63,8 @@ class MessageRecord {
       orderId: (json['order_id'] as num?)?.toInt(),
       offerPrice: (json['offer_price'] as num?)?.toDouble(),
       offerQuantity: (json['offer_quantity'] as num?)?.toDouble(),
+      offerDetails: json['offer_details']?.toString(),
+      declineReason: DeclineReason.parse(json['decline_reason']?.toString()),
     );
   }
 
@@ -77,6 +83,13 @@ class MessageRecord {
   final int? orderId;
   final double? offerPrice;
   final double? offerQuantity;
+
+  /// How the produce changes hands under the terms this event carries,
+  /// e.g. "Pickup at Malolos Kubo Bagsakan Center".
+  final String? offerDetails;
+
+  /// On a declined offer: why the seller turned it down, when they said.
+  final DeclineReason? declineReason;
 
   bool isMine(int userId) => senderId == userId;
 }
@@ -106,6 +119,8 @@ class ConversationRecord {
     this.negotiationStatus,
     this.offeredPrice,
     this.offeredQuantity,
+    this.fulfillment,
+    this.declineReason,
     this.orderId,
     this.orderStatus,
     this.acceptedBy,
@@ -142,6 +157,8 @@ class ConversationRecord {
       negotiationStatus: rawStatus == null ? null : NegotiationStatus.parse(rawStatus),
       offeredPrice: (json['offered_price'] as num?)?.toDouble(),
       offeredQuantity: (json['offered_quantity'] as num?)?.toDouble(),
+      fulfillment: OfferFulfillment.fromJson(json),
+      declineReason: DeclineReason.parse(json['decline_reason']?.toString()),
       orderId: (json['order_id'] as num?)?.toInt(),
       orderStatus: rawOrderStatus == null ? null : OrderStatus.parse(rawOrderStatus),
       acceptedBy: (json['accepted_by'] as num?)?.toInt(),
@@ -158,9 +175,16 @@ class ConversationRecord {
   /// counter. Null until it is accepted.
   final int? acceptedBy;
 
-  /// The offer is accepted and the signed-in user has not seen the
-  /// "deal closed" screen for it yet.
+  /// The buyer has confirmed receipt of the order, and the signed-in user
+  /// has not seen the "deal closed" screen for it yet.
   final bool celebrationPending;
+
+  /// How the latest offer says the produce changes hands; null on offers
+  /// from before terms carried it.
+  final OfferFulfillment? fulfillment;
+
+  /// Why the seller declined the latest offer, when they said.
+  final DeclineReason? declineReason;
 
   /// The signed-in user's rating of the order, null until they review it.
   final int? myReviewRating;
@@ -238,10 +262,18 @@ class ConversationRecord {
   bool canMakeOffer(int userId) =>
       isBuyer(userId) && !hasOpenOffer && !canPlaceOrder(userId) && isProductAvailable;
 
-  /// Accepted and not yet ordered: the buyer's next step is to arrange
-  /// pickup or delivery.
+  /// Accepted and not yet ordered: only an offer from before terms carried
+  /// the handover, whose buyer still has to arrange pickup or delivery. The
+  /// listing is holding the agreed quantity for this deal, and either side
+  /// can still call it off. An offer with its handover agreed is ordered the
+  /// moment it is accepted.
   bool get isAwaitingOrder =>
       negotiationStatus == NegotiationStatus.accepted && orderId == null;
+
+  /// The latest offer was accepted and then cancelled before it was
+  /// ordered (a declined offer was never accepted by anyone).
+  bool get isDealCancelled =>
+      negotiationStatus == NegotiationStatus.declined && acceptedBy != null;
 
   bool canPlaceOrder(int userId) => isBuyer(userId) && isAwaitingOrder;
 
@@ -267,6 +299,8 @@ class ConversationRecord {
       createdAt: null,
       allowsMeetup: allowsMeetup,
       allowsDelivery: allowsDelivery,
+      fulfillment: fulfillment,
+      declineReason: declineReason,
     );
   }
 }

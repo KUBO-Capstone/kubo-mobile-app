@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/profile_service.dart';
 import 'edit_profile_page.dart';
 import 'change_password_page.dart';
+import 'fulfillment_settings_page.dart';
 
 class AccountSettingsPage extends StatefulWidget {
   const AccountSettingsPage({
@@ -162,6 +163,19 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
             onPressed: _savePrivacy,
             icon: const Icon(Icons.save_outlined),
             label: const Text('Save privacy'),
+          ),
+          const SizedBox(height: 24),
+          const Text('Selling', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.black)),
+          const SizedBox(height: 8),
+          _SettingsTile(
+            icon: Icons.local_shipping_outlined,
+            title: 'Pickup & delivery',
+            subtitle: 'Bagsakan centers and couriers buyers can choose',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => FulfillmentSettingsPage.profile(userId: int.parse(_user['user_id'].toString())),
+              ),
+            ),
           ),
           const SizedBox(height: 24),
           const Text('Security', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.black)),

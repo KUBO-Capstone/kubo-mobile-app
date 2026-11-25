@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/listing_service.dart';
 import '../../../shared/data/synthetic_records.dart';
 import '../../login/services/auth_service.dart';
+import '../../profile/screens/fulfillment_settings_page.dart';
 import '../screens/create_listing_page.dart';
 
 /// What the seller did in the manage sheet, so the caller can update its
@@ -96,6 +97,20 @@ class _ManageListingSheetState extends State<_ManageListingSheet> {
     );
   }
 
+  // The listing's own pickup and delivery options. Nothing on the listing
+  // card changes, so the sheet just closes without an outcome.
+  Future<void> _editFulfillment() async {
+    final productId = listing.productId;
+    if (productId == null) return;
+    final navigator = Navigator.of(context);
+    await navigator.push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => FulfillmentSettingsPage.listing(productId: productId, listingTitle: listing.title),
+      ),
+    );
+    if (mounted) navigator.pop();
+  }
+
   Future<void> _toggleSoldOut() {
     return _run(() async {
       final updated = await _service.setSoldOut(
@@ -167,6 +182,13 @@ class _ManageListingSheetState extends State<_ManageListingSheet> {
               leading: const Icon(Icons.edit_outlined, color: AppColors.black),
               title: const Text('Edit listing'),
               onTap: _edit,
+            ),
+            ListTile(
+              enabled: !_busy,
+              leading: const Icon(Icons.local_shipping_outlined, color: AppColors.black),
+              title: const Text('Pickup & delivery'),
+              subtitle: const Text('Optional: centers and couriers for this listing only'),
+              onTap: _editFulfillment,
             ),
             ListTile(
               enabled: !_busy,

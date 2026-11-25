@@ -66,8 +66,67 @@ Then run `npm run db:migrate`, and tell the team to run it too.
   - Unique indexes back the "already exists" checks: one thread per buyer
     and listing, one open offer, one order per accepted offer, one review per
     side, one account per email. A violation also answers 409.
-  - An order only takes stock that is still there.
+  - Stock is only taken if it is still there (see below).
 - **Transactions.** Multi-step writes go through `withTransaction` in `pg.ts`.
+
+## Offers, orders and the closed deal
+
+An offer carries its full terms: price, quantity, and how the produce
+changes hands (`negotiations.delivery_method` with `drop_off_center_id` or
+`courier_name`). The buyer can only pick centers and couriers the seller
+supports (`seller_bagsakan_centers`, `seller_couriers`; an empty list means
+"any"). A seller can optionally give one listing its own choices
+(`products.custom_fulfillment` with `product_bagsakan_centers` /
+`product_couriers`, migration 007); that listing then uses them instead,
+and the profile's are left as they are. A seller's counter can change any of the terms, including moving to
+a farther center at a higher price, and replaces the offer on the table.
+A seller's decline can carry a `decline_reason` the buyer sees in the chat.
+
+Accepting an offer locks those terms and creates the order in the same
+transaction (status `pending`, shown as "In progress"); there is no
+separate "arrange pickup" step. Offers from before migration 006 have no
+handover terms and keep the old flow: accepted, then the buyer places the
+order.
+
+When the seller hands the order over (to the courier, or at the center),
+the order records the tracking number, optional photos of the produce
+(`orders.handover_photos`, keys under `handovers/` in S3) and the time
+(`orders.shipped_at`), migration 008. Both sides see them on the order.
+
+The deal counts as closed when the buyer confirms receipt (order
+`delivered`). That is when both sides see the "deal closed" screen
+(`celebration_pending` in the conversation) and can review each other.
+
+## Stock and "sold out"
+
+`products.available_quantity` is what a buyer can still get, and a listing
+reads `out of stock` only when that reaches zero (or the seller marks it by
+hand).
+
+- **Accepting an offer takes its quantity off the listing**, in the same
+  transaction as the accept. If the listing has less left than the offer,
+  the accept is refused (409) and the seller can counter with less. The
+  order created at acceptance holds that stock. (An offer from before
+  migration 006 records it in `negotiations.reserved_quantity` instead.)
+- **Placing an older offer's order** does not take stock again: it clears
+  `reserved_quantity`, and from then on the order holds the stock.
+- **Stock comes back** when an accepted offer is cancelled before it is
+  ordered (`PATCH /negotiations/:id` with `action: "cancel"`, either side),
+  or when a pending order is cancelled. A listing that was sold out only
+  because nothing was left becomes `available` again.
+- Offers accepted before migration 005 have `reserved_quantity` NULL; their
+  stock is taken when the order is placed, as it used to be.
+
+## Listing locations and the map
+
+A listing shows its seller's farm address (`farmer_profiles`) when they have
+one, and otherwise the town they registered with. On the map a farm address
+is plotted at its own coordinates; everyone else is plotted at their town.
+Town points are looked up once from OpenStreetMap by
+`backend/src/services/geocoding.service.ts` and kept in `place_coordinates`.
+Only the town and province names are sent. The lookup runs in the background
+on server start and whenever a listing or an address may have added a town;
+`GEOCODING_ENABLED=false` in `backend/.env` turns it off.
 
 ## Legacy SQLite files
 

@@ -6,6 +6,7 @@ import '../../../shared/data/chat_socket.dart';
 import '../../../shared/data/message_service.dart';
 import '../../../shared/data/negotiation_service.dart';
 import '../../login/services/auth_service.dart';
+import '../../shell/providers/app_shell_controller.dart';
 
 /// State for one conversation thread: the header (listing, parties, current
 /// offer), the messages, and the offer actions.
@@ -83,6 +84,8 @@ class ChatController extends ChangeNotifier {
       unawaited(_messages.markRead(conversationId: conversationId).catchError((_) {}));
     }
     if (fresh.any((m) => m.type != MessageType.text)) {
+      // An accepted or cancelled deal changes what is left on the listing.
+      AppShellController.instance.notifyListingsChanged();
       try {
         conversation = await _messages.fetchConversation(conversationId: conversationId);
         if (!_disposed) notifyListeners();
@@ -170,20 +173,16 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  /// Buyer opens a new offer on the thread's listing.
-  Future<String?> makeOffer({required double price, required double quantity}) {
-    return _offerAction(() async {
-      final thread = conversation!;
-      await _negotiations.createOffer(
-        productId: thread.productId,
-        price: price,
-        quantity: quantity,
-      );
-    });
-  }
-
-  /// Accept, decline, or counter the current offer.
-  Future<String?> respond(NegotiationAction action, {double? price, double? quantity}) {
+  /// Accept, decline, counter or cancel the current offer. A counter can
+  /// change the handover ([fulfillment]); a seller's decline says why
+  /// ([reason]). New offers go through the offer form instead.
+  Future<String?> respond(
+    NegotiationAction action, {
+    double? price,
+    double? quantity,
+    OfferFulfillment? fulfillment,
+    DeclineReason? reason,
+  }) {
     return _offerAction(() async {
       final negotiationId = conversation!.negotiationId!;
       await _negotiations.respond(
@@ -191,11 +190,14 @@ class ChatController extends ChangeNotifier {
         action: action,
         price: price,
         quantity: quantity,
+        fulfillment: fulfillment,
+        reason: reason,
       );
     });
   }
 
-  /// Records that the "deal closed" screen was shown for [negotiationId].
+  /// Records that the "deal closed" screen (shown once the buyer confirms
+  /// receipt) was shown for [negotiationId].
   /// A failure is ignored: at worst the screen shows once more later.
   Future<void> markCelebrated(int negotiationId) async {
     try {
@@ -213,6 +215,9 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
     try {
       await call();
+      // Accepting takes the quantity off the listing and cancelling puts it
+      // back, so every feed showing the listing reloads.
+      AppShellController.instance.notifyListingsChanged();
       await refresh(silent: true);
       return null;
     } catch (error) {

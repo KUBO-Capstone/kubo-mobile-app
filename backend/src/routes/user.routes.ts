@@ -1,7 +1,8 @@
 import { Router } from "express";
-import { getUsers, createUser, addUserAddress, addFarmAddress, getProfile, updateProfile, uploadProfilePhoto, deleteProfilePhoto, changePassword, updateUserAddress, choosePreferredAddress } from "#controllers/user.controller";
+import { getUsers, createUser, addUserAddress, addFarmAddress, getProfile, updateProfile, uploadProfilePhoto, deleteProfilePhoto, changePassword, updateUserAddress, choosePreferredAddress, followUser, unfollowUser } from "#controllers/user.controller";
 import { getUserReviews } from "#controllers/review.controller";
 import { getEarnings } from "#controllers/earnings.controller";
+import { getFulfillment, updateFulfillment } from "#controllers/fulfillment.controller";
 import { attachAuth, requireAuth, requireOwner } from "#middleware/auth.middleware";
 import { receiveImages } from "#controllers/upload.controller";
 
@@ -22,8 +23,15 @@ router.get('/', requireAuth, getUsers);
 router.post('/', createUser);
 router.get('/:id/profile', attachAuth, getProfile);
 router.patch('/:id/profile', requireAuth, requireOwner, updateProfile);
+// The signed-in user follows or unfollows :id.
+router.post('/:id/follow', requireAuth, followUser);
+router.delete('/:id/follow', requireAuth, unfollowUser);
 router.get('/:id/reviews', getUserReviews);
+// The seller's figures: only ever for the seller themselves.
 router.get('/:id/earnings', requireAuth, requireOwner, getEarnings);
+// Centers and couriers the seller works with; buyers read it, the seller sets it.
+router.get('/:id/fulfillment', getFulfillment);
+router.put('/:id/fulfillment', requireAuth, requireOwner, updateFulfillment);
 router.post('/:id/profile/photo', requireAuth, requireOwner, receiveProfilePhoto, uploadProfilePhoto);
 router.delete('/:id/profile/photo', requireAuth, requireOwner, deleteProfilePhoto);
 router.post('/:id/address', requireAuth, requireOwner, addUserAddress);

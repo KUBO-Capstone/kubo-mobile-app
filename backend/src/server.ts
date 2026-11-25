@@ -5,6 +5,7 @@ import app from "./app";
 import { pendingMigrations } from "./database/migrate";
 import { pool } from "./database/pg";
 import { scheduleMarketImport } from "./market/market-import";
+import { queuePlaceLookups } from "./services/geocoding.service";
 import { initSocket } from "./services/socket.service";
 
 const PORT = Number(process.env.PORT || 3000);
@@ -26,6 +27,8 @@ async function start(): Promise<void> {
         console.log(`Server running on http://${HOST}:${PORT} (Postgres ${process.env.PGHOST}/${process.env.PGDATABASE})`);
         // Daily DA Bantay Presyo refresh of Market Watch; see market/market-import.ts.
         scheduleMarketImport();
+        // Map points for the towns listings are in; see services/geocoding.service.ts.
+        queuePlaceLookups();
     });
 }
 

@@ -1,10 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../shared/data/order_service.dart';
 import '../../../shared/data/review_service.dart';
 import '../../../shared/widgets/kubo_star_rating.dart';
+import '../../../shared/widgets/photo_picker_strip.dart';
 import '../../chat/widgets/counter_offer_dialog.dart' show formatAmount;
 import '../../login/services/auth_service.dart';
 
@@ -32,9 +36,17 @@ class _WriteReviewPageState extends State<WriteReviewPage> {
 
   late final ReviewService _service = widget.service ?? ReviewService();
   final _comment = TextEditingController();
+  final _picker = ImagePicker();
   final Set<String> _tags = <String>{};
   late int _rating = widget.initialRating.clamp(0, 5);
   bool _submitting = false;
+
+  /// Photos picked on this device, in the order they will show.
+  final List<File> _photos = <File>[];
+
+  /// Server paths of [_photos] once uploaded, so a retry after a failed
+  /// post does not upload them again.
+  List<String>? _uploadedPhotos;
 
   int get _userId => AuthService.currentUserId ?? 0;
   bool get _reviewingSeller => widget.order.isBuyer(_userId);
@@ -55,16 +67,41 @@ class _WriteReviewPageState extends State<WriteReviewPage> {
     });
   }
 
+  Future<void> _addPhoto() async {
+    final picked = await pickPhotos(context, _picker, remaining: maxReviewPhotos - _photos.length, max: maxReviewPhotos);
+    if (picked == null || picked.isEmpty || !mounted) return;
+    setState(() {
+      _photos.addAll(picked);
+      _uploadedPhotos = null;
+    });
+  }
+
+  void _removePhoto(int index) {
+    setState(() {
+      _photos.removeAt(index);
+      _uploadedPhotos = null;
+    });
+  }
+
   Future<void> _submit() async {
     if (_rating == 0 || _submitting) return;
     FocusScope.of(context).unfocus();
     setState(() => _submitting = true);
     try {
+      var photos = _uploadedPhotos;
+      if (photos == null && _photos.isNotEmpty) {
+        photos = await _service.uploadPhotos(orderId: widget.order.id, files: List<File>.of(_photos));
+        if (photos.length != _photos.length) {
+          throw Exception('Some photos could not be uploaded. Please use JPG, PNG, or WebP photos.');
+        }
+        _uploadedPhotos = photos;
+      }
       final review = await _service.submitReview(
         orderId: widget.order.id,
         rating: _rating,
         comment: _comment.text,
         tags: _tagChoices.map((tag) => tag.key).where(_tags.contains).toList(),
+        photos: photos ?? const <String>[],
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -156,7 +193,17 @@ class _WriteReviewPageState extends State<WriteReviewPage> {
               ),
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 12),
+          PhotoPickerStrip(
+            photos: _photos,
+            max: maxReviewPhotos,
+            onAdd: _submitting ? null : _addPhoto,
+            onRemove: _submitting ? null : _removePhoto,
+            helper: _reviewingSeller
+                ? 'Optional: Share photos of the produce quality or packaging'
+                : 'Optional: Add photos of the handover',
+          ),
+          const SizedBox(height: 16),
           Row(
             children: [
               const Icon(Icons.public, size: 14, color: AppColors.gray),

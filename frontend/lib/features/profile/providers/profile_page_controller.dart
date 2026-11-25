@@ -120,48 +120,38 @@ class ProfilePageController extends ChangeNotifier {
   /// Currently selected section tab.
   ProfileSection get selectedSection => _selectedSection;
 
-  /// Shared profile record used by the page header and about tab.
+  /// The profile shown in the header and the About tab. Every value comes
+  /// from the account: what the server returned for it, or, until that
+  /// arrives, what the caller already knew (the signed-in user's row, or the
+  /// seller fields of the listing a visitor came from). Anything the account
+  /// has not filled in is left empty for the page to handle, never padded
+  /// with sample text.
   SyntheticProfileRecord get profile {
+    final loaded = _loadedProfile;
     final visitor = subject;
-    if (!isOwnProfile && visitor != null) {
-      final loadedName = '${_loadedProfile?['first_name'] ?? ''} ${_loadedProfile?['last_name'] ?? ''}'.trim();
-      final location = (_loadedProfile?['location'] ?? visitor.locationLabel ?? syntheticProfileRecord.locationLabel).toString();
-      final businessName = _loadedProfile?['business_name']?.toString() ?? '';
-      final businessType = _loadedProfile?['business_type']?.toString() ?? '';
-      return SyntheticProfileRecord(
-        displayName: loadedName.isEmpty ? visitor.displayName : loadedName,
-        username: _loadedProfile?['email']?.toString() ?? 'Kubo grower',
-        locationLabel: location,
-        about: _loadedProfile?['bio']?.toString().trim().isNotEmpty == true
-            ? _loadedProfile!['bio'].toString()
-            : visitor.about ?? 'Fresh local produce from a Kubo grower.',
-        businessName: businessName,
-        businessType: businessType,
-        profilePrivacy: _normalizePrivacy(_loadedProfile?['profile_privacy']),
-        joinedLabel: syntheticProfileRecord.joinedLabel,
-        followingCount: syntheticProfileRecord.followingCount,
-        followersCount: syntheticProfileRecord.followersCount,
-        listingCount: _listings.length,
-        reviewScore: ratingSummary.average ?? 0,
-        reviewCount: ratingSummary.count,
-        photoUrl: _loadedProfile?['profile_photo_url']?.toString() ?? visitor.photoUrl ?? '',
-      );
+    final user = isOwnProfile ? AuthService.currentUser : null;
+
+    String field(String key) => (loaded?[key] ?? user?[key])?.toString().trim() ?? '';
+    // Like field(): the signed-in user's saved row stands in until (or in
+    // case) the profile loads, so their own counts survive a failed fetch.
+    int count(String key) {
+      final value = loaded?[key] ?? user?[key];
+      return value is num ? value.toInt() : 0;
     }
 
-    final user = AuthService.currentUser;
-    if (user == null) {
-      return syntheticProfileRecord;
-    }
+    final name = '${field('first_name')} ${field('last_name')}'.trim();
+    final displayName = name.isNotEmpty
+        ? name
+        : isOwnProfile
+            ? (user == null ? 'Guest' : 'Kubo member')
+            : (visitor?.displayName ?? 'Kubo member');
 
-    final firstName = user['first_name']?.toString().trim() ?? '';
-    final lastName = user['last_name']?.toString().trim() ?? '';
-    final displayName = '$firstName $lastName'.trim();
-    final savedBio = (_loadedProfile?['bio'] ?? user['bio'])?.toString().trim() ?? '';
-    final savedLocation = (_loadedProfile?['location'] ?? user['location'])?.toString().trim() ?? syntheticProfileRecord.locationLabel;
-    final savedBusinessName = (_loadedProfile?['business_name'] ?? user['business_name'])?.toString().trim() ?? '';
-    final savedBusinessType = (_loadedProfile?['business_type'] ?? user['business_type'])?.toString().trim() ?? '';
-    final addresses = (_loadedProfile?['addresses'] as List?)?.whereType<Map>().toList() ?? const <Map>[];
-    final preferredId = _loadedProfile?['preferred_address_id'];
+    // The town of the preferred address, when the profile carries addresses
+    // (a visited profile that hides its location has had them taken out, see
+    // loadProfile); otherwise the location typed on the profile, or the one
+    // the listing showed.
+    final addresses = (loaded?['addresses'] as List?)?.whereType<Map>().toList() ?? const <Map>[];
+    final preferredId = loaded?['preferred_address_id'];
     final address = addresses.cast<Map<String, dynamic>>().firstWhere(
       (item) => item['address_id'] == preferredId,
       orElse: () => <String, dynamic>{},
@@ -170,36 +160,106 @@ class ProfilePageController extends ChangeNotifier {
     final region = address['region']?.toString() ?? '';
     final province = address['province']?.toString() ?? '';
     final addressLocation = city.isEmpty ? '' : '$city, ${region.toUpperCase() == 'NCR' ? region : province}'.trim();
-    final createdAtText = _loadedProfile?['created_at']?.toString() ?? '';
-    final hasTimeZone = RegExp(r'(?:[zZ]|[+-]\d{2}:?\d{2})$').hasMatch(createdAtText);
-    final createdAt = DateTime.tryParse(hasTimeZone ? createdAtText : '${createdAtText}Z')?.toLocal();
+    final typedLocation = field('location');
+    final locationLabel = addressLocation.isNotEmpty
+        ? addressLocation
+        : typedLocation.isNotEmpty
+            ? typedLocation
+            : (isOwnProfile ? '' : visitor?.locationLabel?.trim() ?? '');
+
+    final bio = field('bio');
+    final photo = field('profile_photo_url');
     return SyntheticProfileRecord(
-      displayName: displayName.isEmpty ? syntheticProfileRecord.displayName : displayName,
-      username: user['email']?.toString() ?? syntheticProfileRecord.username,
-      locationLabel: addressLocation.isEmpty ? savedLocation : addressLocation,
-      about: savedBio.isEmpty ? syntheticProfileRecord.about : savedBio,
-      businessName: savedBusinessName,
-      businessType: savedBusinessType,
-      profilePrivacy: _normalizePrivacy(_loadedProfile?['profile_privacy'] ?? user['profile_privacy']),
-      joinedLabel: createdAt == null
-          ? ''
-          : '${createdAt.month.toString().padLeft(2, '0')}/${createdAt.day.toString().padLeft(2, '0')}/${createdAt.year}',
-      followingCount: syntheticProfileRecord.followingCount,
-      followersCount: syntheticProfileRecord.followersCount,
+      displayName: displayName,
+      username: field('email'),
+      locationLabel: locationLabel,
+      about: bio.isNotEmpty ? bio : (isOwnProfile ? '' : visitor?.about?.trim() ?? ''),
+      businessName: field('business_name'),
+      businessType: field('business_type'),
+      profilePrivacy: _normalizePrivacy(loaded?['profile_privacy'] ?? user?['profile_privacy']),
+      joinedLabel: _joinedLabel(field('created_at')),
+      followingCount: count('following_count'),
+      followersCount: count('followers_count'),
       listingCount: _listings.length,
       reviewScore: ratingSummary.average ?? 0,
       reviewCount: ratingSummary.count,
-      photoUrl: _loadedProfile?['profile_photo_url']?.toString() ?? user['profile_photo_url']?.toString() ?? '',
+      completedOrders: count('completed_orders'),
+      photoUrl: photo.isNotEmpty ? photo : (isOwnProfile ? '' : visitor?.photoUrl ?? ''),
     );
+  }
+
+  // "03/14/2026" from the account's created_at, or empty when unknown.
+  static String _joinedLabel(String createdAtText) {
+    if (createdAtText.isEmpty) return '';
+    final hasTimeZone = RegExp(r'(?:[zZ]|[+-]\d{2}:?\d{2})$').hasMatch(createdAtText);
+    final createdAt = DateTime.tryParse(hasTimeZone ? createdAtText : '${createdAtText}Z')?.toLocal();
+    if (createdAt == null) return '';
+    return '${createdAt.month.toString().padLeft(2, '0')}/${createdAt.day.toString().padLeft(2, '0')}/${createdAt.year}';
   }
 
   Map<String, dynamic>? get loadedProfile => _loadedProfile;
 
+  /// Whether the signed-in user follows this profile. Always false on their
+  /// own profile and until the profile has loaded.
+  bool get isFollowing => !isOwnProfile && _loadedProfile?['is_following'] == true;
+
+  /// A follow or unfollow request is in flight; the button waits for it.
+  bool isFollowBusy = false;
+
+  /// Follows the profile, or unfollows it when already followed. The button
+  /// and the follower count change at once and are put back if the server
+  /// says no. Returns an error to show, or null.
+  Future<String?> toggleFollow() async {
+    final userId = subject?.userId;
+    if (isOwnProfile || userId == null) return null;
+    if (AuthService.currentUserId == null) return 'Log in to follow sellers.';
+    if (isFollowBusy) return null;
+
+    final wasFollowing = isFollowing;
+    final follow = !wasFollowing;
+    final followers = (_loadedProfile?['followers_count'] as num?)?.toInt() ?? 0;
+    isFollowBusy = true;
+    _followChanges++;
+    _loadedProfile = {
+      ...?_loadedProfile,
+      'is_following': follow,
+      'followers_count': follow ? followers + 1 : (followers > 0 ? followers - 1 : 0),
+    };
+    notifyListeners();
+    try {
+      final counts = follow ? await _profileService.follow(userId) : await _profileService.unfollow(userId);
+      _loadedProfile = {...?_loadedProfile, ...counts};
+      return null;
+    } catch (error) {
+      // Only the two values this changed go back; anything else that loaded
+      // meanwhile stays.
+      _loadedProfile = {...?_loadedProfile, 'is_following': wasFollowing, 'followers_count': followers};
+      return error.toString().replaceFirst('Exception: ', '');
+    } finally {
+      isFollowBusy = false;
+      _followChanges++;
+      notifyListeners();
+    }
+  }
+
   Future<void> loadProfile() async {
     final userId = _subjectUserId;
     if (userId == null) return;
+    final followChangesAtStart = _followChanges;
     try {
-      _loadedProfile = await _profileService.fetchProfile(userId);
+      var fetched = await _profileService.fetchProfile(userId);
+      // A follow or unfollow started or landed while this was in flight, so
+      // the server may have answered from before it. Everything else in the
+      // answer is still taken; the follow state on screen is the newer one.
+      final current = _loadedProfile;
+      if (current != null && (isFollowBusy || followChangesAtStart != _followChanges)) {
+        fetched = {
+          ...fetched,
+          for (final key in _followFields)
+            if (current.containsKey(key)) key: current[key],
+        };
+      }
+      _loadedProfile = isOwnProfile ? fetched : _withoutHiddenLocation(fetched);
       if (isOwnProfile) AuthService.updateCurrentUser(_loadedProfile!);
       notifyListeners();
     } catch (_) {
@@ -207,8 +267,28 @@ class ProfilePageController extends ChangeNotifier {
     }
   }
 
+  static const List<String> _followFields = <String>['is_following', 'followers_count', 'following_count'];
+
+  /// Goes up when a follow or unfollow starts and again when it lands, so a
+  /// profile load can tell one happened while it was in flight.
+  int _followChanges = 0;
+
+  // Someone else's profile with "show location" off: their addresses say
+  // where they are as plainly as the location line does, so neither is kept
+  // for the page to build a location from.
+  Map<String, dynamic> _withoutHiddenLocation(Map<String, dynamic> profile) {
+    if (_normalizePrivacy(profile['profile_privacy'])['show_location'] != false) return profile;
+    return Map<String, dynamic>.of(profile)
+      ..remove('addresses')
+      ..remove('preferred_address_id')
+      ..remove('location');
+  }
+
+  /// Takes the profile an edit screen returned. Those answers carry what was
+  /// edited, not always the whole profile (the photo upload has no addresses
+  /// or follow counts), so they are laid over what is already known.
   Future<void> setProfile(Map<String, dynamic> profile) async {
-    _loadedProfile = profile;
+    _loadedProfile = {...?_loadedProfile, ...profile};
     if (isOwnProfile) AuthService.updateCurrentUser(profile);
     notifyListeners();
   }
@@ -262,10 +342,21 @@ class ProfilePageController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether the signed-in user is looking at their own account. The only
+  /// case Lifetime Earnings may be loaded or shown in: buyers, guests and
+  /// other sellers never get the figures, from the server or on screen.
+  bool get isViewingOwnAccount {
+    final me = AuthService.currentUserId;
+    return isOwnProfile && me != null && _subjectUserId == me;
+  }
+
   /// Lifetime earnings for the banner on the owner's profile.
   Future<void> loadEarnings() async {
     final userId = AuthService.currentUserId;
-    if (!isOwnProfile || userId == null) return;
+    if (!isViewingOwnAccount || userId == null) {
+      earnings = null;
+      return;
+    }
     try {
       earnings = await _earningsService.fetchEarnings(userId);
       notifyListeners();

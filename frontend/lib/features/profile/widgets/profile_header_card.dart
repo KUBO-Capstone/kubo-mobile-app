@@ -22,7 +22,16 @@ class ProfileHeaderCard extends StatelessWidget {
     required this.onMessage,
     required this.onChangePhoto,
     this.onRatingTap,
+    this.isFollowing = false,
+    this.isFollowBusy = false,
   });
+
+  /// Whether the viewer already follows this profile; the Follow button
+  /// then reads "Following" and unfollows.
+  final bool isFollowing;
+
+  /// A follow or unfollow is in flight; the button waits for it.
+  final bool isFollowBusy;
 
   /// Jumps to the Reviews tab from the rating line.
   final VoidCallback? onRatingTap;
@@ -78,7 +87,12 @@ class ProfileHeaderCard extends StatelessWidget {
                   onTap: onEditProfile,
                 )
               else
-                _HeaderActionButton(label: 'Follow', onTap: onFollow),
+                _HeaderActionButton(
+                  label: isFollowing ? 'Following' : 'Follow',
+                  icon: isFollowing ? Icons.check : null,
+                  highlighted: isFollowing,
+                  onTap: isFollowBusy ? null : onFollow,
+                ),
               const Spacer(),
               if (isOwnProfile) ...[
                 _CircularIconButton(icon: Icons.share_outlined, onTap: onShare),
@@ -106,15 +120,17 @@ class ProfileHeaderCard extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            profile.username,
-            style: const TextStyle(
-              color: AppColors.black,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
+          if (profile.username.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              profile.username,
+              style: const TextStyle(
+                color: AppColors.black,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 8),
           KuboRatingLine(
             average: profile.reviewCount == 0 ? null : profile.reviewScore,
@@ -284,19 +300,28 @@ class _HeaderActionButton extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.icon,
+    this.highlighted = false,
   });
 
   final String label;
   final IconData? icon;
-  final VoidCallback onTap;
+
+  /// Null while the action is in flight.
+  final VoidCallback? onTap;
+
+  /// Drawn in the brand green: the state the button names is on ("Following").
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
+    final color = highlighted ? AppColors.green : AppColors.gray;
     return OutlinedButton(
       onPressed: onTap,
       style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.gray,
-        side: const BorderSide(color: AppColors.border),
+        foregroundColor: color,
+        // Keeps its colour while a request is in flight instead of greying out.
+        disabledForegroundColor: color,
+        side: BorderSide(color: highlighted ? AppColors.green : AppColors.border),
         shape: const StadiumBorder(),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       ),

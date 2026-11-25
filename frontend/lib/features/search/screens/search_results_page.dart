@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -16,6 +18,7 @@ import '../../explore/models/location_result.dart';
 import '../../explore/widgets/location_filter_sheet.dart';
 import '../../explore/widgets/listings_map.dart';
 import '../../explore/widgets/map_result_cards.dart';
+import '../../shell/providers/app_shell_controller.dart';
 
 /// Search results page with list/map toggles over the matching listings.
 class SearchResultsPage extends StatefulWidget {
@@ -41,6 +44,7 @@ class SearchResultsPage extends StatefulWidget {
 class _SearchResultsPageState extends State<SearchResultsPage> {
   late final TextEditingController _searchController;
   late final ListingService _listingService;
+  late final StreamSubscription<void> _listingsChanged;
   List<SyntheticListingRecord> _listings = const <SyntheticListingRecord>[];
 
   /// Location and radius used to narrow the current search results.
@@ -60,6 +64,12 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   /// A search is in flight; the grid shows placeholder cards meanwhile.
   bool _isLoading = true;
 
+  /// Counts the loads started, so an answer can tell it is the newest.
+  int _loadRequest = 0;
+
+  /// A listing changed while a search was in flight; reload once it is done.
+  bool _reloadPending = false;
+
   bool _isListView = true;
 
   /// Collapses the map to a strip, same control as the explore tab.
@@ -76,22 +86,38 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
             ? ExplorePage.defaultLocationLabel
             : widget.initialLocationLabel;
     _loadListings();
+    // Stock moved on some listing; results that sold out drop off.
+    _listingsChanged = AppShellController.instance.listingsChanged.listen((_) => _loadListings(quiet: true));
   }
 
   @override
   void dispose() {
+    _listingsChanged.cancel();
     _searchController.dispose();
     _listingService.dispose();
     super.dispose();
   }
 
-  Future<void> _loadListings() async {
-    if (mounted && !_isLoading) setState(() => _isLoading = true);
+  /// [quiet] reloads behind the results already on screen: no placeholder
+  /// cards, and a failure leaves them as they are.
+  Future<void> _loadListings({bool quiet = false}) async {
+    // A search is already in flight, and it may have read the listings from
+    // before whatever just changed. Starting another now would only cut it
+    // off, so the reload waits and runs once that search is done.
+    if (quiet && _isLoading) {
+      _reloadPending = true;
+      return;
+    }
+    if (mounted && !_isLoading && !quiet) setState(() => _isLoading = true);
     final query = _query;
+    // Two loads for the same words can overlap (a retry, a quiet reload), so
+    // the query alone does not say which answer is the newest.
+    final request = ++_loadRequest;
+    bool isLatest() => mounted && request == _loadRequest && query == _query;
     try {
       final listings = await _listingService.fetchListings(query: query);
       // A newer search may have been submitted while this one was in flight.
-      if (mounted && query == _query) {
+      if (isLatest()) {
         setState(() {
           _listings = listings;
           _loadError = null;
@@ -100,12 +126,19 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
       }
     } catch (error) {
       debugPrint('Search listing fetch failed: $error');
-      if (mounted && query == _query) {
+      if (isLatest() && !quiet) {
         setState(() {
           _listings = const <SyntheticListingRecord>[];
           _loadError = 'Could not reach the Kubo server. Try again.';
           _isLoading = false;
         });
+      }
+    } finally {
+      // Only the newest load runs the waiting reload; an older one finishing
+      // late leaves it to the load that overtook it.
+      if (mounted && request == _loadRequest && _reloadPending) {
+        _reloadPending = false;
+        _loadListings(quiet: true);
       }
     }
   }

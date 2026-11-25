@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../shared/data/negotiation_service.dart';
 import '../../../shared/data/order_service.dart';
 import '../../../shared/data/review_service.dart';
+import '../../deals/screens/deal_celebration_page.dart';
 import '../../../shared/widgets/kubo_star_rating.dart';
 import '../../chat/screens/chat_page.dart';
 import '../../reviews/screens/write_review_page.dart';
@@ -12,7 +15,9 @@ import '../../market/widgets/market_price_table.dart' show formatDate;
 import '../providers/order_controller.dart';
 import '../widgets/order_card.dart';
 import '../widgets/order_status_steps.dart';
-import '../widgets/ship_order_dialog.dart';
+import '../../../shared/widgets/kubo_image.dart';
+import '../../../shared/widgets/kubo_photo_viewer.dart';
+import 'hand_over_page.dart';
 
 /// One order: what was agreed, how it changes hands, where it stands, and
 /// the one action the signed-in side can take next. Pops `true` when the
@@ -53,21 +58,40 @@ class _OrderPageState extends State<OrderPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
   }
 
+  // A page rather than a dialog: courier, tracking number and photos of the
+  // produce. It stays open, with what was entered, if the request fails.
   Future<void> _ship(OrderRecord order) async {
-    final details = await showShipOrderDialog(context, order);
-    if (details == null) return;
-    _showError(await _controller.respond(
-      OrderAction.ship,
-      courierName: order.isMeetup ? null : details.courierName,
-      trackingNumber: order.isMeetup ? null : details.trackingNumber,
-    ));
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => HandOverPage(
+          order: order,
+          uploadPhotos: _controller.uploadHandoverPhotos,
+          ship: (details) => _controller.respond(
+            OrderAction.ship,
+            courierName: order.isMeetup ? null : details.courierName,
+            trackingNumber: order.isMeetup ? null : details.trackingNumber,
+            photos: details.photos,
+          ),
+        ),
+      ),
+    );
   }
 
+  Future<void> _copyTracking(String trackingNumber) async {
+    await Clipboard.setData(ClipboardData(text: trackingNumber));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Tracking number copied'), duration: Duration(seconds: 2)),
+    );
+  }
+
+  // "Order received" is what closes the deal: only now is it celebrated, and
+  // the review opens while the produce is in the buyer's hands.
   Future<void> _deliver(OrderRecord order) async {
     final confirmed = await _confirm(
-      title: order.isMeetup ? 'Picked it up?' : 'Received it?',
-      body: 'This closes the order. Only confirm once you have the produce.',
-      action: order.isMeetup ? 'Picked up' : 'Received',
+      title: 'Order received?',
+      body: 'Only confirm once you have the produce in hand. This closes the deal and cannot be undone.',
+      action: 'Order received',
     );
     if (!confirmed) return;
     final error = await _controller.respond(OrderAction.deliver);
@@ -75,11 +99,33 @@ class _OrderPageState extends State<OrderPage> {
       _showError(error);
       return;
     }
-    // The handover just happened, so this is when the buyer remembers it best.
     final delivered = _controller.order;
-    if (mounted && delivered != null && delivered.canReview(_controller.userId ?? 0)) {
-      await _writeReview(delivered);
-    }
+    final userId = _controller.userId ?? 0;
+    if (!mounted || delivered == null) return;
+
+    // Marked before the screen opens, so the chat does not show it again.
+    final negotiations = NegotiationService();
+    negotiations
+        .markCelebrated(negotiationId: delivered.negotiationId)
+        .catchError((Object error) => debugPrint('Could not record the deal celebration: $error'))
+        .whenComplete(negotiations.dispose);
+
+    final action = await Navigator.of(context).push<DealCelebrationAction>(
+      MaterialPageRoute<DealCelebrationAction>(
+        fullscreenDialog: true,
+        builder: (_) => DealCelebrationPage(
+          isSeller: false,
+          counterpartyName: delivered.sellerName,
+          cropName: delivered.cropName,
+          quantity: delivered.quantity,
+          unit: delivered.unit,
+          price: delivered.price,
+          canReview: delivered.canReview(userId),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (action == DealCelebrationAction.writeReview) await _writeReview(delivered);
   }
 
   Future<void> _writeReview(OrderRecord order, {int initialRating = 0}) async {
@@ -233,9 +279,23 @@ class _OrderPageState extends State<OrderPage> {
               ),
             ] else ...[
               _Row('Method', 'Courier'),
-              // Left blank when shipping if the seller shares them in the chat.
+              // Agreed in the offer; older orders name it when shipped, or in the chat.
               _Row('Courier', order.courierName ?? (order.status == OrderStatus.pending ? 'Not booked yet' : 'See chat')),
-              _Row('Tracking no.', order.trackingNumber ?? (order.status == OrderStatus.pending ? '—' : 'See chat')),
+              if ((order.trackingNumber ?? '').isNotEmpty)
+                _TrackingRow(trackingNumber: order.trackingNumber!, onCopy: () => _copyTracking(order.trackingNumber!))
+              else
+                _Row('Tracking no.', order.status == OrderStatus.pending ? '—' : 'See chat'),
+            ],
+            if (order.shippedAt != null)
+              _Row(order.isMeetup ? 'Dropped off' : 'Shipped', formatDate(order.shippedAt)),
+            if (order.handoverPhotos.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                order.isMeetup ? 'Photos at drop-off' : 'Photos at handover',
+                style: const TextStyle(color: AppColors.gray, fontSize: 12),
+              ),
+              const SizedBox(height: 6),
+              _HandoverPhotos(photos: order.handoverPhotos),
             ],
           ],
         ),
@@ -274,17 +334,23 @@ class _OrderPageState extends State<OrderPage> {
       ));
     } else if (order.canDeliver(userId)) {
       buttons.add(_Primary(
-        label: order.isMeetup ? 'I picked it up' : 'I received it',
+        label: 'Order received',
         onTap: busy ? null : () => _deliver(order),
+      ));
+      buttons.add(const SizedBox(height: 6));
+      buttons.add(const Text(
+        'Tap once you have the produce. Then you can rate the seller.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: AppColors.gray, fontSize: 11),
       ));
     } else if (order.status == OrderStatus.pending) {
       buttons.add(_Hint(order.isBuyer(userId)
-          ? 'Waiting for ${order.sellerName} to ${order.isMeetup ? 'drop it off at the center' : 'book a courier'}.'
-          : 'Once you drop it off, mark it here.'));
+          ? '${order.sellerName} is preparing your order for ${order.isMeetup ? 'drop-off at ${order.centerName ?? 'the center'}' : order.handoverLabel.toLowerCase()}.'
+          : 'Once you drop it off or hand it to the courier, mark it here.'));
     } else if (order.status == OrderStatus.inTransit) {
       buttons.add(_Hint(order.isMeetup
-          ? 'Waiting for ${order.buyerName} to pick it up.'
-          : 'Waiting for ${order.buyerName} to confirm delivery.'));
+          ? 'Waiting for ${order.buyerName} to pick it up and confirm.'
+          : 'Waiting for ${order.buyerName} to confirm the order arrived.'));
     }
 
     if (order.canCancel(userId)) {
@@ -416,6 +482,95 @@ class _Panel extends StatelessWidget {
           const SizedBox(height: 8),
           ...children,
         ],
+      ),
+    );
+  }
+}
+
+/// The tracking number with a copy button, so it can go straight into the
+/// courier's app or site.
+class _TrackingRow extends StatelessWidget {
+  const _TrackingRow({required this.trackingNumber, required this.onCopy});
+
+  final String trackingNumber;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 100,
+            child: Text('Tracking no.', style: TextStyle(color: AppColors.gray, fontSize: 12)),
+          ),
+          Expanded(
+            child: SelectableText(
+              trackingNumber,
+              style: const TextStyle(color: AppColors.black, fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Copy tracking number',
+            onPressed: onCopy,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.copy_rounded, size: 18, color: AppColors.green),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The seller's handover photos; tap one to see it full screen.
+class _HandoverPhotos extends StatefulWidget {
+  const _HandoverPhotos({required this.photos});
+
+  final List<String> photos;
+
+  @override
+  State<_HandoverPhotos> createState() => _HandoverPhotosState();
+}
+
+class _HandoverPhotosState extends State<_HandoverPhotos> {
+  static const double _size = 72;
+
+  // Tells these photos apart from other galleries in the stack.
+  final Object _gallery = Object();
+
+  @override
+  Widget build(BuildContext context) {
+    final photos = widget.photos;
+    final decodeWidth = kuboDecodeWidthFor(context, width: _size, height: _size);
+    return SizedBox(
+      height: _size,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: photos.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) => Semantics(
+          button: true,
+          label: 'Handover photo ${index + 1} of ${photos.length}',
+          onTapHint: 'view full screen',
+          excludeSemantics: true,
+          child: GestureDetector(
+            onTap: () => KuboPhotoViewer.open(
+              context,
+              photos: photos,
+              initialIndex: index,
+              heroTagFor: (i) => KuboPhotoHeroTag(_gallery, i),
+              placeholderFor: (i) => kuboImageProvider(photos[i], decodeWidth: decodeWidth),
+            ),
+            child: Hero(
+              tag: KuboPhotoHeroTag(_gallery, index),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: KuboImage(photos[index], width: _size, height: _size, decodeWidth: decodeWidth),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

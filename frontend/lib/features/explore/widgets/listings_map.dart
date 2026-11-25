@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/synthetic_records.dart';
+import '../../../shared/widgets/kubo_map_controls.dart';
 import '../../listing/screens/listing_page.dart';
 import '../models/bagsakan_center.dart';
 import '../models/location_result.dart';
@@ -12,15 +13,21 @@ import '../models/location_result.dart';
 /// are the alternate mode behind the warehouse toggle.
 enum MapPinMode { products, centers }
 
-/// One map pin representing a single farm address that may host several listings.
+/// One map pin: every listing at the same point. That is one farm when the
+/// seller saved a farm address, and one town otherwise, since a seller
+/// without a farm address is placed at their town.
 class _FarmPin {
   _FarmPin({required this.point, required this.listings});
 
-  /// Coordinate taken from the farm address on the seller's farmer profile.
+  /// Where the listings are: the farm address, or the seller's town.
   final LatLng point;
 
-  /// Every listing sold from this farm, within the active region filter.
+  /// Every listing at this point, within the active filters.
   final List<SyntheticListingRecord> listings;
+
+  /// How many different sellers those listings belong to.
+  int get sellerCount =>
+      listings.map<Object>((listing) => listing.sellerId ?? listing.sellerLabel).toSet().length;
 }
 
 /// Map view that plots either farm listings or bagsakan centers onto
@@ -112,11 +119,16 @@ class _ListingsMapState extends State<ListingsMap> {
 
   bool get _isProducts => _modeOf(widget) == MapPinMode.products;
 
-  /// Identifies what is on screen, ignoring list instance churn.
+  /// Identifies what is on screen, ignoring list instance churn. A listing
+  /// counts with where it is plotted: the same listings come back from a
+  /// refresh with a point once their town has been looked up, and the camera
+  /// has to move to the pins that appear.
   String _signature(ListingsMap w) {
     final ids =
         _modeOf(w) == MapPinMode.products
-            ? w.listings.map((record) => record.id)
+            ? w.listings.map(
+              (record) => '${record.id}@${record.latitude},${record.longitude}',
+            )
             : w.centers.map((center) => center.id);
     final focus = w.focusLocation;
     final focusKey =
@@ -199,6 +211,16 @@ class _ListingsMapState extends State<ListingsMap> {
     );
   }
 
+  // The recenter button: back to every pin, or to the whole country when
+  // there is nothing to frame.
+  void _recenter() {
+    if (_cameraPoints.isEmpty) {
+      _mapController.move(kuboMapCountryCentre, kuboMapCountryZoom);
+      return;
+    }
+    _fitPoints();
+  }
+
   // Opens the same detail page the list-view cards use, closing the pin
   // sheet first so the back button returns to the map rather than the sheet.
   void _openListing(BuildContext sheetContext, SyntheticListingRecord listing) {
@@ -218,6 +240,9 @@ class _ListingsMapState extends State<ListingsMap> {
       ),
       builder: (sheetContext) {
         final first = pin.listings.first;
+        final count = pin.listings.length;
+        final sellers = pin.sellerCount;
+        final listingsLabel = '$count listing${count == 1 ? '' : 's'}';
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
@@ -235,8 +260,10 @@ class _ListingsMapState extends State<ListingsMap> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${first.sellerLabel} - ${pin.listings.length} listing'
-                  '${pin.listings.length == 1 ? '' : 's'}',
+                  // A town's pin can hold several sellers' listings.
+                  sellers == 1
+                      ? '${first.sellerLabel} - $listingsLabel'
+                      : '$listingsLabel from $sellers sellers',
                   style: const TextStyle(color: AppColors.gray, fontSize: 13),
                 ),
                 const SizedBox(height: 12),
@@ -255,13 +282,26 @@ class _ListingsMapState extends State<ListingsMap> {
                           child: Row(
                             children: [
                               Expanded(
-                                child: Text(
-                                  listing.title,
-                                  style: const TextStyle(
-                                    color: AppColors.black,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      listing.title,
+                                      style: const TextStyle(
+                                        color: AppColors.black,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    if (sellers > 1)
+                                      Text(
+                                        listing.sellerLabel,
+                                        style: const TextStyle(
+                                          color: AppColors.gray,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -365,10 +405,14 @@ class _ListingsMapState extends State<ListingsMap> {
           '${widget.focusLocation!.label}. Try a wider radius.';
     }
 
-    return _isProducts
-        ? 'No mapped listings$_regionSuffix yet. Sellers need a saved farm '
-            'address before they appear on the map.'
-        : 'No bagsakan centers$_regionSuffix yet.';
+    if (_isProducts) {
+      // Listings without a point are ones whose town is still being looked
+      // up on the server; a refresh a little later picks them up.
+      return widget.listings.isEmpty
+          ? 'No listings$_regionSuffix to show on the map yet.'
+          : 'These listings are not on the map yet. Pull down to refresh in a moment.';
+    }
+    return 'No bagsakan centers$_regionSuffix yet.';
   }
 
   @override
@@ -378,11 +422,13 @@ class _ListingsMapState extends State<ListingsMap> {
     final isProducts = _isProducts;
     final onPinModeChanged = widget.onPinModeChanged;
     final hasPins = isProducts ? farmPins.isNotEmpty : centers.isNotEmpty;
+    final cameraPoints = _cameraPoints;
+    final focus = widget.focusLocation;
 
-    // Keep the map up whenever a radius is active even with nothing matching:
-    // seeing the empty circle is what explains why the results are empty.
-    final showMap = hasPins || widget.focusLocation != null;
-
+    // The map is always drawn, pins or no pins. An empty map with a line
+    // saying why still shows where the user is looking, and lets them move
+    // around or switch to the other pin set; a grey box in its place read as
+    // the map being broken.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -394,30 +440,36 @@ class _ListingsMapState extends State<ListingsMap> {
               children: [
                 Positioned.fill(
                   child:
-                      showMap
-                          ? FlutterMap(
+                          FlutterMap(
                             mapController: _mapController,
                             options: MapOptions(
+                              // One pin: that pin, close up. Nothing to
+                              // frame: the whole country.
                               initialCenter:
-                                  _points.isNotEmpty
-                                      ? _points.first
-                                      : widget.focusLocation != null
-                                      ? LatLng(
-                                        widget.focusLocation!.latitude,
-                                        widget.focusLocation!.longitude,
-                                      )
-                                      : const LatLng(12.8797, 121.7740),
-                              initialZoom: 11,
+                                  cameraPoints.isNotEmpty
+                                      ? cameraPoints.first
+                                      : focus != null
+                                      ? LatLng(focus.latitude, focus.longitude)
+                                      : kuboMapCountryCentre,
+                              initialZoom:
+                                  cameraPoints.isEmpty && focus == null
+                                      ? kuboMapCountryZoom
+                                      : 11,
                               // Frame every pin at once, widening to the radius
                               // circle when a distance filter is active.
                               initialCameraFit:
-                                  _cameraPoints.length > 1
+                                  cameraPoints.length > 1
                                       ? CameraFit.coordinates(
-                                        coordinates: _cameraPoints,
+                                        coordinates: cameraPoints,
                                         padding: const EdgeInsets.all(48),
                                         maxZoom: 13,
                                       )
                                       : null,
+                              // Pan and zoom only; the map never rotates.
+                              interactionOptions: kuboMapInteraction,
+                              minZoom: kuboMapMinZoom,
+                              maxZoom: kuboMapMaxZoom,
+                              cameraConstraint: kuboMapBounds,
                             ),
                             children: [
                               TileLayer(
@@ -457,7 +509,9 @@ class _ListingsMapState extends State<ListingsMap> {
                                         child: GestureDetector(
                                           onTap:
                                               () => _showFarmListings(context, pin),
-                                          child: const _FarmMarker(),
+                                          child: _FarmMarker(
+                                            listingCount: pin.listings.length,
+                                          ),
                                         ),
                                       )
                                   else
@@ -481,7 +535,9 @@ class _ListingsMapState extends State<ListingsMap> {
                                       ),
                                 ],
                               ),
+                              // Bottom left: the buttons own the right edge.
                               const RichAttributionWidget(
+                                alignment: AttributionAlignment.bottomLeft,
                                 attributions: [
                                   TextSourceAttribution(
                                     'OpenStreetMap contributors',
@@ -489,25 +545,12 @@ class _ListingsMapState extends State<ListingsMap> {
                                 ],
                               ),
                             ],
-                          )
-                          : Container(
-                            color: AppColors.softBackground,
-                            alignment: Alignment.center,
-                            padding: const EdgeInsets.all(24),
-                            child: Text(
-                              _emptyMessage,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: AppColors.gray,
-                                fontSize: 14,
-                              ),
-                            ),
                           ),
                 ),
 
-                // With the map still showing an empty circle, say why it is
-                // empty rather than leaving the user to guess.
-                if (showMap && !hasPins)
+                // With nothing plotted, say why rather than leaving the user
+                // to guess.
+                if (!hasPins)
                   Positioned(
                     left: 12,
                     right: onPinModeChanged == null ? 12 : 62,
@@ -541,14 +584,14 @@ class _ListingsMapState extends State<ListingsMap> {
                     right: 10,
                     child: Column(
                       children: [
-                        _MapModeButton(
+                        KuboMapButton(
                           icon: Icons.inventory_2_outlined,
                           tooltip: 'Show produce listings',
                           selected: isProducts,
                           onTap: () => onPinModeChanged(MapPinMode.products),
                         ),
                         const SizedBox(height: 8),
-                        _MapModeButton(
+                        KuboMapButton(
                           icon: Icons.warehouse_outlined,
                           tooltip: 'Show bagsakan centers',
                           selected: !isProducts,
@@ -558,18 +601,34 @@ class _ListingsMapState extends State<ListingsMap> {
                     ),
                   ),
 
-                // Minimize / expand control.
+                // Bottom right, top to bottom: back to the pins, zoom in and
+                // out, then minimize / expand. The collapsed strip only has
+                // room for the last one; pinching still zooms it.
                 Positioned(
                   bottom: 10,
                   right: 10,
-                  child: _MapModeButton(
-                    icon:
-                        widget.minimized
-                            ? Icons.open_in_full
-                            : Icons.close_fullscreen,
-                    tooltip: widget.minimized ? 'Expand map' : 'Minimize map',
-                    selected: false,
-                    onTap: widget.onToggleMinimized,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!widget.minimized) ...[
+                        KuboMapButton(
+                          icon: Icons.center_focus_strong_outlined,
+                          tooltip: hasPins ? 'Show all pins' : 'Show the whole country',
+                          onTap: _recenter,
+                        ),
+                        const SizedBox(height: 8),
+                        KuboMapZoomControls(controller: _mapController),
+                        const SizedBox(height: 8),
+                      ],
+                      KuboMapButton(
+                        icon:
+                            widget.minimized
+                                ? Icons.open_in_full
+                                : Icons.close_fullscreen,
+                        tooltip: widget.minimized ? 'Expand map' : 'Minimize map',
+                        onTap: widget.onToggleMinimized,
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -590,71 +649,34 @@ class _ListingsMapState extends State<ListingsMap> {
     );
   }
 
-  /// Summary line that also calls out listings missing a farm address.
+  /// Summary line that also calls out listings not on the map yet.
   String _listingSummary(List<_FarmPin> pins) {
     final plotted = pins.fold<int>(0, (sum, pin) => sum + pin.listings.length);
     final missing = widget.listings.length - plotted;
     if (missing > 0) {
       return '$plotted of ${widget.listings.length} listings mapped, '
-          '$missing without a farm address';
+          '$missing not on the map yet';
     }
-    return '$plotted listing${plotted == 1 ? '' : 's'} across '
-        '${pins.length} farm${pins.length == 1 ? '' : 's'}';
+    return '$plotted listing${plotted == 1 ? '' : 's'} in '
+        '${pins.length} location${pins.length == 1 ? '' : 's'}';
   }
 }
 
-/// Small translucent square button used for the map overlay controls.
-class _MapModeButton extends StatelessWidget {
-  const _MapModeButton({
-    required this.icon,
-    required this.tooltip,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String tooltip;
-
-  /// Highlights the button green while its mode is the active one.
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: selected ? AppColors.green : AppColors.white,
-        borderRadius: BorderRadius.circular(10),
-        elevation: 2,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: onTap,
-          child: SizedBox(
-            width: 38,
-            height: 38,
-            child: Icon(
-              icon,
-              size: 20,
-              color: selected ? AppColors.white : AppColors.black,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Shared map pin shape so produce and bagsakan markers differ only by icon
-/// and colour, matching the toggle icons in the map's corner.
+/// Shared map pin shape so produce and bagsakan markers differ only by what
+/// is in the circle and its colour, matching the toggle icons in the map's
+/// corner.
 class _MapPin extends StatelessWidget {
-  const _MapPin({required this.icon, required this.color});
+  const _MapPin({required this.icon, required this.color, this.count});
 
   final IconData icon;
   final Color color;
 
+  /// Shown instead of [icon] when the pin stands for more than one thing.
+  final int? count;
+
   @override
   Widget build(BuildContext context) {
+    final count = this.count;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -667,7 +689,19 @@ class _MapPin extends StatelessWidget {
             border: Border.all(color: AppColors.white, width: 2),
           ),
           alignment: Alignment.center,
-          child: Icon(icon, size: 15, color: AppColors.white),
+          child: count != null && count > 1
+              ? Text(
+                  count > 99 ? '99+' : '$count',
+                  // Fixed size: the circle does not grow with the text scale.
+                  textScaler: TextScaler.noScaling,
+                  style: TextStyle(
+                    color: AppColors.white,
+                    fontSize: count > 99 ? 9 : 12,
+                    fontWeight: FontWeight.w800,
+                    height: 1,
+                  ),
+                )
+              : Icon(icon, size: 15, color: AppColors.white),
         ),
         Icon(Icons.arrow_drop_down, color: color, size: 18),
       ],
@@ -675,15 +709,23 @@ class _MapPin extends StatelessWidget {
   }
 }
 
-/// Brand-green pin marking a farm that has produce listed.
+/// Brand-green pin marking a place with produce listed. It shows how many
+/// listings are there when there is more than one.
 class _FarmMarker extends StatelessWidget {
-  const _FarmMarker();
+  const _FarmMarker({required this.listingCount});
+
+  final int listingCount;
 
   @override
   Widget build(BuildContext context) {
-    return const _MapPin(
-      icon: Icons.inventory_2_outlined,
-      color: AppColors.green,
+    return Semantics(
+      button: true,
+      label: '$listingCount listing${listingCount == 1 ? '' : 's'} here',
+      child: _MapPin(
+        icon: Icons.inventory_2_outlined,
+        color: AppColors.green,
+        count: listingCount,
+      ),
     );
   }
 }

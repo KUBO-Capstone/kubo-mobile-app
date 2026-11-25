@@ -90,12 +90,16 @@ class _ProfilePageState extends State<ProfilePage> {
   final ScrollController _scroll = ScrollController();
   final GlobalKey<RefreshIndicatorState> _refreshKey = GlobalKey<RefreshIndicatorState>();
   StreamSubscription<AppTab>? _reselected;
+  late final StreamSubscription<void> _listingsChanged;
   bool _wasActiveTab = true;
 
   @override
   void initState() {
     super.initState();
     _listenToShell();
+    // A deal takes stock off a listing (or a cancelled one gives it back),
+    // and a listing with nothing left reads sold out: keep the grid current.
+    _listingsChanged = AppShellController.instance.listingsChanged.listen((_) => _controller.loadListings());
     _controller = ProfilePageController(
       isOwnProfile: widget.isOwnProfile,
       subject: widget.subject,
@@ -123,6 +127,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void dispose() {
     _reselected?.cancel();
+    _listingsChanged.cancel();
     if (widget.isTabRoot) AppShellController.instance.removeListener(_handleShellTabChanged);
     _scroll.dispose();
     _controller.dispose();
@@ -213,7 +218,11 @@ class _ProfilePageState extends State<ProfilePage> {
     final profile = _controller.profile;
     final userId = AuthService.currentUserId;
     if (userId == null) return;
-    final shareText = '${profile.displayName} on Kubo\n\n${profile.about}\n\nView this profile: https://kubo.app/profile/$userId';
+    final shareText = [
+      '${profile.displayName} on Kubo',
+      if (profile.about.isNotEmpty) profile.about,
+      'View this profile: https://kubo.app/profile/$userId',
+    ].join('\n\n');
     await Share.share(shareText, subject: '${profile.displayName} on Kubo');
   }
 
@@ -228,10 +237,12 @@ class _ProfilePageState extends State<ProfilePage> {
     if (updated != null && mounted) await _controller.setProfile(updated);
   }
 
-  void _followProfile() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Followed profile')),
-    );
+  // Follows, or unfollows when already following. The button and the count
+  // have already changed by the time this returns; only a refusal is shown.
+  Future<void> _followProfile() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final error = await _controller.toggleFollow();
+    if (error != null) messenger.showSnackBar(SnackBar(content: Text(error)));
   }
 
   // Chats belong to a listing, so messaging a seller means asking about one
@@ -327,6 +338,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           onShare: _openShare,
                           onSettings: _openSettings,
                           onFollow: _followProfile,
+                          isFollowing: _controller.isFollowing,
+                          isFollowBusy: _controller.isFollowBusy,
                           onMessage: _messageProfile,
                           onChangePhoto: _openEditProfile,
                           onRatingTap: () => _controller.selectSection(ProfileSection.reviews),
@@ -336,7 +349,9 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 34)),
-                if (widget.isOwnProfile && _controller.earnings != null)
+                // Lifetime earnings are the owner's alone: not built at all
+                // for anyone else looking at this profile.
+                if (_controller.isViewingOwnAccount && _controller.earnings != null)
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
@@ -570,6 +585,21 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildAboutSection() {
+    final profile = _controller.profile;
+    // Only what the account has filled in gets a row.
+    final details = <Widget>[
+      if (profile.joinedLabel.isNotEmpty)
+        _DetailRow(icon: Icons.calendar_today_outlined, label: 'Date joined', value: profile.joinedLabel),
+      if (profile.businessName.isNotEmpty)
+        _DetailRow(icon: Icons.storefront_outlined, label: 'Business', value: profile.businessName),
+      if (profile.businessType.isNotEmpty)
+        _DetailRow(icon: Icons.category_outlined, label: 'Type', value: profile.businessType),
+      if (profile.locationLabel.isNotEmpty)
+        _DetailRow(icon: Icons.location_on_outlined, value: profile.locationLabel),
+      if (profile.username.isNotEmpty)
+        _DetailRow(icon: Icons.person_outline, value: profile.username),
+    ];
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 22, 16, 0),
       child: Column(
@@ -584,54 +614,54 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            _controller.profile.about,
-            style: const TextStyle(
-              color: AppColors.black,
-              fontSize: 15,
-              height: 1.3,
+          if (profile.about.isNotEmpty)
+            Text(
+              profile.about,
+              style: const TextStyle(
+                color: AppColors.black,
+                fontSize: 15,
+                height: 1.3,
+              ),
+            )
+          else ...[
+            // No bio written yet: say so, and on your own profile offer the
+            // way to add one.
+            Text(
+              widget.isOwnProfile
+                  ? 'You have not written a bio yet. Tell buyers what you grow and where.'
+                  : 'No bio yet.',
+              style: const TextStyle(color: AppColors.gray, fontSize: 15, height: 1.3),
             ),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'Account details',
-            style: TextStyle(
-              color: AppColors.black,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _DetailRow(
-            icon: Icons.calendar_today_outlined,
-            label: 'Date joined',
-            value: _controller.profile.joinedLabel,
-          ),
-          const SizedBox(height: 14),
-          if (_controller.profile.businessName.isNotEmpty)
-            _DetailRow(
-              icon: Icons.storefront_outlined,
-              label: 'Business',
-              value: _controller.profile.businessName,
-            ),
-          if (_controller.profile.businessType.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            _DetailRow(
-              icon: Icons.category_outlined,
-              label: 'Type',
-              value: _controller.profile.businessType,
-            ),
+            if (widget.isOwnProfile && AuthService.currentUser != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _openEditProfile,
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('Add a bio', style: TextStyle(fontWeight: FontWeight.w700)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.green,
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
           ],
-          const SizedBox(height: 14),
-          _DetailRow(
-            icon: Icons.location_on_outlined,
-            value: _controller.profile.locationLabel,
-          ),
-          const SizedBox(height: 14),
-          _DetailRow(
-            icon: Icons.person_outline,
-            value: _controller.profile.username,
-          ),
+          if (details.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            const Text(
+              'Account details',
+              style: TextStyle(
+                color: AppColors.black,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (final (index, row) in details.indexed) ...[
+              if (index > 0) const SizedBox(height: 14),
+              row,
+            ],
+          ],
           const SizedBox(height: 24),
           const Text(
             'Profile analytics',
@@ -683,35 +713,35 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ],
           ),
-          if (widget.isOwnProfile) ...[
-            const SizedBox(height: 28),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _logout,
-                icon: const Icon(Icons.logout, size: 18),
-                label: const Text(
-                  'Log out',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.black,
-                  side: const BorderSide(color: AppColors.border),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+          const SizedBox(height: 12),
+          // Public trust signals. Earnings are never among them.
+          Row(
+            children: [
+              Expanded(
+                child: _AnalyticsCard(
+                  label: 'Completed orders',
+                  value: _controller.profile.completedOrders.toString(),
+                  accent: AppColors.green,
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: _AnalyticsCard(
+                  label: 'Member since',
+                  value: _controller.profile.joinedLabel.isEmpty ? '—' : _controller.profile.joinedLabel,
+                  accent: AppColors.black,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  // Ends the session and drops the whole navigator stack so no screen from
-  // the old account stays mounted behind the login page.
+  // Reached from Account settings (the gear in the header). Ends the session
+  // and drops the whole navigator stack so no screen from the old account
+  // stays mounted behind the login page.
   Future<void> _logout() async {
     final confirmed = await showDialog<bool>(
       context: context,

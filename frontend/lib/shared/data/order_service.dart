@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../../core/constants/api_config.dart';
 import 'api_request.dart';
@@ -73,6 +75,8 @@ class OrderRecord {
     this.centerAddress,
     this.courierName,
     this.trackingNumber,
+    this.handoverPhotos = const <String>[],
+    this.shippedAt,
     this.myReview,
     this.theirReview,
   });
@@ -102,6 +106,12 @@ class OrderRecord {
       centerAddress: json['center_address']?.toString(),
       courierName: json['courier_name']?.toString(),
       trackingNumber: json['tracking_number']?.toString(),
+      handoverPhotos: (json['handover_photos'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<String>()
+          .map(resolveMediaUrl)
+          .whereType<String>()
+          .toList(growable: false),
+      shippedAt: DateTime.tryParse(json['shipped_at']?.toString() ?? ''),
       orderDate: DateTime.tryParse(json['order_date']?.toString() ?? ''),
       updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? ''),
       myReview: review(json['my_review']),
@@ -145,6 +155,14 @@ class OrderRecord {
   /// Set once the seller hands a courier order over.
   final String? courierName;
   final String? trackingNumber;
+
+  /// Photos the seller took of the produce as they handed it over; empty
+  /// when they added none.
+  final List<String> handoverPhotos;
+
+  /// When the seller marked it shipped / dropped off; null before that, and
+  /// on orders shipped before this was recorded.
+  final DateTime? shippedAt;
   final DateTime? orderDate;
   final DateTime? updatedAt;
 
@@ -155,28 +173,30 @@ class OrderRecord {
 
   bool get isMeetup => deliveryMethod == DeliveryMethod.meetup;
 
-  /// Status in words that fit the delivery method.
+  /// Status in words that fit the delivery method. A pending order is one
+  /// whose offer was accepted and that the seller is getting ready.
   String get statusLabel {
     switch (status) {
       case OrderStatus.pending:
-        return isMeetup ? 'Waiting for drop-off' : 'Waiting for dispatch';
+        return 'In progress';
       case OrderStatus.inTransit:
-        return isMeetup ? 'Ready for pickup' : 'In transit';
+        return isMeetup ? 'Ready for pickup' : 'Out for delivery';
       case OrderStatus.delivered:
-        return isMeetup ? 'Picked up' : 'Delivered';
+        return 'Received';
       case OrderStatus.cancelled:
         return 'Cancelled';
     }
   }
 
-  /// "Pickup at Malolos Kubo Bagsakan Center" / "Courier delivery".
+  /// "Pickup at Malolos Kubo Bagsakan Center" / "Lalamove delivery".
   String get handoverLabel =>
-      isMeetup ? 'Pickup at ${centerName ?? 'a bagsakan center'}' : 'Courier delivery';
+      isMeetup ? 'Pickup at ${centerName ?? 'a bagsakan center'}' : '${courierName ?? 'Courier'} delivery';
 
   /// The seller's next move: drop it at the center or hand it to a courier.
   bool canShip(int userId) => isSeller(userId) && status == OrderStatus.pending;
 
-  /// The buyer's next move: confirm it was picked up / received.
+  /// The buyer's next move: tap "Order received" once the produce is in
+  /// hand. That closes the deal and opens the review.
   bool canDeliver(int userId) => isBuyer(userId) && status == OrderStatus.inTransit;
 
   /// Either side may back out while nothing has moved yet.
@@ -245,6 +265,7 @@ class OrderService {
     required OrderAction action,
     String? courierName,
     String? trackingNumber,
+    List<String>? photos,
   }) async {
     final response = await sendRequest(
       () => _client.patch(
@@ -254,10 +275,34 @@ class OrderService {
           'action': action.name,
           if (courierName != null) 'courier_name': courierName,
           if (trackingNumber != null) 'tracking_number': trackingNumber,
+          if (photos != null) 'photos': photos,
         }),
       ),
     );
     return OrderRecord.fromJson(readData(response) as Map<String, dynamic>);
+  }
+
+  /// Stores the seller's photos of the produce being handed over on
+  /// [orderId] and returns their server paths, in the same order, for the
+  /// ship action's `photos`.
+  Future<List<String>> uploadHandoverPhotos({required int orderId, required List<File> files}) async {
+    if (files.isEmpty) return const <String>[];
+    final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/orders/$orderId/handover/photos'));
+    for (final file in files) {
+      final subtype = switch (file.path.split('.').last.toLowerCase()) {
+        'png' => 'png',
+        'webp' => 'webp',
+        _ => 'jpeg',
+      };
+      request.files.add(await http.MultipartFile.fromPath('photos', file.path, contentType: MediaType('image', subtype)));
+    }
+    // Photos take longer than the usual JSON round trip on rural data.
+    final response = await sendRequest(
+      () async => http.Response.fromStream(await _client.send(request)),
+      timeout: const Duration(seconds: 90),
+    );
+    final data = readData(response) as Map<String, dynamic>;
+    return (data['images'] as List<dynamic>).whereType<String>().toList(growable: false);
   }
 
   void dispose() => _client.close();

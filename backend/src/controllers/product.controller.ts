@@ -14,6 +14,7 @@ import {
 } from "#models/product.model";
 import { authUserId } from "#middleware/auth.middleware";
 import { deleteStoredImage, storedImageExists, toStoredMediaUrl } from "#controllers/upload.controller";
+import { queuePlaceLookups } from "#services/geocoding.service";
 
 const categories = new Set<string>(productCategories);
 const units = new Set<string>(productUnits);
@@ -160,6 +161,20 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
     res.json({ success: true, data: await ProductModel.findAll(query, Number.isInteger(sellerId) ? sellerId : undefined, includeUnavailable) });
 };
 
+const defaultSuggestions = 8;
+const maxSuggestions = 20;
+
+// Search help for the search page. With ?q= it is what matches the text so
+// far (listing titles, towns, sellers); without, the most listed produce.
+// Everything comes from listings that are up now, so picking a suggestion
+// always finds something.
+export const getSuggestions = async (req: Request, res: Response): Promise<void> => {
+    const query = typeof req.query.q === 'string' ? req.query.q.slice(0, 100) : '';
+    const requested = Number(req.query.limit);
+    const limit = Number.isInteger(requested) && requested > 0 ? Math.min(requested, maxSuggestions) : defaultSuggestions;
+    res.json({ success: true, data: await ProductModel.suggest(query, limit) });
+};
+
 export const getProduct = async (req: Request, res: Response): Promise<void> => {
     const product = await ProductModel.findById(Number(req.params.id));
     if (!product) {
@@ -211,6 +226,8 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
     }
     try {
         const product = await ProductModel.create({ ...listing, seller_id }, images.value);
+        // A first listing may put a new town on the map; find where it is.
+        queuePlaceLookups();
         res.status(201).json({ success: true, data: product });
     } catch (error) {
         res.status(400).json({ success: false, message: error instanceof Error ? error.message : 'Unable to create listing' });
@@ -271,6 +288,10 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
         return;
     }
 
+    // ProductModel.update keeps "sold out" in step with the stock, and
+    // refuses (StockRuleError, answered as a 400 below) to mark a listing
+    // with nothing left as available. It decides both against the row it has
+    // locked, since `product` above may already be behind an accepted offer.
     try {
         const updated = await ProductModel.update(product.product_id, changes, images);
         if (images) {

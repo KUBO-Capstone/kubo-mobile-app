@@ -84,14 +84,17 @@ class _ChatPageState extends State<ChatPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
   }
 
-  // Opens the "deal closed" screen the first time this person sees an
-  // accepted offer: right after accepting, when the other side's accept
-  // arrives over the socket, or on opening the thread later.
+  // Opens the "deal closed" screen the first time this person sees a deal
+  // the buyer has confirmed receiving: when the buyer's "Order received"
+  // arrives over the socket, or on opening the thread later. (A buyer who
+  // confirms from the order page sees it there instead.) Accepting an offer
+  // only starts the order, so it does not celebrate anything yet.
   void _celebrateClosedDeal() {
     final thread = _controller.conversation;
     final userId = _controller.userId;
     final negotiationId = thread?.negotiationId;
-    if (thread == null || userId == null || negotiationId == null || !thread.celebrationPending) return;
+    final orderId = thread?.orderId;
+    if (thread == null || userId == null || negotiationId == null || orderId == null || !thread.celebrationPending) return;
     if (_celebrated.contains(negotiationId)) return;
     // Wait until the chat is on top again rather than covering another page.
     if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
@@ -104,20 +107,19 @@ class _ChatPageState extends State<ChatPage> {
           fullscreenDialog: true,
           builder: (_) => DealCelebrationPage(
             isSeller: thread.isSeller(userId),
-            acceptedByMe: thread.acceptedBy == userId,
             counterpartyName: thread.counterpartyName(userId),
             cropName: thread.cropName,
             quantity: thread.offeredQuantity ?? 0,
             unit: thread.unit,
             price: thread.offeredPrice ?? 0,
+            canReview: thread.canReviewOrder(userId),
           ),
         ),
       );
       if (!mounted) return;
-      final latest = _controller.conversation ?? thread;
       switch (action) {
-        case DealCelebrationAction.arrangePickup:
-          if (latest.canPlaceOrder(userId)) await _placeOrder(latest);
+        case DealCelebrationAction.writeReview:
+          await _rateOrder(orderId);
         case DealCelebrationAction.viewEarnings:
           await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const LifetimeEarningsPage()));
         case null:
@@ -170,6 +172,9 @@ class _ChatPageState extends State<ChatPage> {
       basePrice: thread.basePrice,
       unit: thread.unit,
       status: thread.productStatus,
+      // The offer form only shows the deal methods the listing has.
+      allowsMeetup: thread.allowsMeetup,
+      allowsDelivery: thread.allowsDelivery,
     );
   }
 
@@ -180,12 +185,29 @@ class _ChatPageState extends State<ChatPage> {
     await _controller.refresh(silent: true);
   }
 
-  Future<void> _respond(NegotiationAction action, {double? price, double? quantity}) async {
-    _showError(await _controller.respond(action, price: price, quantity: quantity));
+  Future<void> _respond(
+    NegotiationAction action, {
+    double? price,
+    double? quantity,
+    OfferFulfillment? fulfillment,
+    DeclineReason? reason,
+  }) async {
+    final error = await _controller.respond(action, price: price, quantity: quantity, fulfillment: fulfillment, reason: reason);
+    if (error != null) {
+      _showError(error);
+      return;
+    }
+    // Accepting an offer with its handover agreed starts the order at once.
+    if (action == NegotiationAction.accept && mounted && _controller.conversation?.orderId != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Offer accepted. Order #${_controller.conversation!.orderId} is in progress.')),
+      );
+    }
   }
 
-  // Buyer turns the accepted offer into an order; the server writes the
-  // "Placed order" line, so the thread only needs re-reading afterwards.
+  // Buyer turns an accepted offer from before the handover was part of the
+  // terms into an order; the server writes the "Placed order" line, so the
+  // thread only needs re-reading afterwards.
   Future<void> _placeOrder(ConversationRecord thread) async {
     final offer = thread.negotiation;
     if (offer == null) return;
@@ -324,19 +346,37 @@ class _ChatPageState extends State<ChatPage> {
         ),
       );
     }
+    final live = _liveOfferMessageId(messages);
     return ListView.builder(
       controller: _scroll,
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: messages.length,
       itemBuilder: (_, index) {
         final message = messages[index];
+        final isOfferCard = message.type == MessageType.offer || message.type == MessageType.counter;
         return ChatMessageBubble(
           message: message,
           isMine: userId != null && message.isMine(userId),
           onOpenOrder: _openOrder,
+          superseded: isOfferCard && message.id != live,
         );
       },
     );
+  }
+
+  // The one offer card still on the table: the newest offer or counter, as
+  // long as the offer it belongs to is open. Every earlier one was replaced
+  // by a counter, or closed by an accept or decline.
+  String? _liveOfferMessageId(List<MessageRecord> messages) {
+    final thread = _controller.conversation;
+    if (thread == null || !thread.hasOpenOffer) return null;
+    for (final message in messages.reversed) {
+      if ((message.type == MessageType.offer || message.type == MessageType.counter) &&
+          message.negotiationId == thread.negotiationId) {
+        return message.id;
+      }
+    }
+    return null;
   }
 }
 

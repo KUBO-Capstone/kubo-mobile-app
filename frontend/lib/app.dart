@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,14 +9,17 @@ import 'features/explore/screens/explore_page.dart';
 import 'features/login/screens/create_account_page.dart';
 import 'features/login/screens/get_started_page.dart';
 import 'features/login/screens/login_page.dart';
+import 'features/login/services/auth_service.dart';
 import 'features/market/screens/market_page.dart';
 import 'features/notification/screens/notification_page.dart';
 import 'features/profile/screens/profile_page.dart';
 import 'features/report/screens/report_page.dart';
+import 'features/saved/providers/saved_listings_controller.dart';
 import 'features/saved/screens/saved_listings_page.dart';
 import 'features/search/screens/search_page.dart';
 import 'features/shell/providers/app_shell_controller.dart';
 import 'features/shell/screens/app_shell.dart';
+import 'shared/data/api_request.dart';
 
 /// Status and navigation bar look for the app's white screens. Pages with an
 /// app bar set their own; this covers the rest (the listing page, profiles)
@@ -28,8 +33,54 @@ const SystemUiOverlayStyle _systemBars = SystemUiOverlayStyle(
 );
 
 /// Root application widget that defines the theme and named routes for Kubo.
-class KuboApp extends StatelessWidget {
+///
+/// It also looks after the session across the app's life: it opens on the
+/// shell when `main` restored a saved session, checks that session with the
+/// server on launch and when the app returns to the foreground, and sends
+/// the user back to the login screen if the server stops accepting it.
+class KuboApp extends StatefulWidget {
   const KuboApp({super.key});
+
+  @override
+  State<KuboApp> createState() => _KuboAppState();
+}
+
+class _KuboAppState extends State<KuboApp> with WidgetsBindingObserver {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<ScaffoldMessengerState> _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  late final StreamSubscription<void> _sessionExpired;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _sessionExpired = ApiSession.expired.listen((_) => _handleSessionExpired());
+    // A restored session is shown at once; this swaps in the server's copy.
+    if (AuthService.currentUser != null) AuthService.refreshSession();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _sessionExpired.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) AuthService.refreshSessionIfStale();
+  }
+
+  // The server refused the token (it ran out, or the account is gone): end
+  // the session here too and drop every screen of it.
+  void _handleSessionExpired() {
+    AuthService.logout();
+    SavedListingsController.instance.clear();
+    _navigatorKey.currentState?.pushNamedAndRemoveUntil(LoginPage.routeName, (_) => false);
+    _messengerKey.currentState
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('Your session has expired. Please log in again.')));
+  }
 
   /// Named route map that keeps the app shell and feature screens wired together.
   @override
@@ -45,6 +96,8 @@ class KuboApp extends StatelessWidget {
     );
 
     return MaterialApp(
+      navigatorKey: _navigatorKey,
+      scaffoldMessengerKey: _messengerKey,
       debugShowCheckedModeBanner: false,
       title: 'Kubo',
       theme: ThemeData(
@@ -103,6 +156,17 @@ class KuboApp extends StatelessWidget {
         ReportPage.routeName: (_) => const ReportPage(),
       },
       initialRoute: LoginPage.routeName,
+      // Exactly one first screen: the shell for a restored session, the
+      // login screen otherwise. (An initial route of '/home' would stack the
+      // shell on top of the login screen, and Back would lead to it.)
+      onGenerateInitialRoutes: (_) => <Route<dynamic>>[
+        AuthService.currentUser != null
+            ? AppShell.route()
+            : MaterialPageRoute<void>(
+                settings: const RouteSettings(name: LoginPage.routeName),
+                builder: (_) => const LoginPage(),
+              ),
+      ],
     );
   }
 }

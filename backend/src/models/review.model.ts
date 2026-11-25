@@ -1,5 +1,8 @@
 import { pool } from "#database/pg";
-import { fromMediaColumn } from "#controllers/upload.controller";
+import { fromMediaColumn, toMediaColumn } from "#controllers/upload.controller";
+
+// Most photos one review can carry; matches the upload route's limit.
+export const maxReviewPhotos = 5;
 
 // Quick tags a reviewer can pick, by who is being reviewed. Stored as keys;
 // the app owns the labels.
@@ -18,6 +21,8 @@ export interface Review {
     rating: number;
     comment: string;
     tags: string[];
+    // Photos the reviewer attached, as stored URLs, in the order given.
+    photos: string[];
     product_id: number;
     crop_name: string;
     product_image: string | null;
@@ -39,6 +44,7 @@ export interface ReviewInput {
     rating: number;
     comment: string;
     tags: string[];
+    photos: string[];
 }
 
 const reviewQuery = `
@@ -55,9 +61,10 @@ const reviewQuery = `
     JOIN products p ON p.product_id = oi.product_id
 `;
 
-// reviews.tags is jsonb, so node-postgres hands over the parsed array.
-const parseTags = (value: unknown): string[] =>
-    Array.isArray(value) ? value.filter((tag): tag is string => typeof tag === 'string') : [];
+// reviews.tags and reviews.photos are jsonb, so node-postgres hands over the
+// parsed arrays.
+const parseStrings = (value: unknown): string[] =>
+    Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
 function mapReview(row: Record<string, unknown>): Review {
     return {
@@ -70,7 +77,8 @@ function mapReview(row: Record<string, unknown>): Review {
         reviewer_role: row.reviewer_role === 'seller' ? 'seller' : 'buyer',
         rating: Number(row.rating),
         comment: row.comment ? String(row.comment) : '',
-        tags: parseTags(row.tags),
+        tags: parseStrings(row.tags),
+        photos: parseStrings(row.photos).map(fromMediaColumn),
         product_id: Number(row.product_id),
         crop_name: String(row.crop_name),
         product_image: row.product_image ? fromMediaColumn(String(row.product_image)) : null,
@@ -111,14 +119,16 @@ export const ReviewModel = {
         return { average: count === 0 ? null : Math.round((sum / count) * 10) / 10, count, breakdown };
     },
 
-    // tags is sent as JSON text: node-postgres would turn a JS array into a
-    // Postgres array literal, which jsonb does not accept.
+    // tags and photos are sent as JSON text: node-postgres would turn a JS
+    // array into a Postgres array literal, which jsonb does not accept. The
+    // photos column keeps object keys, like product_images.
     async create(input: ReviewInput): Promise<Review> {
         const { rows: [created] } = await pool.query(`
-            INSERT INTO reviews (order_id, reviewer_id, reviewee_id, rating, comment, tags)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO reviews (order_id, reviewer_id, reviewee_id, rating, comment, tags, photos)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING review_id
-        `, [input.order_id, input.reviewer_id, input.reviewee_id, input.rating, input.comment, JSON.stringify(input.tags)]);
+        `, [input.order_id, input.reviewer_id, input.reviewee_id, input.rating, input.comment,
+            JSON.stringify(input.tags), JSON.stringify(input.photos.map(toMediaColumn))]);
         const { rows } = await pool.query(`${reviewQuery} WHERE r.review_id = $1`, [created.review_id]);
         return mapReview(rows[0]);
     },

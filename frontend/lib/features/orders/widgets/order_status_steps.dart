@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/order_service.dart';
 
-/// Three-step progress line for an order: placed, on its way (dropped at
-/// the bagsakan center or handed to a courier), received. A cancelled order
-/// shows a single grey line instead of pretending it progressed.
+/// Three-step progress line for an order: in progress (the offer was
+/// accepted and the seller is getting it ready), ready for pickup or out for
+/// delivery, received (the buyer confirmed, which closes the deal). A
+/// cancelled order shows a single grey line instead of pretending it
+/// progressed.
 class OrderStatusSteps extends StatelessWidget {
   const OrderStatusSteps({super.key, required this.order});
 
@@ -27,9 +29,9 @@ class OrderStatusSteps extends StatelessWidget {
     }
 
     final labels = [
-      'Order placed',
-      order.isMeetup ? 'At the bagsakan' : 'With the courier',
-      order.isMeetup ? 'Picked up' : 'Delivered',
+      'In progress',
+      order.isMeetup ? 'Ready for pickup' : 'Out for delivery',
+      'Received',
     ];
     final reached = switch (order.status) {
       OrderStatus.pending => 1,

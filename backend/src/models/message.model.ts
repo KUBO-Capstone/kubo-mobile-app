@@ -14,10 +14,11 @@ import { ddb } from "#config/aws";
 
 // 'text' is a chat line; the rest are offer events written by the negotiation
 // controller so the thread doubles as the offer history (a counter overwrites
-// the price on the negotiations row, the messages keep every step). 'order'
+// the price on the negotiations row, the messages keep every step).
+// 'cancelled' is an accepted deal called off before it was ordered. 'order'
 // is written by the order controller for placed / shipped / delivered /
 // cancelled, with `order_id` pointing at the order.
-export type MessageType = 'text' | 'offer' | 'counter' | 'accepted' | 'declined' | 'order';
+export type MessageType = 'text' | 'offer' | 'counter' | 'accepted' | 'declined' | 'cancelled' | 'order';
 
 /** A message as stored in DynamoDB. */
 export interface StoredMessage {
@@ -30,6 +31,11 @@ export interface StoredMessage {
     order_id?: number;
     offer_price?: number;
     offer_quantity?: number;
+    // On offer events: how the produce changes hands under these terms,
+    // e.g. "Pickup at Malolos Kubo Bagsakan Center" or "Lalamove delivery".
+    offer_details?: string;
+    // On 'declined': the seller's reason, one of DECLINE_REASONS.
+    decline_reason?: string;
     sent_at: string;            // ISO 8601, UTC
 }
 

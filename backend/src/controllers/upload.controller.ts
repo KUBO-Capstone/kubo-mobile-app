@@ -14,12 +14,12 @@ import { requireEnv, s3 } from "#config/aws";
 // and requests that send one of those back are mapped to the stored form
 // with toStoredMediaUrl. See docs/media_storage.md for the bucket setup.
 
-export type MediaFolder = 'products' | 'profiles';
+export type MediaFolder = 'products' | 'profiles' | 'reviews' | 'handovers';
 
 type ImageType = { extension: string; contentType: string };
 
 // .jpeg only appears on photos copied over from the old disk storage.
-const keyPattern = /^(products|profiles)\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp)$/;
+const keyPattern = /^(products|profiles|reviews|handovers)\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp)$/;
 const cacheControl = 'public, max-age=86400, immutable';
 const presignedLifetimeSeconds = 7 * 24 * 60 * 60; // the longest SigV4 allows
 const dayMs = 24 * 60 * 60 * 1000;
@@ -170,6 +170,22 @@ export const objectExists = async (key: string): Promise<boolean> => {
 export const storedImageExists = async (storedUrl: string): Promise<boolean> => {
     const key = mediaKeyOf(storedUrl);
     return key !== undefined && objectExists(key);
+};
+
+/**
+ * The stored forms of photos a client sends back after uploading them to
+ * `folder`, in the same order, or undefined when any of them is not an
+ * upload of ours that is still in the bucket. Photos in `current` (ones a
+ * record already has) are accepted as they are.
+ */
+export const readStoredImages = async (images: unknown[], folder: MediaFolder, current: string[] = []): Promise<string[] | undefined> => {
+    const accepted = await Promise.all(images.map(async (value) => {
+        if (typeof value !== 'string') return undefined;
+        const stored = toStoredMediaUrl(value, folder);
+        if (stored) return current.includes(stored) || (await storedImageExists(stored)) ? stored : undefined;
+        return current.includes(value) ? value : undefined;
+    }));
+    return accepted.every((image): image is string => image !== undefined) ? accepted : undefined;
 };
 
 /**

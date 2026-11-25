@@ -1,10 +1,15 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../shared/data/listing_service.dart';
 import '../../../shared/data/market_service.dart';
 import '../../../shared/data/synthetic_records.dart';
 
 class ListingPageController extends ChangeNotifier {
-  ListingPageController({required SyntheticListingRecord listing}) : _listing = listing;
+  ListingPageController({
+    required SyntheticListingRecord listing,
+    ListingService? listings,
+  })  : _listing = listing,
+        _listings = listings ?? ListingService();
 
   SyntheticListingRecord _listing;
 
@@ -13,8 +18,14 @@ class ListingPageController extends ChangeNotifier {
   bool _changed = false;
 
   int _currentImageIndex = 0;
+  bool _disposed = false;
+
+  /// Goes up each time [_listing] is about to be set, so an answer that was
+  /// asked for earlier can tell it has been overtaken.
+  int _listingGeneration = 0;
 
   final MarketService _market = MarketService();
+  final ListingService _listings;
 
   /// Market Watch reference for this crop in the seller's region; null when
   /// nothing matched (mock rows, unknown crops, server down).
@@ -36,12 +47,35 @@ class ListingPageController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Fetches the listing again. The page opens on the copy its card already
+  /// had, which can be behind: accepting an offer takes its quantity off the
+  /// listing, and a listing with nothing left reads sold out. Called when
+  /// the page opens, when it comes back from a chat, and whenever a deal on
+  /// any listing moves. A failure keeps what is on screen.
+  Future<void> refresh() async {
+    final productId = _listing.productId;
+    if (productId == null) return;
+    final generation = ++_listingGeneration;
+    try {
+      final latest = await _listings.fetchListing(productId);
+      // Something newer set the listing while this was in flight: a later
+      // refresh, or the record a seller's edit came back with.
+      if (_disposed || generation != _listingGeneration) return;
+      _listing = latest;
+      notifyListeners();
+    } catch (error) {
+      debugPrint('Listing refresh failed: $error');
+    }
+  }
+
   SyntheticListingRecord get listing => _listing;
 
   bool get changed => _changed;
 
   /// Swaps in the record returned by the server after a seller action.
   void replaceListing(SyntheticListingRecord listing) {
+    // A refresh started before the edit would put the old listing back.
+    _listingGeneration++;
     _listing = listing;
     _changed = true;
     notifyListeners();
@@ -59,8 +93,15 @@ class ListingPageController extends ChangeNotifier {
   int get currentImageIndex => _currentImageIndex;
 
   @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  @override
   void dispose() {
+    _disposed = true;
     _market.dispose();
+    _listings.dispose();
     super.dispose();
   }
 

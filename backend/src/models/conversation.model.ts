@@ -34,8 +34,16 @@ export interface ConversationSummary {
     negotiation_status: string | null;
     offered_price: number | null;
     offered_quantity: number | null;
+    // How that offer says the produce changes hands; null on offers from
+    // before migration 006.
+    delivery_method: string | null;
+    drop_off_center_id: number | null;
+    center_name: string | null;
+    courier_name: string | null;
+    // Why the seller turned it down, when they said.
+    decline_reason: string | null;
     // Who accepted that negotiation, and whether the caller has yet to see
-    // the "deal closed" screen for it.
+    // the "deal closed" screen, which comes once the buyer confirms receipt.
     accepted_by: number | null;
     celebration_pending: boolean;
     // The order placed on that latest negotiation, if any.
@@ -70,8 +78,9 @@ const conversationQuery = `
                      CASE WHEN c.buyer_id = $1 THEN c.buyer_last_read_at ELSE c.seller_last_read_at END, '-infinity')
                 THEN 1 ELSE 0 END AS is_unread,
            n.negotiation_id, n.status AS negotiation_status, n.offered_price, n.offered_quantity,
+           n.delivery_method, n.drop_off_center_id, bc.location_name AS center_name, n.courier_name, n.decline_reason,
            n.accepted_by,
-           CASE WHEN n.status = 'accepted'
+           CASE WHEN o.order_status = 'delivered'
                  AND (CASE WHEN c.buyer_id = $1 THEN n.buyer_celebrated_at ELSE n.seller_celebrated_at END) IS NULL
                 THEN 1 ELSE 0 END AS celebration_pending,
            o.order_id, o.order_status,
@@ -84,12 +93,15 @@ const conversationQuery = `
     JOIN users b ON b.user_id = c.buyer_id
     JOIN users s ON s.user_id = c.seller_id
     JOIN products p ON p.product_id = c.product_id
+    -- The seller's farm address, or the one they registered with: the same
+    -- place the listing shows (sellerPlaceJoins in product.model.ts).
     LEFT JOIN farmer_profiles fp ON fp.farmer_id = c.seller_id
-    LEFT JOIN addresses a ON a.address_id = fp.address_id
+    LEFT JOIN addresses a ON a.address_id = COALESCE(fp.address_id, s.preferred_address_id)
     LEFT JOIN negotiations n ON n.negotiation_id = (
         SELECT negotiation_id FROM negotiations WHERE conversation_id = c.conversation_id ORDER BY negotiation_id DESC LIMIT 1
     )
     LEFT JOIN orders o ON o.negotiation_id = n.negotiation_id
+    LEFT JOIN bagsakan_centers bc ON bc.center_id = n.drop_off_center_id
 `;
 
 function mapConversation(row: Record<string, unknown>): ConversationSummary {
@@ -118,6 +130,11 @@ function mapConversation(row: Record<string, unknown>): ConversationSummary {
         negotiation_status: str(row.negotiation_status),
         offered_price: num(row.offered_price),
         offered_quantity: num(row.offered_quantity),
+        delivery_method: str(row.delivery_method),
+        drop_off_center_id: num(row.drop_off_center_id),
+        center_name: str(row.center_name),
+        courier_name: str(row.courier_name),
+        decline_reason: str(row.decline_reason),
         accepted_by: num(row.accepted_by),
         celebration_pending: Number(row.celebration_pending) === 1,
         order_id: num(row.order_id),

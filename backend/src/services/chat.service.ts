@@ -3,6 +3,7 @@ import { MessageModel, NewMessage, StoredMessage } from "#models/message.model";
 import { NotificationModel } from "#models/notification.model";
 import { UserModel } from "#models/user.model";
 import { emitToUsers } from "#services/socket.service";
+import { belongsToThread, ThreadBounds } from "#services/chat-thread-filter";
 
 /** A message as the API returns it: the DynamoDB item plus the sender's name. */
 export type ChatMessage = StoredMessage & { sender_name: string };
@@ -60,6 +61,12 @@ export async function sendChatMessage(input: NewMessage): Promise<ChatMessage> {
     return message;
 }
 
-export async function listChatMessages(conversationId: number, afterId?: string): Promise<ChatMessage[]> {
-    return withSenderNames(await MessageModel.listForConversation(conversationId, afterId));
+// Leftovers stored under a reused conversation_id are left out; see
+// chat-thread-filter.ts.
+export async function listChatMessages(
+    thread: ThreadBounds & { conversation_id: number },
+    afterId?: string,
+): Promise<ChatMessage[]> {
+    const stored = await MessageModel.listForConversation(thread.conversation_id, afterId);
+    return withSenderNames(stored.filter((message) => belongsToThread(message, thread)));
 }

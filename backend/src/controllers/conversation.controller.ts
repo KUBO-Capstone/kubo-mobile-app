@@ -77,7 +77,7 @@ export const getMessages = async (req: Request, res: Response): Promise<void> =>
         res.status(400).json({ success: false, message: 'after must be a message id' });
         return;
     }
-    res.json({ success: true, data: await listChatMessages(conversation.conversation_id, after) });
+    res.json({ success: true, data: await listChatMessages(conversation, after) });
 };
 
 export const sendMessage = async (req: Request, res: Response): Promise<void> => {

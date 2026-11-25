@@ -101,8 +101,13 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         businessType: (_user['business_type'] ?? '').toString().trim(),
         profilePrivacy: _privacy,
       );
-      // Kept on the signed-in user too, so _latestUser hands it back.
-      if (_isSignedInUser(AuthService.currentUser)) AuthService.updateCurrentUser(updated);
+      // Only the privacy goes onto the signed-in user, so _latestUser hands
+      // it back. The rest of this answer is the profile as this page sent it
+      // and could be older than what the signed-in user holds by now.
+      final privacy = updated['profile_privacy'];
+      if (privacy != null && _isSignedInUser(AuthService.currentUser)) {
+        AuthService.updateCurrentUser({'profile_privacy': privacy});
+      }
       if (!mounted) return;
       setState(() => _user = updated);
       ScaffoldMessenger.of(context).showSnackBar(

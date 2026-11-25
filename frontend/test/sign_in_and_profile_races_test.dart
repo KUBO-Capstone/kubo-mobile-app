@@ -59,6 +59,31 @@ void main() {
       });
     });
 
+    test('a registration answering after another sign-in committed does not replace it', () async {
+      final registered = Completer<Object?>();
+      final api = FakeApi({
+        'POST /auth/register': (_) => registered.future,
+        'POST /auth/login': (_) => {...account(2, 'fast@kubo.local'), 'token': 'fast.token'},
+      });
+      await api.run(() async {
+        final signUp = AuthService();
+        final signIn = AuthService();
+        final registration = signUp.register(
+          firstName: 'New', lastName: 'User', email: 'new@kubo.local', password: 'password123',
+          contactNumber: '09171234567', region: 'NCR', province: '', cityMunicipality: 'Manila', zipCode: '1000',
+        );
+        await Future<void>.delayed(Duration.zero);
+        await signIn.login(email: 'fast@kubo.local', password: 'password123');
+
+        registered.complete({...account(3, 'new@kubo.local'), 'token': 'new.token'});
+        await expectLater(registration, throwsA(isA<SignInSuperseded>()));
+        expect(AuthService.currentUserId, 2);
+        expect(AuthService.accessToken, 'fast.token');
+        signUp.dispose();
+        signIn.dispose();
+      });
+    });
+
     test('a sign-in started after the last one finished goes through as usual', () async {
       var next = 0;
       final api = FakeApi({
@@ -162,6 +187,37 @@ void main() {
         GoogleAuth.signInForIdToken(),
         throwsA(predicate((error) => error.toString().contains('not available on this device'))),
       );
+    });
+  });
+
+  testWidgets('saving privacy puts only the privacy on the signed-in user', (tester) async {
+    final opened = {...account(7, 'juan@gmail.com'), 'contact_number': '', 'bio': 'old bio'};
+    AuthService.currentUser = Map<String, dynamic>.of(opened);
+    final api = FakeApi({
+      // The server answers with the profile as this page sent it.
+      'PATCH /users/7/profile': (_) => {
+            ...opened,
+            'profile_privacy': {'public_profile': true, 'show_bio': true, 'show_contact_number': false, 'show_location': true},
+          },
+    });
+    await api.run(() async {
+      await tester.pumpWidget(MaterialApp(home: AccountSettingsPage(user: opened, onLogout: () async {})));
+      // Saved from the "complete your profile" banner while this page is open.
+      AuthService.updateCurrentUser({'contact_number': '09171234567', 'bio': 'new bio'});
+
+      // The list only builds what is on screen.
+      final toggle = find.text('Show contact number');
+      await tester.scrollUntilVisible(toggle, 200);
+      await tester.tap(toggle);
+      await tester.pump();
+      final save = find.text('Save privacy');
+      await tester.scrollUntilVisible(save, 200);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+
+      expect((AuthService.currentUser?['profile_privacy'] as Map)['show_contact_number'], isFalse);
+      expect(AuthService.currentUser?['contact_number'], '09171234567', reason: 'not overwritten by the older copy');
+      expect(AuthService.currentUser?['bio'], 'new bio');
     });
   });
 

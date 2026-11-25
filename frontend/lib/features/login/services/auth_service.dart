@@ -50,7 +50,8 @@ class AuthService {
   static DateTime? _refreshedAt;
   static bool _isRefreshing = false;
 
-  /// Goes up each time an email or Google sign-in commits its session.
+  /// Goes up each time a sign-in (email, Google or a new registration)
+  /// commits its session.
   static int _signInCommits = 0;
 
   /// The signed-in user's row, or null when nobody is logged in.
@@ -200,8 +201,11 @@ class AuthService {
     required String province,
     required String cityMunicipality,
     required String zipCode,
-  }) async {
-    final response = await _post('/auth/register', {
+  }) {
+    // Same rule as the sign-ins below. If another sign-in finished first,
+    // the new account still exists and can be logged into later; it just
+    // does not replace the session that won.
+    return _signIn(() => _post('/auth/register', {
       'first_name': firstName,
       'last_name': lastName,
       'email': email,
@@ -211,9 +215,7 @@ class AuthService {
       'province': province,
       'city_municipality': cityMunicipality,
       'zip_code': zipCode,
-    });
-
-    return _startSession(readData(response) as Map<String, dynamic>);
+    }));
   }
 
   Future<Map<String, dynamic>> login({

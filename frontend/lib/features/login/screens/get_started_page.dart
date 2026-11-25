@@ -151,6 +151,8 @@ class _GetStartedPageState extends State<GetStartedPage> {
         ),
         (route) => false,
       );
+    } on SignInSuperseded {
+      // Another sign-in finished first and has already opened the app.
     } catch (error) {
       if (mounted) {
         _showMessage(error.toString().replaceFirst('Exception: ', ''));

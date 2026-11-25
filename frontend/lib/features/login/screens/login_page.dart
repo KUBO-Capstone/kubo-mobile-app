@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/app_svg_icon.dart';
 import '../../shell/screens/app_shell.dart';
 import '../services/auth_service.dart';
 import 'create_account_page.dart';
@@ -219,14 +221,7 @@ class _AuthButtonIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     switch (icon) {
       case _AuthIcon.google:
-        return const Text(
-          'G',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF4285F4),
-          ),
-        );
+        return const AppSvgIcon(assetPath: AppIcons.googleLogo, size: 20);
       case _AuthIcon.email:
         return const Icon(
           Icons.email_outlined,

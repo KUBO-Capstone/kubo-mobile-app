@@ -54,6 +54,19 @@ class AuthService {
   static int? get currentUserId =>
       int.tryParse(currentUser?['user_id']?.toString() ?? '');
 
+  /// What the signed-in account still lacks before it can make an offer or
+  /// list produce: email sign-up asks for both, an account made with Google
+  /// starts without them. Empty when nothing is missing, and when nobody is
+  /// signed in (screens handle that case themselves).
+  static List<String> get missingProfileDetails {
+    final user = currentUser;
+    if (user == null) return const <String>[];
+    return <String>[
+      if ((user['contact_number']?.toString().trim() ?? '').isEmpty) 'contact number',
+      if (user['preferred_address_id'] == null) 'address',
+    ];
+  }
+
   static void updateCurrentUser(Map<String, dynamic> user) {
     currentUser = {
       ...?currentUser,

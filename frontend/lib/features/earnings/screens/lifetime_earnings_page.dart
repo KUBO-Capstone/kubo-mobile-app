@@ -7,6 +7,7 @@ import '../../../shared/data/listing_service.dart';
 import '../../../shared/data/profile_service.dart';
 import '../../chat/widgets/counter_offer_dialog.dart' show formatAmount;
 import '../../listing/screens/create_listing_page.dart';
+import '../../profile/widgets/complete_profile_prompt.dart';
 import '../../listing/screens/listing_page.dart';
 import '../../login/services/auth_service.dart';
 import '../widgets/earnings_illustration.dart';
@@ -67,6 +68,7 @@ class _LifetimeEarningsPageState extends State<LifetimeEarningsPage> {
   }
 
   Future<void> _createListing() async {
+    if (!ensureProfileComplete(context, toDo: 'create a listing')) return;
     await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const CreateListingPage()));
     if (mounted) _load();
   }

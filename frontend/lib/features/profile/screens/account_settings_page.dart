@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/profile_service.dart';
+import '../../login/services/auth_service.dart';
 import 'edit_profile_page.dart';
 import 'change_password_page.dart';
 import 'fulfillment_settings_page.dart';
@@ -68,7 +69,11 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         builder: (_) => EditProfilePage(user: _user),
       ),
     );
-    if (updated != null && mounted) setState(() => _user = updated);
+    if (updated == null) return;
+    // The app's copy of the signed-in user too: a contact number and
+    // address saved here are what let the account make offers and list.
+    AuthService.updateCurrentUser(updated);
+    if (mounted) setState(() => _user = updated);
   }
 
   Future<void> _savePrivacy() async {

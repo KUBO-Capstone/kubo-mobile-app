@@ -38,8 +38,6 @@ class ProfileEmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.inbox_outlined, size: 56, color: AppColors.green),
-          const SizedBox(height: 14),
           Text(
             title,
             textAlign: TextAlign.center,

@@ -103,6 +103,15 @@ class _MakeOfferSheetState extends State<_MakeOfferSheet> {
     super.dispose();
   }
 
+  /// Shown under the quantity field, as it is typed, when it asks for more
+  /// than the listing has left; null otherwise.
+  String? get _quantityError {
+    final available = listing.availableQuantity;
+    final quantity = double.tryParse(_quantityController.text.trim());
+    if (available == null || quantity == null || quantity <= available) return null;
+    return 'Only ${_trim(available)} $unit available';
+  }
+
   Future<void> _submit() async {
     final price = double.tryParse(_priceController.text.trim());
     final quantity = double.tryParse(_quantityController.text.trim());
@@ -114,11 +123,8 @@ class _MakeOfferSheetState extends State<_MakeOfferSheet> {
       setState(() => _error = 'Enter a valid quantity.');
       return;
     }
-    final available = listing.availableQuantity;
-    if (available != null && quantity > available) {
-      setState(() => _error = 'Only ${_trim(available)} $unit available.');
-      return;
-    }
+    // The quantity field already shows this in red under itself.
+    if (_quantityError != null) return;
     final fulfillment = _fulfillment;
     if (!isCompleteFulfillment(fulfillment)) {
       setState(() => _error = fulfillment == null
@@ -204,6 +210,9 @@ class _MakeOfferSheetState extends State<_MakeOfferSheet> {
                     hint: 'How much',
                     suffix: unit,
                     enabled: !_submitting,
+                    errorText: _quantityError,
+                    // Re-checks against what is available on every keystroke.
+                    onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 20),
                   if (_reachError != null)
@@ -290,6 +299,8 @@ class _OfferField extends StatelessWidget {
     required this.suffix,
     required this.enabled,
     this.autofocus = false,
+    this.errorText,
+    this.onChanged,
   });
 
   final TextEditingController controller;
@@ -297,6 +308,10 @@ class _OfferField extends StatelessWidget {
   final String suffix;
   final bool enabled;
   final bool autofocus;
+
+  /// Turns the outline red and is shown under the field when set.
+  final String? errorText;
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -309,6 +324,7 @@ class _OfferField extends StatelessWidget {
       controller: controller,
       enabled: enabled,
       autofocus: autofocus,
+      onChanged: onChanged,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       style: const TextStyle(color: AppColors.black, fontSize: 18, fontWeight: FontWeight.w500),
       decoration: InputDecoration(
@@ -321,6 +337,10 @@ class _OfferField extends StatelessWidget {
         border: border(AppColors.border, 0),
         enabledBorder: border(AppColors.border, 0),
         focusedBorder: border(AppColors.green, 1.5),
+        errorText: errorText,
+        errorStyle: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
+        errorBorder: border(Colors.redAccent, 1.5),
+        focusedErrorBorder: border(Colors.redAccent, 1.5),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
     );

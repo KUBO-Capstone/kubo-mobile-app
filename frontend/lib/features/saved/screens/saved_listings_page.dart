@@ -58,20 +58,25 @@ class _SavedListingsPageState extends State<SavedListingsPage> {
             return const Center(child: CircularProgressIndicator(color: AppColors.green));
           }
           final error = _controller.errorMessage;
+          // The page has nothing else on it, so these sit in the middle.
           if (error != null && listings.isEmpty) {
-            return ProfileEmptyState(
-              title: 'Could not load saved listings',
-              message: error,
-              actionLabel: 'Try again',
-              onActionPressed: _controller.load,
+            return Center(
+              child: ProfileEmptyState(
+                title: 'Could not load saved listings',
+                message: error,
+                actionLabel: 'Try again',
+                onActionPressed: _controller.load,
+              ),
             );
           }
           if (listings.isEmpty) {
-            return ProfileEmptyState(
-              title: 'No saved listings yet',
-              message: 'Tap the heart on a listing to keep track of it here.',
-              actionLabel: 'Browse listings',
-              onActionPressed: () => Navigator.of(context).pop(),
+            return Center(
+              child: ProfileEmptyState(
+                title: 'No saved listings yet',
+                message: 'Tap the heart on a listing to keep track of it here.',
+                actionLabel: 'Browse listings',
+                onActionPressed: () => Navigator.of(context).pop(),
+              ),
             );
           }
           return RefreshIndicator(

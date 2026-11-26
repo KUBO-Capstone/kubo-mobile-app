@@ -591,7 +591,6 @@ class _ExplorePageState extends State<ExplorePage> {
     }
     if (_hasActiveFilter) {
       return _FeedMessage(
-        icon: Icons.filter_alt_off_outlined,
         title: 'Nothing here yet',
         message: _focusLocation != null && _selectedRegionFilter == 'All'
             ? 'No listings within ${_radiusKm.toStringAsFixed(0)} km of ${_focusLocation!.label}.'
@@ -646,14 +645,15 @@ class _ExplorePageState extends State<ExplorePage> {
 /// the filters.
 class _FeedMessage extends StatelessWidget {
   const _FeedMessage({
-    required this.icon,
+    this.icon,
     required this.title,
     required this.message,
     required this.actionLabel,
     required this.onAction,
   });
 
-  final IconData icon;
+  /// Drawn above the title when given; the filtered-out message has none.
+  final IconData? icon;
   final String title;
   final String message;
   final String actionLabel;
@@ -666,8 +666,10 @@ class _FeedMessage extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 44, color: AppColors.green),
-          const SizedBox(height: 12),
+          if (icon != null) ...[
+            Icon(icon, size: 44, color: AppColors.green),
+            const SizedBox(height: 12),
+          ],
           Text(
             title,
             textAlign: TextAlign.center,

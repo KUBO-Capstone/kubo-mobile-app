@@ -161,8 +161,11 @@ void main() {
 
       expect(tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers, hasLength(2));
       expect(find.text('3 listings in 2 locations'), findsOneWidget);
-      // The shared pin shows its count in place of the icon.
+      // Every pin keeps the produce icon; the shared one adds a count badge,
+      // the single one has none.
+      expect(find.byIcon(Icons.inventory_2_outlined), findsNWidgets(2));
       expect(find.text('2'), findsOneWidget);
+      expect(find.text('1'), findsNothing);
     });
 
     testWidgets("a town's pin lists every seller's listings there", (tester) async {

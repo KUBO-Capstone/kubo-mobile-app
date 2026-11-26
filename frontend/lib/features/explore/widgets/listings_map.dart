@@ -470,6 +470,8 @@ class _ListingsMapState extends State<ListingsMap> {
                               minZoom: kuboMapMinZoom,
                               maxZoom: kuboMapMaxZoom,
                               cameraConstraint: kuboMapBounds,
+                              // A resize can leave the view past the limit; put it back.
+                              onMapEvent: kuboMapKeepInBounds(_mapController),
                             ),
                             children: [
                               TileLayer(
@@ -503,8 +505,8 @@ class _ListingsMapState extends State<ListingsMap> {
                                     for (final pin in farmPins)
                                       Marker(
                                         point: pin.point,
-                                        width: 44,
-                                        height: 46,
+                                        width: _MapPin.markerWidth,
+                                        height: _MapPin.markerHeight,
                                         alignment: Alignment.topCenter,
                                         child: GestureDetector(
                                           onTap:
@@ -521,8 +523,8 @@ class _ListingsMapState extends State<ListingsMap> {
                                           center.latitude!,
                                           center.longitude!,
                                         ),
-                                        width: 44,
-                                        height: 46,
+                                        width: _MapPin.markerWidth,
+                                        height: _MapPin.markerHeight,
                                         alignment: Alignment.topCenter,
                                         child: GestureDetector(
                                           onTap:
@@ -668,10 +670,16 @@ class _ListingsMapState extends State<ListingsMap> {
 class _MapPin extends StatelessWidget {
   const _MapPin({required this.icon, required this.color, this.count});
 
+  /// Width and height of a marker drawing this pin: the head (circle plus
+  /// room for the badge) and the arrow under it.
+  static const double markerWidth = 44;
+  static const double markerHeight = 52;
+
   final IconData icon;
   final Color color;
 
-  /// Shown instead of [icon] when the pin stands for more than one thing.
+  /// How many things the pin stands for. Two or more show as a badge on the
+  /// circle's top right; the icon always stays.
   final int? count;
 
   @override
@@ -680,28 +688,30 @@ class _MapPin extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border: Border.all(color: AppColors.white, width: 2),
+        // The circle sits at the bottom centre, leaving room above and to
+        // its right for the badge to overlap its corner.
+        SizedBox(
+          width: markerWidth,
+          height: 34,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.bottomCenter,
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.white, width: 2),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 15, color: AppColors.white),
+              ),
+              if (count != null && count > 1)
+                Positioned(top: 0, right: 0, child: _CountBadge(count: count)),
+            ],
           ),
-          alignment: Alignment.center,
-          child: count != null && count > 1
-              ? Text(
-                  count > 99 ? '99+' : '$count',
-                  // Fixed size: the circle does not grow with the text scale.
-                  textScaler: TextScaler.noScaling,
-                  style: TextStyle(
-                    color: AppColors.white,
-                    fontSize: count > 99 ? 9 : 12,
-                    fontWeight: FontWeight.w800,
-                    height: 1,
-                  ),
-                )
-              : Icon(icon, size: 15, color: AppColors.white),
         ),
         Icon(Icons.arrow_drop_down, color: color, size: 18),
       ],
@@ -709,8 +719,41 @@ class _MapPin extends StatelessWidget {
   }
 }
 
-/// Brand-green pin marking a place with produce listed. It shows how many
-/// listings are there when there is more than one.
+/// The number on a pin's top right: how many listings are at that place.
+class _CountBadge extends StatelessWidget {
+  const _CountBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 18,
+      constraints: const BoxConstraints(minWidth: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppColors.black,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: AppColors.white, width: 1.5),
+      ),
+      child: Text(
+        count > 99 ? '99+' : '$count',
+        // Fixed size: the badge does not grow with the text scale.
+        textScaler: TextScaler.noScaling,
+        style: const TextStyle(
+          color: AppColors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          height: 1,
+        ),
+      ),
+    );
+  }
+}
+
+/// Brand-green pin marking a place with produce listed: the produce icon,
+/// with a badge counting the listings there when there is more than one.
 class _FarmMarker extends StatelessWidget {
   const _FarmMarker({required this.listingCount});
 

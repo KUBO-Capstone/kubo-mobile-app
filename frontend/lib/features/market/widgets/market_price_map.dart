@@ -125,6 +125,8 @@ class _MarketPriceMapState extends State<MarketPriceMap> {
                             minZoom: kuboMapMinZoom,
                             maxZoom: kuboMapMaxZoom,
                             cameraConstraint: kuboMapBounds,
+                            // A resize can leave the view past the limit; put it back.
+                            onMapEvent: kuboMapKeepInBounds(_mapController),
                           ),
                           children: [
                             TileLayer(

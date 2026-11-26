@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -15,15 +17,83 @@ final InteractionOptions kuboMapInteraction = InteractionOptions(
 );
 
 /// Zoom range shared by the app's maps: from the whole country down to
-/// street level. OpenStreetMap's tiles stop at 19.
+/// street level. OpenStreetMap's tiles stop at 19. How far out a map really
+/// goes is set by [kuboMapBounds], which depends on the map's size; this is
+/// only the floor below that.
 const double kuboMapMinZoom = 4.5;
 const double kuboMapMaxZoom = 18;
 
-/// The Philippines with a margin. The centre of a map cannot be dragged
-/// outside it, so nobody ends up lost in open sea.
-final CameraConstraint kuboMapBounds = CameraConstraint.containCenter(
-  bounds: LatLngBounds(const LatLng(3.5, 115.5), const LatLng(22.0, 128.0)),
-);
+/// How far any map can show: the Philippine Area of Responsibility (PAR,
+/// 5–25°N, 115–135°E), widened a little to the south and west so the whole
+/// country stays reachable (Tawi-Tawi's southern islands sit near 4.6°N,
+/// Pag-asa in the Kalayaan group near 114.3°E). Bits of the neighbours
+/// inside this box (Taiwan, northern Borneo) are unavoidable.
+final LatLngBounds kuboPhilippineArea = LatLngBounds(const LatLng(4.0, 114.0), const LatLng(25.0, 135.0));
+
+/// Keeps every map's whole view inside [kuboPhilippineArea]: it cannot be
+/// zoomed out past the point where that area fills the map, or panned past
+/// its edges.
+final KuboContainCamera kuboMapBounds = KuboContainCamera(kuboPhilippineArea);
+
+/// A camera constraint that keeps the map's visible edges inside [bounds].
+///
+/// flutter_map's own `CameraConstraint.contain` drops a whole move that would
+/// show anything outside, so a pinch or the zoom-out button stops short and
+/// a resized map can be left stuck outside. This one moves the camera to the
+/// nearest view that fits instead: zoomed in just enough, then slid back in.
+class KuboContainCamera extends CameraConstraint {
+  const KuboContainCamera(this.bounds);
+
+  final LatLngBounds bounds;
+
+  /// The furthest-out zoom at which [bounds] still cover the whole view of
+  /// [camera], which depends on the map's size on screen.
+  double minZoomFor(MapCamera camera) {
+    final size = camera.size;
+    if (!_isLaidOut(size)) return camera.zoom;
+    final northEast = camera.projectAtZoom(bounds.northEast, camera.zoom);
+    final southWest = camera.projectAtZoom(bounds.southWest, camera.zoom);
+    final spanWidth = (northEast.dx - southWest.dx).abs();
+    final spanHeight = (northEast.dy - southWest.dy).abs();
+    if (spanWidth == 0 || spanHeight == 0) return camera.zoom;
+    // Each zoom level doubles the area's size on screen.
+    final scale = math.max(size.width / spanWidth, size.height / spanHeight);
+    return camera.zoom + math.log(scale) / math.ln2;
+  }
+
+  static bool _isLaidOut(Size size) => size.isFinite && size.width > 0 && size.height > 0;
+
+  @override
+  MapCamera constrain(MapCamera camera) {
+    // Before the first layout the map has no real size to fit yet.
+    if (!_isLaidOut(camera.size)) return camera;
+    // A hair over the limit, so rounding can never make the area fall short.
+    final minZoom = minZoomFor(camera) + 1e-6;
+    final zoomed = camera.zoom < minZoom ? camera.withPosition(zoom: minZoom) : camera;
+    return CameraConstraint.contain(bounds: bounds).constrain(zoomed) ?? zoomed;
+  }
+
+  @override
+  bool operator ==(Object other) => other is KuboContainCamera && other.bounds == bounds;
+
+  @override
+  int get hashCode => bounds.hashCode;
+}
+
+/// For `MapOptions.onMapEvent` on every map using [kuboMapBounds]. The
+/// constraint applies when the map moves, not when it is resized, so a map
+/// that grows (the explore map expanded, a phone turned) could be left
+/// showing past the edges, and flutter_map's debug check would then fail.
+/// On each size change, including the first layout, the camera is put back
+/// inside.
+ValueChanged<MapEvent> kuboMapKeepInBounds(MapController controller) {
+  return (event) {
+    if (event is! MapEventNonRotatedSizeChange) return;
+    final camera = controller.camera;
+    // move() runs the constraint, which does the putting back.
+    if (kuboMapBounds.constrain(camera) != camera) controller.move(camera.center, camera.zoom);
+  };
+}
 
 /// Centre and zoom that show the whole country, for a map with nothing to
 /// frame yet.
@@ -134,12 +204,16 @@ class _KuboMapZoomControlsState extends State<KuboMapZoomControls> with SingleTi
     widget.controller.move(camera.center, zoom.value);
   }
 
+  // How far out this map can go at its current size: the Philippine area
+  // filling it, never below the shared floor.
+  static double _minZoom(MapCamera camera) => math.max(kuboMapMinZoom, kuboMapBounds.minZoomFor(camera));
+
   void _zoomBy(double levels) {
     final camera = _camera;
     if (camera == null) return;
     final gliding = _glide.isAnimating;
     final target = ((gliding ? _target ?? camera.zoom : camera.zoom) + levels)
-        .clamp(kuboMapMinZoom, kuboMapMaxZoom)
+        .clamp(_minZoom(camera), kuboMapMaxZoom)
         .toDouble();
     _target = target;
     if (MediaQuery.disableAnimationsOf(context)) {
@@ -161,7 +235,9 @@ class _KuboMapZoomControlsState extends State<KuboMapZoomControls> with SingleTi
     return StreamBuilder<MapEvent>(
       stream: widget.controller.mapEventStream,
       builder: (context, _) {
-        final zoom = _camera?.zoom;
+        final camera = _camera;
+        final zoom = camera?.zoom;
+        final minZoom = camera == null ? kuboMapMinZoom : _minZoom(camera);
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -174,7 +250,7 @@ class _KuboMapZoomControlsState extends State<KuboMapZoomControls> with SingleTi
             KuboMapButton(
               icon: Icons.remove,
               tooltip: 'Zoom out',
-              onTap: zoom != null && zoom <= kuboMapMinZoom + 0.01 ? null : () => _zoomBy(-1),
+              onTap: zoom != null && zoom <= minZoom + 0.01 ? null : () => _zoomBy(-1),
             ),
           ],
         );

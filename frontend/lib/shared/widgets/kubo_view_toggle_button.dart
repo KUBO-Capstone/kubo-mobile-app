@@ -53,7 +53,7 @@ class KuboViewToggleButton extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Container(
-            width: 62,
+            width: 80,
             height: 2,
             color: selected ? AppColors.green : Colors.transparent,
           ),

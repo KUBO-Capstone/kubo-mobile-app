@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
+import '../../core/utils/media_files.dart' show uploadContentType;
 
 import '../../core/constants/api_config.dart';
 import '../../core/utils/formatters.dart';
@@ -23,19 +23,19 @@ class ReviewTag {
 abstract final class ReviewTags {
   /// What a buyer can say about a seller and their produce.
   static const aboutSeller = <ReviewTag>[
-    ReviewTag('fresh', 'Fresh produce'),
-    ReviewTag('as_described', 'As described'),
-    ReviewTag('well_packed', 'Well packed'),
-    ReviewTag('on_time', 'On time'),
-    ReviewTag('fair_price', 'Fair price'),
+    ReviewTag('fresh', 'Fresh Produce'),
+    ReviewTag('as_described', 'As Described'),
+    ReviewTag('well_packed', 'Well Packed'),
+    ReviewTag('on_time', 'On Time'),
+    ReviewTag('fair_price', 'Fair Price'),
     ReviewTag('friendly', 'Friendly'),
   ];
 
   /// What a seller can say about a buyer.
   static const aboutBuyer = <ReviewTag>[
-    ReviewTag('smooth_deal', 'Smooth deal'),
-    ReviewTag('on_time', 'On time'),
-    ReviewTag('clear_communication', 'Clear communication'),
+    ReviewTag('smooth_deal', 'Smooth Deal'),
+    ReviewTag('on_time', 'On Time'),
+    ReviewTag('clear_communication', 'Clear Communication'),
     ReviewTag('friendly', 'Friendly'),
   ];
 
@@ -55,7 +55,7 @@ const ratingLabels = <int, String>{
   1: 'Poor',
   2: 'Fair',
   3: 'Good',
-  4: 'Very good',
+  4: 'Very Good',
   5: 'Excellent',
 };
 
@@ -187,12 +187,8 @@ class ReviewService {
     if (files.isEmpty) return const <String>[];
     final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/orders/$orderId/review/photos'));
     for (final file in files) {
-      final subtype = switch (file.path.split('.').last.toLowerCase()) {
-        'png' => 'png',
-        'webp' => 'webp',
-        _ => 'jpeg',
-      };
-      request.files.add(await http.MultipartFile.fromPath('photos', file.path, contentType: MediaType('image', subtype)));
+      // Photos and videos both go up as `photos`; the server tells them apart.
+      request.files.add(await http.MultipartFile.fromPath('photos', file.path, contentType: uploadContentType(file.path)));
     }
     // Photos take longer than the usual JSON round trip on rural data.
     final response = await sendRequest(

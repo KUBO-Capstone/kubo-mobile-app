@@ -10,6 +10,7 @@ class ReportService {
 
   final http.Client _client;
 
+  /// App feedback or a bug report, from the drawer's Report page.
   Future<void> submit({
     required String name,
     required String category,
@@ -24,6 +25,26 @@ class ReportService {
           'category': category,
           'message': message,
         }),
+      ),
+    );
+    checkResponse(response);
+  }
+
+  /// Reports a listing. Throws with the server's message when it is refused,
+  /// for example when the user has already reported it.
+  Future<void> reportListing({required int productId, required String reason}) =>
+      _fileReport('${ApiConfig.baseUrl}/reports/listings/$productId', reason);
+
+  /// Reports an account.
+  Future<void> reportUser({required int userId, required String reason}) =>
+      _fileReport('${ApiConfig.baseUrl}/reports/users/$userId', reason);
+
+  Future<void> _fileReport(String url, String reason) async {
+    final response = await sendRequest(
+      () => _client.post(
+        Uri.parse(url),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({'reason': reason}),
       ),
     );
     checkResponse(response);

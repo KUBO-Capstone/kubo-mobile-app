@@ -68,7 +68,7 @@ void main() {
     expect(AppShellController.instance.current, AppTab.profile);
     expect(find.text('Maria Santos'), findsNothing);
     expect(find.text('Leonard Cruz'), findsOneWidget);
-    expect(find.text('Edit profile'), findsOneWidget);
+    expect(find.text('Edit Profile'), findsOneWidget);
     expect(find.byTooltip('Back'), findsNothing);
   });
 
@@ -100,7 +100,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Edit profile'), findsOneWidget);
+    expect(find.text('Edit Profile'), findsOneWidget);
     expect(find.byTooltip('Back'), findsOneWidget);
     expect(navItem('Profile'), findsOneWidget);
   });

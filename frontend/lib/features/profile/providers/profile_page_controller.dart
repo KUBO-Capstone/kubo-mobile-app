@@ -161,11 +161,15 @@ class ProfilePageController extends ChangeNotifier {
     final province = address['province']?.toString() ?? '';
     final addressLocation = city.isEmpty ? '' : '$city, ${region.toUpperCase() == 'NCR' ? region : province}'.trim();
     final typedLocation = field('location');
+    final privacy = _normalizePrivacy(loaded?['profile_privacy'] ?? user?['profile_privacy']);
+    // What the listing showed stands in until the profile loads, but never
+    // once the account's own answer is in (it leaves out what is hidden).
+    final mayFallBack = !isOwnProfile && loaded == null;
     final locationLabel = addressLocation.isNotEmpty
         ? addressLocation
         : typedLocation.isNotEmpty
             ? typedLocation
-            : (isOwnProfile ? '' : visitor?.locationLabel?.trim() ?? '');
+            : (mayFallBack ? visitor?.locationLabel?.trim() ?? '' : '');
 
     final bio = field('bio');
     final photo = field('profile_photo_url');
@@ -173,10 +177,11 @@ class ProfilePageController extends ChangeNotifier {
       displayName: displayName,
       username: field('email'),
       locationLabel: locationLabel,
-      about: bio.isNotEmpty ? bio : (isOwnProfile ? '' : visitor?.about?.trim() ?? ''),
+      about: bio.isNotEmpty ? bio : (mayFallBack ? visitor?.about?.trim() ?? '' : ''),
+      contactNumber: privacy['show_contact_number'] == false && !isOwnProfile ? '' : field('contact_number'),
       businessName: field('business_name'),
       businessType: field('business_type'),
-      profilePrivacy: _normalizePrivacy(loaded?['profile_privacy'] ?? user?['profile_privacy']),
+      profilePrivacy: privacy,
       joinedLabel: _joinedLabel(field('created_at')),
       followingCount: count('following_count'),
       followersCount: count('followers_count'),
@@ -388,11 +393,11 @@ class ProfilePageController extends ChangeNotifier {
         notifyListeners();
         return;
       }
-      // Only the owner sees their sold-out listings; visitors get the same
-      // list the explore tab shows.
+      // Sold-out listings show to everyone, after the ones still for sale:
+      // what a seller has sold is part of why a buyer trusts them.
       _listings = await _listingService.fetchListings(
         sellerId: userId,
-        includeUnavailable: isOwnProfile,
+        includeUnavailable: true,
       );
       notifyListeners();
     } catch (_) {

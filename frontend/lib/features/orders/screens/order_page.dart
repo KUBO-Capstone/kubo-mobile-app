@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/kubo_pressable.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -91,7 +92,7 @@ class _OrderPageState extends State<OrderPage> {
     final confirmed = await _confirm(
       title: 'Order received?',
       body: 'Only confirm once you have the produce in hand. This closes the deal and cannot be undone.',
-      action: 'Order received',
+      action: 'Order Received',
     );
     if (!confirmed) return;
     final error = await _controller.respond(OrderAction.deliver);
@@ -144,7 +145,7 @@ class _OrderPageState extends State<OrderPage> {
       title: 'Cancel this order?',
       body: 'The ${formatAmount(order.quantity)} ${order.unit} go back on the listing and '
           '${order.counterpartyName(_controller.userId ?? 0)} will see it was cancelled.',
-      action: 'Cancel order',
+      action: 'Cancel Order',
     );
     if (!confirmed) return;
     _showError(await _controller.respond(OrderAction.cancel));
@@ -259,7 +260,7 @@ class _OrderPageState extends State<OrderPage> {
           title: 'Order',
           children: [
             _Row('Quantity', '${formatAmount(order.quantity)} ${order.unit}'),
-            _Row('Agreed price', 'PHP ${formatAmount(order.price)} / ${order.unit}'),
+            _Row('Agreed Price', 'PHP ${formatAmount(order.price)} / ${order.unit}'),
             _Row('Total', 'PHP ${formatAmount(order.total)}', bold: true),
             _Row('Placed', formatDate(order.orderDate)),
           ],
@@ -287,11 +288,11 @@ class _OrderPageState extends State<OrderPage> {
                 _Row('Tracking no.', order.status == OrderStatus.pending ? '—' : 'See chat'),
             ],
             if (order.shippedAt != null)
-              _Row(order.isMeetup ? 'Dropped off' : 'Shipped', formatDate(order.shippedAt)),
+              _Row(order.isMeetup ? 'Dropped Off' : 'Shipped', formatDate(order.shippedAt)),
             if (order.handoverPhotos.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                order.isMeetup ? 'Photos at drop-off' : 'Photos at handover',
+                order.isMeetup ? 'Photos at Drop-off' : 'Photos at Handover',
                 style: const TextStyle(color: AppColors.gray, fontSize: 12),
               ),
               const SizedBox(height: 6),
@@ -311,11 +312,10 @@ class _OrderPageState extends State<OrderPage> {
         ..._buildActions(order, userId),
         if (widget.openChat) ...[
           const SizedBox(height: 8),
-          TextButton.icon(
+          TextButton(
             onPressed: () => _openChat(order),
-            icon: const Icon(Icons.chat_bubble_outline, size: 16),
-            label: Text('Open chat with ${order.counterpartyName(userId)}'),
             style: TextButton.styleFrom(foregroundColor: AppColors.green),
+            child: Text('Open Chat with ${order.counterpartyName(userId)}'),
           ),
         ],
       ],
@@ -329,12 +329,12 @@ class _OrderPageState extends State<OrderPage> {
 
     if (order.canShip(userId)) {
       buttons.add(_Primary(
-        label: order.isMeetup ? 'Mark as dropped off at center' : 'Hand over to courier',
+        label: order.isMeetup ? 'Mark as Dropped Off at Center' : 'Hand Over to Courier',
         onTap: busy ? null : () => _ship(order),
       ));
     } else if (order.canDeliver(userId)) {
       buttons.add(_Primary(
-        label: 'Order received',
+        label: 'Order Received',
         onTap: busy ? null : () => _deliver(order),
       ));
       buttons.add(const SizedBox(height: 6));
@@ -363,7 +363,7 @@ class _OrderPageState extends State<OrderPage> {
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
-        child: const Text('Cancel order', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+        child: const Text('Cancel Order', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
       ));
     }
     return buttons;
@@ -398,7 +398,7 @@ class _ReviewPanel extends StatelessWidget {
             child: Text('Tap a star to rate', style: TextStyle(color: AppColors.gray, fontSize: 11)),
           ),
         ] else ...[
-          const Text('Your review', style: TextStyle(color: AppColors.gray, fontSize: 12, fontWeight: FontWeight.w600)),
+          const Text('Your Review', style: TextStyle(color: AppColors.gray, fontSize: 12, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
           ReviewCard(review: mine, showProduct: false, margin: EdgeInsets.zero),
         ],
@@ -554,7 +554,7 @@ class _HandoverPhotosState extends State<_HandoverPhotos> {
           label: 'Handover photo ${index + 1} of ${photos.length}',
           onTapHint: 'view full screen',
           excludeSemantics: true,
-          child: GestureDetector(
+          child: KuboPressable(
             onTap: () => KuboPhotoViewer.open(
               context,
               photos: photos,

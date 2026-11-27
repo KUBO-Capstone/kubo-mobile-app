@@ -64,7 +64,7 @@ class _SavedListingsPageState extends State<SavedListingsPage> {
               child: ProfileEmptyState(
                 title: 'Could not load saved listings',
                 message: error,
-                actionLabel: 'Try again',
+                actionLabel: 'Try Again',
                 onActionPressed: _controller.load,
               ),
             );
@@ -74,7 +74,7 @@ class _SavedListingsPageState extends State<SavedListingsPage> {
               child: ProfileEmptyState(
                 title: 'No saved listings yet',
                 message: 'Tap the heart on a listing to keep track of it here.',
-                actionLabel: 'Browse listings',
+                actionLabel: 'Browse Listings',
                 onActionPressed: () => Navigator.of(context).pop(),
               ),
             );

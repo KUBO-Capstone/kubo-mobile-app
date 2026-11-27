@@ -5,14 +5,25 @@ import 'package:flutter/services.dart' show PlatformException;
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/constants/app_colors.dart';
+import 'kubo_video.dart';
+
+enum _PickKind { photo, video }
 
 /// Asks camera or gallery, then picks up to [remaining] photos. Resolves to
 /// the picked files (possibly empty), or null when the person backed out.
 /// Shows a snackbar when the picker failed or more were picked than fit.
-Future<List<File>?> pickPhotos(BuildContext context, ImagePicker picker, {required int remaining, required int max}) async {
+/// With [allowVideo], it also offers to record or choose one video, which
+/// is refused (with a snackbar) when over 10 MB.
+Future<List<File>?> pickPhotos(
+  BuildContext context,
+  ImagePicker picker, {
+  required int remaining,
+  required int max,
+  bool allowVideo = false,
+}) async {
   if (remaining <= 0) return const <File>[];
   final messenger = ScaffoldMessenger.of(context);
-  final source = await showModalBottomSheet<ImageSource>(
+  final choice = await showModalBottomSheet<(ImageSource, _PickKind)>(
     context: context,
     backgroundColor: AppColors.white,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -21,20 +32,52 @@ Future<List<File>?> pickPhotos(BuildContext context, ImagePicker picker, {requir
         children: [
           ListTile(
             leading: const Icon(Icons.camera_alt_outlined),
-            title: const Text('Take a photo'),
-            onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+            title: const Text('Take a Photo'),
+            onTap: () => Navigator.of(sheetContext).pop((ImageSource.camera, _PickKind.photo)),
           ),
           ListTile(
             leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('Choose from gallery'),
+            title: const Text('Choose Photos'),
             subtitle: Text('Up to $remaining more'),
-            onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
+            onTap: () => Navigator.of(sheetContext).pop((ImageSource.gallery, _PickKind.photo)),
           ),
+          if (allowVideo) ...[
+            ListTile(
+              leading: const Icon(Icons.videocam_outlined),
+              title: const Text('Record a Video'),
+              subtitle: const Text('Up to 10 MB'),
+              onTap: () => Navigator.of(sheetContext).pop((ImageSource.camera, _PickKind.video)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.video_library_outlined),
+              title: const Text('Choose a Video'),
+              subtitle: const Text('Up to 10 MB'),
+              onTap: () => Navigator.of(sheetContext).pop((ImageSource.gallery, _PickKind.video)),
+            ),
+          ],
         ],
       ),
     ),
   );
-  if (source == null) return null;
+  if (choice == null) return null;
+  final (source, kind) = choice;
+  if (kind == _PickKind.video) {
+    try {
+      // A minute is plenty for showing produce, and keeps most clips under 10 MB.
+      final video = await picker.pickVideo(source: source, maxDuration: const Duration(seconds: 60));
+      if (video == null) return null;
+      final file = File(video.path);
+      final tooLarge = await videoTooLargeMessage(file);
+      if (tooLarge != null) {
+        messenger.showSnackBar(SnackBar(content: Text('$tooLarge Try a shorter clip.')));
+        return null;
+      }
+      return [file];
+    } on PlatformException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message ?? 'Could not open your videos.')));
+      return null;
+    }
+  }
   final List<XFile> picked;
   try {
     // The picker rejects a limit under 2, so the last slot is a single pick.
@@ -114,17 +157,20 @@ class PhotoPickerStrip extends StatelessWidget {
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.file(
-                          photos[i],
-                          width: _tile,
-                          height: _tile,
-                          fit: BoxFit.cover,
-                          cacheWidth: decodeWidth,
-                          semanticLabel: 'Photo ${i + 1}',
+                      if (isVideoSource(photos[i].path))
+                        KuboVideoTile(source: photos[i].path, width: _tile, height: _tile)
+                      else
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.file(
+                            photos[i],
+                            width: _tile,
+                            height: _tile,
+                            fit: BoxFit.cover,
+                            cacheWidth: decodeWidth,
+                            semanticLabel: 'Photo ${i + 1}',
+                          ),
                         ),
-                      ),
                       Positioned(
                         top: -8,
                         right: -8,

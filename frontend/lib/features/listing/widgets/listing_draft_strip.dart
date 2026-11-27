@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/kubo_pressable.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/kubo_image.dart';
@@ -92,7 +93,7 @@ class _DraftThumb extends StatelessWidget {
       button: true,
       selected: selected,
       label: 'Listing $number',
-      child: GestureDetector(
+      child: KuboPressable(
         onTap: onTap,
         child: Column(
           children: [

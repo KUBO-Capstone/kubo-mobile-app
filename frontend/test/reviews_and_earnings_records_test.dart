@@ -85,7 +85,7 @@ void main() {
     expect(first.reviewerPhotoUrl, endsWith('/uploads/profile/juan.jpg'));
     expect(first.createdAt!.toUtc(), DateTime.utc(2026, 10, 29, 8, 23, 11));
     expect(reviews.reviews.last.reviewerRole, ReviewerRole.seller);
-    expect(ReviewTags.labelOf('fresh'), 'Fresh produce');
+    expect(ReviewTags.labelOf('fresh'), 'Fresh Produce');
     expect(RatingSummary.fromJson(const {'average': null, 'count': 0}).hasReviews, isFalse);
   });
 

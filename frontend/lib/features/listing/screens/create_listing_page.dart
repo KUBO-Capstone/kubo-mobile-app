@@ -179,13 +179,13 @@ class _CreateListingPageState extends State<CreateListingPage> {
           children: [
             ListTile(
               leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Choose from gallery'),
+              title: const Text('Choose from Gallery'),
               subtitle: Text('Up to $remaining more'),
               onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
             ),
             ListTile(
               leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text('Take a photo'),
+              title: const Text('Take a Photo'),
               onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
             ),
           ],
@@ -228,13 +228,13 @@ class _CreateListingPageState extends State<CreateListingPage> {
             if (index > 0)
               ListTile(
                 leading: const Icon(Icons.star_outline),
-                title: const Text('Make cover photo'),
+                title: const Text('Make Cover Photo'),
                 subtitle: const Text('Buyers see this one first'),
                 onTap: () => Navigator.of(sheetContext).pop('cover'),
               ),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: listingErrorColor),
-              title: const Text('Remove photo', style: TextStyle(color: listingErrorColor)),
+              title: const Text('Remove Photo', style: TextStyle(color: listingErrorColor)),
               onTap: () => Navigator.of(sheetContext).pop('remove'),
             ),
           ],
@@ -279,7 +279,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
       initialDate: current != null && !current.isBefore(first) && !current.isAfter(last) ? current : today,
       firstDate: first,
       lastDate: last,
-      helpText: draft.isPreorder ? 'Expected harvest date' : 'Harvest date',
+      helpText: draft.isPreorder ? 'Expected Harvest Date' : 'Harvest Date',
     );
     if (picked != null && mounted) setState(() => draft.harvestDate = picked);
   }
@@ -535,7 +535,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
           TextButton(
             onPressed: _clearDraft,
             style: TextButton.styleFrom(foregroundColor: AppColors.green),
-            child: const Text('Clear details', style: TextStyle(fontWeight: FontWeight.w800)),
+            child: const Text('Clear Details', style: TextStyle(fontWeight: FontWeight.w800)),
           ),
         if (!_isEditing && _drafts.length > 1)
           IconButton(
@@ -584,7 +584,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
       ),
       ListingFieldError(errors[DraftField.category]),
       const SizedBox(height: 18),
-      const ListingFieldLabel('Listing title'),
+      const ListingFieldLabel('Listing Title'),
       TextField(
         controller: draft.title,
         maxLength: 100,
@@ -612,12 +612,12 @@ class _CreateListingPageState extends State<CreateListingPage> {
         ),
       ),
       const SizedBox(height: 18),
-      const ListingFieldLabel('Farming method'),
+      const ListingFieldLabel('Farming Method'),
       ListingPickerField(
         placeholder: 'Select farming method',
         value: ListingOptions.labelOf(ListingOptions.farmingMethods, draft.farmingMethod),
         onTap: () => _pickOption(
-          title: 'Farming method',
+          title: 'Farming Method',
           options: ListingOptions.farmingMethods,
           selected: draft.farmingMethod,
           apply: (value) => draft.farmingMethod = value,
@@ -706,7 +706,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
         onUse: () => _useMarketPrice(reference, marketPrice),
       ),
       const SizedBox(height: 18),
-      const ListingFieldLabel('Available quantity'),
+      const ListingFieldLabel('Available Quantity'),
       TextField(
         controller: draft.quantity,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -738,7 +738,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
         onChanged: (value) => setState(() => draft.setPreorder(value)),
       ),
       const SizedBox(height: 10),
-      ListingFieldLabel(draft.isPreorder ? 'Expected harvest date' : 'Harvest date', optional: !draft.isPreorder),
+      ListingFieldLabel(draft.isPreorder ? 'Expected Harvest Date' : 'Harvest Date', optional: !draft.isPreorder),
       Row(
         children: [
           Expanded(
@@ -828,7 +828,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
                       ],
                     )
                   : Text(
-                      _isEditing ? 'Save changes' : 'List it!',
+                      _isEditing ? 'Save Changes' : 'List It!',
                       style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
                     ),
             ),

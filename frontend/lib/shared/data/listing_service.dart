@@ -132,8 +132,8 @@ class ListingService {
         .toList(growable: false);
   }
 
-  /// [includeUnavailable] also returns the seller's sold-out listings; only
-  /// the owner's profile tab asks for them.
+  /// [includeUnavailable] also returns sold-out listings, after the ones
+  /// still for sale.
   Future<List<SyntheticListingRecord>> fetchListings({
     String query = '',
     int? sellerId,

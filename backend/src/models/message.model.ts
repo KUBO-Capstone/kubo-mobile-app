@@ -1,6 +1,7 @@
 import { PutCommand, QueryCommand, QueryCommandInput } from "@aws-sdk/lib-dynamodb";
 import { isValid, monotonicFactory } from "ulid";
 import { ddb } from "#config/aws";
+import { fromMediaColumn, toMediaColumn } from "#controllers/upload.controller";
 
 // Chat messages live in the DynamoDB table ChatMessages, not SQLite/RDS:
 //   PK chatRoomId (S) = String(conversation_id) - one partition per thread
@@ -17,8 +18,11 @@ import { ddb } from "#config/aws";
 // the price on the negotiations row, the messages keep every step).
 // 'cancelled' is an accepted deal called off before it was ordered. 'order'
 // is written by the order controller for placed / shipped / delivered /
-// cancelled, with `order_id` pointing at the order.
-export type MessageType = 'text' | 'offer' | 'counter' | 'accepted' | 'declined' | 'cancelled' | 'order';
+// cancelled, with `order_id` pointing at the order. 'photo' is a picture sent
+// in the chat: `image_url` holds it, and `content` a plain-text stand-in
+// ("Sent a photo") for the inbox preview, notifications and older apps.
+// 'video' is the same for a short clip (MP4, MOV or WebM, up to 10 MB).
+export type MessageType = 'text' | 'offer' | 'counter' | 'accepted' | 'declined' | 'cancelled' | 'order' | 'photo' | 'video';
 
 /** A message as stored in DynamoDB. */
 export interface StoredMessage {
@@ -36,6 +40,9 @@ export interface StoredMessage {
     offer_details?: string;
     // On 'declined': the seller's reason, one of DECLINE_REASONS.
     decline_reason?: string;
+    // On 'photo': the picture's stored URL (see upload.controller.ts). The
+    // item keeps only its object key, like the database's media columns.
+    image_url?: string;
     sent_at: string;            // ISO 8601, UTC
 }
 
@@ -51,11 +58,19 @@ const KEY_NAMES = { '#ts': 'timestamp' };
 
 type Item = Omit<StoredMessage, 'conversation_id' | 'message_id'> & { chatRoomId: string; timestamp: string };
 
-const toItem = ({ conversation_id, message_id, ...rest }: StoredMessage): Item =>
-    ({ ...rest, chatRoomId: String(conversation_id), timestamp: message_id });
+const toItem = ({ conversation_id, message_id, image_url, ...rest }: StoredMessage): Item => ({
+    ...rest,
+    ...(image_url ? { image_url: toMediaColumn(image_url) } : {}),
+    chatRoomId: String(conversation_id),
+    timestamp: message_id,
+});
 
-const fromItem = ({ chatRoomId, timestamp, ...rest }: Item): StoredMessage =>
-    ({ ...rest, conversation_id: Number(chatRoomId), message_id: timestamp });
+const fromItem = ({ chatRoomId, timestamp, image_url, ...rest }: Item): StoredMessage => ({
+    ...rest,
+    ...(image_url ? { image_url: fromMediaColumn(image_url) } : {}),
+    conversation_id: Number(chatRoomId),
+    message_id: timestamp,
+});
 
 // Monotonic so two messages in the same millisecond still sort in send order.
 const nextId = monotonicFactory();

@@ -13,7 +13,7 @@ Future<void> _pumpPage(WidgetTester tester) async {
 void main() {
   testWidgets('List it! on an empty draft marks what is missing', (tester) async {
     await _pumpPage(tester);
-    await tester.tap(find.text('List it!'));
+    await tester.tap(find.text('List It!'));
     await tester.pump();
 
     expect(find.text('Please complete the details marked in red.'), findsOneWidget);
@@ -42,8 +42,8 @@ void main() {
   testWidgets('a template fills the description from the title', (tester) async {
     await _pumpPage(tester);
     await tester.enterText(find.widgetWithText(TextField, 'e.g. Lakatan bananas, Baguio strawberries'), 'Carabao mango');
-    await tester.scrollUntilVisible(find.text('Bullet points'), 300, scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('Bullet points'));
+    await tester.scrollUntilVisible(find.text('Bullet Points'), 300, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Bullet Points'));
     await tester.pump();
 
     expect(find.textContaining('- Produce: Carabao mango'), findsOneWidget);
@@ -53,13 +53,13 @@ void main() {
 
   testWidgets('turning on pre-order makes the harvest date required', (tester) async {
     await _pumpPage(tester);
-    await tester.scrollUntilVisible(find.text('Harvest date (Optional)'), 300, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(find.text('Harvest Date (Optional)'), 300, scrollable: find.byType(Scrollable).first);
 
     await tester.tap(find.text('Pre-order'));
     await tester.pump();
-    expect(find.text('Expected harvest date'), findsOneWidget);
+    expect(find.text('Expected Harvest Date'), findsOneWidget);
 
-    await tester.tap(find.text('List it!'));
+    await tester.tap(find.text('List It!'));
     await tester.pump();
     expect(find.text('Please pick the expected harvest date.'), findsOneWidget);
   });

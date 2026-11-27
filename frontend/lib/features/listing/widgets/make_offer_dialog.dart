@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/amount_input.dart';
 import '../../../shared/data/fulfillment_service.dart';
 import '../../../shared/data/negotiation_service.dart';
 import '../../../shared/data/synthetic_records.dart';
@@ -103,28 +104,35 @@ class _MakeOfferSheetState extends State<_MakeOfferSheet> {
     super.dispose();
   }
 
-  /// Shown under the quantity field, as it is typed, when it asks for more
-  /// than the listing has left; null otherwise.
-  String? get _quantityError {
-    final available = listing.availableQuantity;
-    final quantity = double.tryParse(_quantityController.text.trim());
-    if (available == null || quantity == null || quantity <= available) return null;
-    return 'Only ${_trim(available)} $unit available';
-  }
+  /// Set by Make Offer: from then on an empty field is marked too.
+  bool _submitted = false;
+
+  /// Shown under the price field as it is typed: not a number, too many
+  /// decimals, zero, or (after Make Offer) empty.
+  String? get _priceError => amountInputError(
+        _priceController.text,
+        what: 'your price per $unit',
+        maxDecimals: 2,
+        required: _submitted,
+      );
+
+  /// Shown under the quantity field as it is typed: the same checks, plus
+  /// asking for more than the listing has left.
+  String? get _quantityError => amountInputError(
+        _quantityController.text,
+        what: 'a quantity',
+        maxDecimals: 3,
+        required: _submitted,
+        max: listing.availableQuantity,
+        unit: unit,
+      );
 
   Future<void> _submit() async {
-    final price = double.tryParse(_priceController.text.trim());
-    final quantity = double.tryParse(_quantityController.text.trim());
-    if (price == null || price <= 0) {
-      setState(() => _error = 'Enter a valid price per $unit.');
-      return;
-    }
-    if (quantity == null || quantity <= 0) {
-      setState(() => _error = 'Enter a valid quantity.');
-      return;
-    }
-    // The quantity field already shows this in red under itself.
-    if (_quantityError != null) return;
+    setState(() => _submitted = true);
+    // The fields already say what is wrong, in red under themselves.
+    if (_priceError != null || _quantityError != null) return;
+    final price = double.parse(_priceController.text.trim());
+    final quantity = double.parse(_quantityController.text.trim());
     final fulfillment = _fulfillment;
     if (!isCompleteFulfillment(fulfillment)) {
       setState(() => _error = fulfillment == null
@@ -197,6 +205,8 @@ class _MakeOfferSheetState extends State<_MakeOfferSheet> {
                     suffix: 'PHP',
                     autofocus: true,
                     enabled: !_submitting,
+                    errorText: _priceError,
+                    onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 14),
                   _Label(
@@ -211,7 +221,7 @@ class _MakeOfferSheetState extends State<_MakeOfferSheet> {
                     suffix: unit,
                     enabled: !_submitting,
                     errorText: _quantityError,
-                    // Re-checks against what is available on every keystroke.
+                    // Re-checks the format and what is available on every keystroke.
                     onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 20),
@@ -223,7 +233,7 @@ class _MakeOfferSheetState extends State<_MakeOfferSheet> {
                           "Could not load the seller's pickup and delivery options. $_reachError",
                           style: const TextStyle(color: AppColors.gray, fontSize: 12),
                         ),
-                        TextButton(onPressed: _loadReach, child: const Text('Try again')),
+                        TextButton(onPressed: _loadReach, child: const Text('Try Again')),
                       ],
                     )
                   else

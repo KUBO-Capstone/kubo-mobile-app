@@ -100,7 +100,7 @@ void main() {
     expect(tester.getTopLeft(find.text(title)).dy, greaterThan(0));
     expect(find.text('Add your contact number and address to make an offer. Buyers and sellers need them to arrange the handover.'),
         findsOneWidget);
-    expect(find.text('Complete profile'), findsOneWidget);
+    expect(find.text('Complete Profile'), findsOneWidget);
   });
 
   testWidgets('it slides back up by itself after 5 seconds', (tester) async {
@@ -173,7 +173,7 @@ void main() {
       final results = await pumpHost(tester);
       await tapMakeOffer(tester);
 
-      await tester.tap(find.text('Complete profile'));
+      await tester.tap(find.text('Complete Profile'));
       await tester.pumpAndSettle();
       expect(find.byType(EditProfilePage), findsOneWidget);
       expect(find.text(title), findsNothing);

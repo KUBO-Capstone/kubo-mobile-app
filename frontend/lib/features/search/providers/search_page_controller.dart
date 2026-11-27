@@ -100,7 +100,7 @@ class SearchPageController extends ChangeNotifier {
 
   /// Label shown on the history toggle button.
   String get recentSearchToggleLabel =>
-      _showAllRecentSearches ? 'See less' : 'See more';
+      _showAllRecentSearches ? 'See Less' : 'See More';
 
   /// Fetches the popular produce. A failed refresh keeps what was shown.
   Future<void> loadPopular() async {

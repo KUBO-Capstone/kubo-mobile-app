@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/listing_service.dart';
@@ -7,7 +8,9 @@ import '../../../shared/data/negotiation_service.dart';
 import '../../../shared/data/order_service.dart';
 import '../../../shared/data/review_service.dart';
 import '../../../shared/data/synthetic_records.dart';
+import '../../../shared/widgets/kubo_avatar.dart';
 import '../../../shared/widgets/kubo_star_rating.dart';
+import '../../../shared/widgets/photo_picker_strip.dart';
 import '../../deals/screens/deal_celebration_page.dart';
 import '../../earnings/screens/lifetime_earnings_page.dart';
 import '../../listing/screens/listing_page.dart';
@@ -39,6 +42,7 @@ class _ChatPageState extends State<ChatPage> {
   late final ChatController _controller;
   final _composer = TextEditingController();
   final _scroll = ScrollController();
+  final _picker = ImagePicker();
   int _renderedCount = 0;
 
   // Negotiations already celebrated on this screen, so a refresh that lands
@@ -154,6 +158,29 @@ class _ChatPageState extends State<ChatPage> {
       // Put the text back so a failed send is not lost.
       _composer.text = text;
       _showError(error);
+    }
+  }
+
+  static const _maxPhotosAtOnce = 5;
+
+  // Camera or gallery; each picked photo goes out as its own message, in
+  // the order picked. Stops at the first one that fails.
+  Future<void> _sendPhotos() async {
+    if (_controller.isSendingPhoto) return;
+    final files = await pickPhotos(
+      context,
+      _picker,
+      remaining: _maxPhotosAtOnce,
+      max: _maxPhotosAtOnce,
+      allowVideo: true,
+    );
+    if (files == null || files.isEmpty || !mounted) return;
+    for (final file in files) {
+      final error = await _controller.sendPhoto(file);
+      if (error != null) {
+        _showError(error);
+        return;
+      }
     }
   }
 
@@ -292,13 +319,6 @@ class _ChatPageState extends State<ChatPage> {
                   onRateOrder: _rateOrder,
                   onOpenListing: () => _openListing(thread),
                 ),
-                _CounterpartyBlock(
-                  name: thread.counterpartyName(userId),
-                  location: thread.isBuyer(userId) ? thread.sellerLocation : null,
-                  rating: thread.counterpartyRating(userId),
-                  reviewCount: thread.counterpartyReviewCount(userId),
-                  onTap: () => _openCounterpartyProfile(thread, userId),
-                ),
               ],
               Expanded(child: _buildThread(userId)),
             ],
@@ -307,6 +327,8 @@ class _ChatPageState extends State<ChatPage> {
             controller: _composer,
             onSend: _send,
             sending: _controller.isSending,
+            onAttachPhoto: thread == null ? null : _sendPhotos,
+            sendingPhoto: _controller.isSendingPhoto,
           ),
         );
       },
@@ -334,31 +356,50 @@ class _ChatPageState extends State<ChatPage> {
       );
     }
     final messages = _controller.messages;
+    final thread = _controller.conversation;
+    // The other person's card opens the thread and scrolls away with it,
+    // so a long chat gets the whole screen.
+    final Widget counterparty = thread == null || userId == null
+        ? const SizedBox.shrink()
+        : _CounterpartyBlock(
+            name: thread.counterpartyName(userId),
+            photo: thread.counterpartyPhoto(userId),
+            location: thread.isBuyer(userId) ? thread.sellerLocation : null,
+            rating: thread.counterpartyRating(userId),
+            reviewCount: thread.counterpartyReviewCount(userId),
+            onTap: () => _openCounterpartyProfile(thread, userId),
+          );
     if (messages.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'No messages yet. Say hello or make an offer.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.gray, fontSize: 13),
+      return ListView(
+        controller: _scroll,
+        children: [
+          counterparty,
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'No messages yet. Say hello or make an offer.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.gray, fontSize: 13),
+            ),
           ),
-        ),
+        ],
       );
     }
     final live = _liveOfferMessageId(messages);
     return ListView.builder(
       controller: _scroll,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: messages.length,
+      padding: const EdgeInsets.only(bottom: 8),
+      itemCount: messages.length + 1,
       itemBuilder: (_, index) {
-        final message = messages[index];
+        if (index == 0) return counterparty;
+        final message = messages[index - 1];
         final isOfferCard = message.type == MessageType.offer || message.type == MessageType.counter;
         return ChatMessageBubble(
           message: message,
           isMine: userId != null && message.isMine(userId),
           onOpenOrder: _openOrder,
           superseded: isOfferCard && message.id != live,
+          senderPhoto: thread?.photoOf(message.senderId),
         );
       },
     );
@@ -388,9 +429,11 @@ class _CounterpartyBlock extends StatelessWidget {
     required this.rating,
     required this.reviewCount,
     this.location,
+    this.photo,
   });
 
   final String name;
+  final String? photo;
   final String? location;
   final double? rating;
   final int reviewCount;
@@ -404,11 +447,7 @@ class _CounterpartyBlock extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
         child: Column(
           children: [
-            const CircleAvatar(
-              radius: 22,
-              backgroundColor: AppColors.black,
-              child: Icon(Icons.person, size: 26, color: AppColors.white),
-            ),
+            KuboAvatar(photoUrl: photo, size: 44),
             const SizedBox(height: 6),
             Text(
               name,

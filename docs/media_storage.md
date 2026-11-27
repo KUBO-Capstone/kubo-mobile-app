@@ -12,12 +12,15 @@ and display do not work without the S3 settings below.**
 | Profile pictures | `profiles/<uuid>.<ext>` | `POST /api/users/:id/profile/photo` |
 | Review photos (up to 5 per review) | `reviews/<uuid>.<ext>` | `POST /api/orders/:id/review/photos` |
 | Handover photos (up to 5 per order, taken by the seller when shipping) | `handovers/<uuid>.<ext>` | `POST /api/orders/:id/handover/photos` |
+| Chat photos (one per photo message) | `chats/<uuid>.<ext>` | `POST /api/conversations/:id/photos`, then `POST /api/conversations/:id/messages` with `image_url` |
 
 - Uploads are held in memory, checked by their bytes (still JPEG, PNG or
   WebP only; the file name and MIME type the client sends are ignored), then
-  written with `PutObject`. Code: `backend/src/controllers/upload.controller.ts`.
+  written with `PutObject`. Chat messages and reviews also take videos (MP4,
+  MOV or WebM, up to 10 MB each), stored with the same key scheme and a
+  `.mp4` / `.mov` / `.webm` extension. Code: `backend/src/controllers/upload.controller.ts`.
 - The database stores the object key (`product_images.image_key`,
-  `users.profile_photo_key`). The models turn it into the plain S3 URL,
+  `users.profile_photo_key`, and `image_url` on DynamoDB chat messages). The models turn it into the plain S3 URL,
   `https://<bucket>.s3.<region>.amazonaws.com/<key>`, which is what the rest
   of the backend works with. Absolute URLs that are not ours (the seed data's
   sample photos) are stored and returned as they are.
@@ -55,7 +58,8 @@ not needed.
       "arn:aws:s3:::<bucket>/products/*",
       "arn:aws:s3:::<bucket>/profiles/*",
       "arn:aws:s3:::<bucket>/reviews/*",
-      "arn:aws:s3:::<bucket>/handovers/*"
+      "arn:aws:s3:::<bucket>/handovers/*",
+      "arn:aws:s3:::<bucket>/chats/*"
     ]
   }]
 }

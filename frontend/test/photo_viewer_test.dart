@@ -169,15 +169,15 @@ void main() {
 
     await tester.tap(find.bySemanticsLabel('Your profile photo'));
     await tester.pumpAndSettle();
-    expect(find.text('View profile photo'), findsOneWidget);
-    await tester.tap(find.text('Change profile photo'));
+    expect(find.text('View Profile Photo'), findsOneWidget);
+    await tester.tap(find.text('Change Profile Photo'));
     await tester.pumpAndSettle();
     expect(changed, 1);
     expect(find.byType(KuboPhotoViewer), findsNothing);
 
     await tester.tap(find.bySemanticsLabel('Your profile photo'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('View profile photo'));
+    await tester.tap(find.text('View Profile Photo'));
     await tester.pumpAndSettle();
     expect(find.byType(KuboPhotoViewer), findsOneWidget);
   });
@@ -190,6 +190,6 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Your profile photo'));
     await tester.pumpAndSettle();
     expect(changed, 1);
-    expect(find.text('View profile photo'), findsNothing);
+    expect(find.text('View Profile Photo'), findsNothing);
   });
 }

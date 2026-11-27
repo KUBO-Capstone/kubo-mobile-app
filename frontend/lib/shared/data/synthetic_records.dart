@@ -78,6 +78,7 @@ class SyntheticListingRecord {
     this.allowsDelivery = true,
     this.sellerRating,
     this.sellerReviewCount = 0,
+    this.sellerPhotoUrl,
   });
 
   factory SyntheticListingRecord.fromJson(Map<String, dynamic> json) {
@@ -112,6 +113,7 @@ class SyntheticListingRecord {
       allowsDelivery: json['allows_delivery'] != false,
       sellerRating: (json['seller_rating'] as num?)?.toDouble(),
       sellerReviewCount: (json['seller_review_count'] as num?)?.toInt() ?? 0,
+      sellerPhotoUrl: resolveMediaUrl(json['seller_photo']?.toString()),
       date: createdAt == null ? 'Recently posted' : 'Posted ${createdAt.month}/${createdAt.day}/${createdAt.year}',
       groups: <String>[json['category']?.toString() ?? 'produce'],
       latitude: (json['latitude'] as num?)?.toDouble(),
@@ -157,6 +159,9 @@ class SyntheticListingRecord {
   /// The seller's average rating; null until their first review.
   final double? sellerRating;
   final int sellerReviewCount;
+
+  /// The seller's profile photo; null when they have none.
+  final String? sellerPhotoUrl;
 
   /// Stable identifier for the record.
   final String id;

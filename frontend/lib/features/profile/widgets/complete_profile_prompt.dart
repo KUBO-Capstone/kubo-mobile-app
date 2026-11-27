@@ -20,7 +20,7 @@ bool ensureProfileComplete(BuildContext context, {required String toDo}) {
     icon: Icons.person_outline,
     title: 'Complete your profile first',
     message: 'Add your ${missing.join(' and ')} to $toDo. Buyers and sellers need them to arrange the handover.',
-    actionLabel: 'Complete profile',
+    actionLabel: 'Complete Profile',
     onAction: () => _openEditProfile(navigator),
   );
   return false;
@@ -30,7 +30,7 @@ Future<void> _openEditProfile(NavigatorState navigator) async {
   final user = AuthService.currentUser;
   if (user == null || !navigator.mounted) return;
   final updated = await navigator.push<Map<String, dynamic>>(
-    MaterialPageRoute<Map<String, dynamic>>(builder: (_) => EditProfilePage(user: user)),
+    MaterialPageRoute<Map<String, dynamic>>(builder: (_) => EditProfilePage(user: user, highlightMissing: true)),
   );
   // The saved profile carries the new contact number and preferred address,
   // which is what lets the next offer or listing through.

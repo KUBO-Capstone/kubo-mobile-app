@@ -156,7 +156,8 @@ const deleteUnusedUploads = async (images: string[]): Promise<void> => {
 export const getProducts = async (req: Request, res: Response): Promise<void> => {
     const query = typeof req.query.q === 'string' ? req.query.q : '';
     const sellerId = typeof req.query.seller_id === 'string' ? Number(req.query.seller_id) : undefined;
-    // A seller's own tab asks for sold-out rows too; public views never do.
+    // The app's feeds, search and profiles ask for sold-out rows too, so
+    // buyers still see what has sold; the map leaves them out.
     const includeUnavailable = req.query.include_unavailable === 'true';
     res.json({ success: true, data: await ProductModel.findAll(query, Number.isInteger(sellerId) ? sellerId : undefined, includeUnavailable) });
 };

@@ -86,7 +86,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
             ? ExplorePage.defaultLocationLabel
             : widget.initialLocationLabel;
     _loadListings();
-    // Stock moved on some listing; results that sold out drop off.
+    // Stock moved on some listing; results that sold out show it.
     _listingsChanged = AppShellController.instance.listingsChanged.listen((_) => _loadListings(quiet: true));
   }
 
@@ -99,8 +99,9 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   }
 
   /// [quiet] reloads behind the results already on screen: no placeholder
-  /// cards, and a failure leaves them as they are.
-  Future<void> _loadListings({bool quiet = false}) async {
+  /// cards, and a failure leaves them as they are. [pulled] is a
+  /// pull-to-refresh, whose failure is worth a word.
+  Future<void> _loadListings({bool quiet = false, bool pulled = false}) async {
     // A search is already in flight, and it may have read the listings from
     // before whatever just changed. Starting another now would only cut it
     // off, so the reload waits and runs once that search is done.
@@ -115,7 +116,8 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
     final request = ++_loadRequest;
     bool isLatest() => mounted && request == _loadRequest && query == _query;
     try {
-      final listings = await _listingService.fetchListings(query: query);
+      // Sold-out matches come last, marked Sold out.
+      final listings = await _listingService.fetchListings(query: query, includeUnavailable: true);
       // A newer search may have been submitted while this one was in flight.
       if (isLatest()) {
         setState(() {
@@ -126,6 +128,11 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
       }
     } catch (error) {
       debugPrint('Search listing fetch failed: $error');
+      if (mounted && pulled && isLatest()) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('Could not refresh. Check your connection and try again.')));
+      }
       if (isLatest() && !quiet) {
         setState(() {
           _listings = const <SyntheticListingRecord>[];
@@ -229,12 +236,18 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   @override
   Widget build(BuildContext context) {
     final listings = _visibleListings;
+    // The map leaves out sold-out listings, like the explore map.
+    final mappable = listings.where((listing) => !listing.isSoldOut).toList(growable: false);
 
     return Scaffold(
       backgroundColor: AppColors.white,
       body: SafeArea(
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
+        child: RefreshIndicator(
+          color: AppColors.green,
+          onRefresh: () => _loadListings(quiet: true, pulled: true),
+          child: CustomScrollView(
+          // Always scrollable, so a short or empty result can still be pulled.
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           slivers: [
             SliverToBoxAdapter(
@@ -365,11 +378,10 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                           ),
                         ),
                         if (_loadError != null)
-                          TextButton.icon(
+                          TextButton(
                             onPressed: _loadListings,
-                            icon: const Icon(Icons.refresh, size: 18),
-                            label: const Text('Try again'),
                             style: TextButton.styleFrom(foregroundColor: AppColors.green),
+                            child: const Text('Try Again'),
                           ),
                       ],
                     ),
@@ -395,7 +407,7 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       ListingsMap(
-                        listings: listings,
+                        listings: mappable,
                         focusLocation: _focusLocation,
                         radiusKm: _radiusKm,
                         minimized: _mapMinimized,
@@ -404,13 +416,14 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                             () => setState(() => _mapMinimized = !_mapMinimized),
                       ),
                       const SizedBox(height: 16),
-                      MapListingCards(listings: listings, loadError: _loadError),
+                      MapListingCards(listings: mappable, loadError: _loadError),
                     ],
                   ),
                 ),
               ),
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
           ],
+          ),
         ),
       ),
       bottomNavigationBar: const KuboBottomNavigationBar.detached(),

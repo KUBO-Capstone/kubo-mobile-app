@@ -33,7 +33,7 @@ enum NegotiationStatus {
 enum DeclineReason {
   bagsakanTooFar('bagsakan_too_far', 'Selected bagsakan is too far'),
   courierUnavailable('courier_unavailable', 'Courier not available in my area'),
-  priceTooLow('price_too_low', 'Price too low');
+  priceTooLow('price_too_low', 'Price Too Low');
 
   const DeclineReason(this.key, this.label);
 

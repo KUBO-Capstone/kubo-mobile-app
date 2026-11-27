@@ -4,6 +4,7 @@ import { NotificationModel } from "#models/notification.model";
 import { UserModel } from "#models/user.model";
 import { emitToUsers } from "#services/socket.service";
 import { belongsToThread, ThreadBounds } from "#services/chat-thread-filter";
+import { viewableMediaUrl } from "#controllers/upload.controller";
 
 /** A message as the API returns it: the DynamoDB item plus the sender's name. */
 export type ChatMessage = StoredMessage & { sender_name: string };
@@ -19,11 +20,17 @@ async function withSenderNames(messages: StoredMessage[]): Promise<ChatMessage[]
     return messages.map((m) => ({ ...m, sender_name: names.get(m.sender_id) ?? 'Deleted User' }));
 }
 
+// The title also sorts the notification for the app's filter: Messages,
+// Offers (New Offer, Offer Update), Orders (Order Update, Delivered).
 function notificationTitle(message: StoredMessage): string {
     if (message.message_type === 'offer' || message.message_type === 'counter') return 'New Offer';
-    if (message.message_type === 'order'
-        && (message.content.startsWith('Received order #') || message.content.startsWith('Picked up order #'))) {
-        return 'Delivered';
+    if (message.message_type === 'accepted' || message.message_type === 'declined' || message.message_type === 'cancelled') {
+        return 'Offer Update';
+    }
+    if (message.message_type === 'order') {
+        return message.content.startsWith('Received order #') || message.content.startsWith('Picked up order #')
+            ? 'Delivered'
+            : 'Order Update';
     }
     return 'New Message';
 }
@@ -57,7 +64,13 @@ export async function sendChatMessage(input: NewMessage): Promise<ChatMessage> {
     }
 
     const [message] = await withSenderNames([stored]);
-    emitToUsers([parties.buyer_id, parties.seller_id], 'message:new', message);
+    // The socket push skips the JSON middleware that makes photo URLs
+    // loadable (media.middleware.ts), so a photo is signed here; the REST
+    // reply goes through the middleware and carries the stored URL.
+    const pushed = message.image_url
+        ? { ...message, image_url: await viewableMediaUrl(message.image_url) }
+        : message;
+    emitToUsers([parties.buyer_id, parties.seller_id], 'message:new', pushed);
     return message;
 }
 

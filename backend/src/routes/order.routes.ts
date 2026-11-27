@@ -18,10 +18,12 @@ const receiveReviewPhotos = receiveImages({
     folder: 'reviews',
     maxFiles: maxReviewPhotos,
     maxBytes: 8 * 1024 * 1024,
+    // Short clips of the produce, up to 10 MB each.
+    maxVideoBytes: 10 * 1024 * 1024,
     messages: {
-        LIMIT_FILE_SIZE: 'Each photo must be 8 MB or smaller',
-        LIMIT_FILE_COUNT: `A review can have up to ${maxReviewPhotos} photos`,
-        LIMIT_UNEXPECTED_FILE: `A review can have up to ${maxReviewPhotos} photos`,
+        LIMIT_FILE_SIZE: 'Photos must be 8 MB or smaller, and videos 10 MB',
+        LIMIT_FILE_COUNT: `A review can have up to ${maxReviewPhotos} photos and videos`,
+        LIMIT_UNEXPECTED_FILE: `A review can have up to ${maxReviewPhotos} photos and videos`,
     },
 });
 

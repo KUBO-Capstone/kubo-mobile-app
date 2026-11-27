@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -83,7 +84,7 @@ class ChatController extends ChangeNotifier {
     if (fresh.any((m) => !m.isMine(id))) {
       unawaited(_messages.markRead(conversationId: conversationId).catchError((_) {}));
     }
-    if (fresh.any((m) => m.type != MessageType.text)) {
+    if (fresh.any((m) => !m.type.isChat)) {
       // An accepted or cancelled deal changes what is left on the listing.
       AppShellController.instance.notifyListingsChanged();
       try {
@@ -170,6 +171,26 @@ class ChatController extends ChangeNotifier {
     } finally {
       isSending = false;
       notifyListeners();
+    }
+  }
+
+  /// True while a photo is uploading.
+  bool isSendingPhoto = false;
+
+  /// Uploads and sends a photo. Returns an error string to show, or null.
+  Future<String?> sendPhoto(File file) async {
+    if (userId == null) return 'Log in to send messages.';
+    isSendingPhoto = true;
+    notifyListeners();
+    try {
+      final sent = await _messages.sendPhoto(conversationId: conversationId, file: file);
+      _merge([sent]);
+      return null;
+    } catch (error) {
+      return error.toString().replaceFirst('Exception: ', '');
+    } finally {
+      isSendingPhoto = false;
+      if (!_disposed) notifyListeners();
     }
   }
 

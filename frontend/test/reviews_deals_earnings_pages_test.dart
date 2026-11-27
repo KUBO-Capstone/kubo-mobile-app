@@ -117,20 +117,20 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: WriteReviewPage(order: _deliveredOrder, service: service)));
 
     expect(find.text('How was your order from Maria Santos?'), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Submit review')).onPressed, isNull);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Submit Review')).onPressed, isNull);
 
     await tester.tap(_star(2));
     await tester.pumpAndSettle();
     expect(find.text('Fair'), findsOneWidget);
-    expect(find.text('Fresh produce'), findsNothing);
+    expect(find.text('Fresh Produce'), findsNothing);
 
     await tester.tap(_star(5));
     await tester.pumpAndSettle();
     expect(find.text('Excellent'), findsOneWidget);
-    await tester.tap(find.text('On time'));
-    await tester.tap(find.text('Fresh produce'));
+    await tester.tap(find.text('On Time'));
+    await tester.tap(find.text('Fresh Produce'));
     await tester.enterText(find.byType(TextField), 'Sobrang fresh!');
-    await tester.tap(find.text('Submit review'));
+    await tester.tap(find.text('Submit Review'));
     await tester.pump();
 
     expect(service.rating, 5);
@@ -145,11 +145,11 @@ void main() {
   testWidgets('dropping below 3 stars clears picked tags', (tester) async {
     final service = _FakeReviewService();
     await tester.pumpWidget(MaterialApp(home: WriteReviewPage(order: _deliveredOrder, service: service, initialRating: 4)));
-    await tester.tap(find.text('Fresh produce'));
+    await tester.tap(find.text('Fresh Produce'));
     await tester.pump();
     await tester.tap(_star(1));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Submit review'));
+    await tester.tap(find.text('Submit Review'));
     await tester.pump();
     expect(service.rating, 1);
     expect(service.tags, isEmpty);
@@ -195,16 +195,16 @@ void main() {
       // The line under the strip, so the strip clears the bottom Submit bar.
       await tester.scrollUntilVisible(find.textContaining('Your review is public'), 200, scrollable: find.byType(Scrollable).first);
 
-      expect(find.text('Add Photos'), findsOneWidget);
-      expect(find.text('Optional: Share photos of the produce quality or packaging'), findsOneWidget);
+      expect(find.text('Add Photos or Videos'), findsOneWidget);
+      expect(find.text('Optional: Photos or short videos (up to 10 MB) of the produce or packaging'), findsOneWidget);
       expect(find.text('0/5'), findsOneWidget);
 
-      await addFrom(tester, 'Take a photo');
+      await addFrom(tester, 'Take a Photo');
       expect(calls, ['pickImage']);
       expect(find.text('1/5'), findsOneWidget);
 
       // The gallery hands back 6; only 4 slots are left.
-      await addFrom(tester, 'Choose from gallery');
+      await addFrom(tester, 'Choose Photos');
       expect(calls.last, isNot('pickImage'));
       expect(find.text('5/5'), findsOneWidget);
       expect(find.text('+ Add Photo'), findsNothing);
@@ -216,7 +216,7 @@ void main() {
       // Back after the thumbnails, scrolled just past the edge of the strip.
       expect(find.text('+ Add Photo', skipOffstage: false), findsOneWidget);
 
-      await tester.tap(find.text('Submit review'));
+      await tester.tap(find.text('Submit Review'));
       await tester.pump();
       await tester.pump();
       // Photo 2 (the first gallery pick, p1) was removed.
@@ -286,13 +286,13 @@ void main() {
     expect(find.text('Congratulations!'), findsOneWidget);
     expect(find.text('You just closed a deal!'), findsOneWidget);
     expect(find.text('You received your order from Maria Santos.'), findsOneWidget);
-    expect(find.text('Your total'), findsOneWidget);
+    expect(find.text('Your Total'), findsOneWidget);
     expect(find.text('₱800'), findsOneWidget);
     expect(find.text('10 kg Calamansi · ₱80/kg'), findsOneWidget);
     // Earnings are the seller's alone.
-    expect(find.text('See lifetime earnings'), findsNothing);
+    expect(find.text('See Lifetime Earnings'), findsNothing);
 
-    await tester.tap(find.text('Write a review'));
+    await tester.tap(find.text('Write a Review'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(results, [DealCelebrationAction.writeReview]);
@@ -314,10 +314,10 @@ void main() {
 
     expect(find.text('You just closed a deal!'), findsOneWidget);
     expect(find.text('Juan Dela Cruz received the produce.'), findsOneWidget);
-    expect(find.text('Deal amount'), findsOneWidget);
+    expect(find.text('Deal Amount'), findsOneWidget);
     expect(find.text('₱805'), findsOneWidget);
 
-    await tester.tap(find.text('See lifetime earnings'));
+    await tester.tap(find.text('See Lifetime Earnings'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(results, [DealCelebrationAction.viewEarnings]);
@@ -337,8 +337,8 @@ void main() {
       ),
     );
     await tester.pump(const Duration(seconds: 3));
-    expect(find.text('Write a review'), findsNothing);
-    expect(find.text('Maybe later'), findsNothing);
+    expect(find.text('Write a Review'), findsNothing);
+    expect(find.text('Maybe Later'), findsNothing);
     await tester.tap(find.text('Done'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -380,7 +380,7 @@ void main() {
     expect(find.text('Calamansi'), findsOneWidget);
     expect(find.text('₱1,600'), findsOneWidget);
     expect(find.text('25 kg sold · 2 orders'), findsOneWidget);
-    expect(find.text('Create a listing'), findsOneWidget);
+    expect(find.text('Create a Listing'), findsOneWidget);
   });
 
   testWidgets('lifetime earnings before the first sale', (tester) async {

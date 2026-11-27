@@ -234,7 +234,7 @@ void main() {
       });
 
       expect(find.text('Third-generation rice farmer.'), findsOneWidget);
-      expect(find.textContaining('Date joined | 03/1'), findsOneWidget);
+      expect(find.textContaining('Date Joined | 03/1'), findsOneWidget);
       expect(find.textContaining('June 2025'), findsNothing);
       // The Followers card in Profile analytics agrees with the header.
       expect(find.text('12'), findsNWidgets(2));
@@ -251,7 +251,7 @@ void main() {
       expect(find.text('No bio yet.'), findsOneWidget);
       expect(find.textContaining("don't call me baby"), findsNothing);
       expect(find.textContaining('Fresh local produce from a Kubo grower'), findsNothing);
-      expect(find.text('Add a bio'), findsNothing, reason: 'only on your own profile');
+      expect(find.text('Add a Bio'), findsNothing, reason: 'only on your own profile');
     });
 
     testWidgets('your own About offers to add a bio, and has no Log out button', (tester) async {
@@ -265,8 +265,8 @@ void main() {
       });
 
       expect(find.textContaining('You have not written a bio yet'), findsOneWidget);
-      expect(find.text('Add a bio'), findsOneWidget);
-      expect(find.text('Log out'), findsNothing);
+      expect(find.text('Add a Bio'), findsOneWidget);
+      expect(find.text('Log Out'), findsNothing);
       expect(find.byIcon(Icons.logout), findsNothing);
       expect(headerCounts(tester), ['1', '4', '0']);
       // Rows the account has nothing for are left out rather than filled in.

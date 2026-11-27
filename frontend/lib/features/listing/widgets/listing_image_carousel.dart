@@ -14,7 +14,6 @@ class ListingImageCarousel extends StatefulWidget {
     required this.onBackPressed,
     required this.onFavoriteToggle,
     required this.isFavorite,
-    this.onShare,
     this.showControls = true,
   });
 
@@ -22,8 +21,9 @@ class ListingImageCarousel extends StatefulWidget {
   /// the user has scrolled past it.
   static const double height = 300;
 
-  /// Draws the back / share / save buttons over the photos. The listing page
-  /// turns this off and keeps them in a top bar that stays on screen.
+  /// Draws the back / save buttons over the photos. The listing page turns
+  /// this off and keeps them, with its Share / Report menu, in a top bar that
+  /// stays on screen.
   final bool showControls;
 
   final List<String> images;
@@ -32,9 +32,6 @@ class ListingImageCarousel extends StatefulWidget {
   /// Null hides the heart (the viewer's own listing, or a mock row).
   final VoidCallback? onFavoriteToggle;
   final bool isFavorite;
-
-  /// Null hides the share button (mock rows have nothing to link to).
-  final VoidCallback? onShare;
 
   @override
   State<ListingImageCarousel> createState() => _ListingImageCarouselState();
@@ -180,35 +177,15 @@ class _ListingImageCarouselState extends State<ListingImageCarousel> {
               onPressed: widget.onBackPressed,
             ),
           ),
-        if (widget.showControls)
+        if (widget.showControls && widget.onFavoriteToggle != null)
           Positioned(
             top: 12,
             right: 12,
-            child: Row(
-              children: [
-                if (widget.onShare != null)
-                  _OverlayButton(
-                    icon: Icons.share_outlined,
-                    tooltip: 'Share listing',
-                    onPressed: widget.onShare!,
-                  ),
-                if (widget.onShare != null && widget.onFavoriteToggle != null)
-                  const SizedBox(width: 8),
-                if (widget.onFavoriteToggle != null)
-                  _OverlayButton(
-                    icon:
-                        widget.isFavorite
-                            ? Icons.favorite
-                            : Icons.favorite_border,
-                    color:
-                        widget.isFavorite ? AppColors.green : AppColors.black,
-                    tooltip:
-                        widget.isFavorite
-                            ? 'Remove from saved'
-                            : 'Save listing',
-                    onPressed: widget.onFavoriteToggle!,
-                  ),
-              ],
+            child: _OverlayButton(
+              icon: widget.isFavorite ? Icons.favorite : Icons.favorite_border,
+              color: widget.isFavorite ? AppColors.green : AppColors.black,
+              tooltip: widget.isFavorite ? 'Remove from saved' : 'Save listing',
+              onPressed: widget.onFavoriteToggle!,
             ),
           ),
       ],

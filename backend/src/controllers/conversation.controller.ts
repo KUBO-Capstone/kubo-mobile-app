@@ -1,4 +1,5 @@
-import { Request, Response } from "express";
+import { Request, RequestHandler, Response } from "express";
+import { isVideoUrl, readStoredImages } from "#controllers/upload.controller";
 import { ConversationModel, ConversationSummary } from "#models/conversation.model";
 import { ProductModel } from "#models/product.model";
 import { authUserId } from "#middleware/auth.middleware";
@@ -80,9 +81,50 @@ export const getMessages = async (req: Request, res: Response): Promise<void> =>
     res.json({ success: true, data: await listChatMessages(conversation, after) });
 };
 
+// Runs ahead of the photo upload, so nobody outside the thread can store
+// pictures under it.
+export const requireOwnConversation: RequestHandler = async (req, res, next) => {
+    const conversation = await loadOwnConversation(req, res);
+    if (!conversation) return;
+    res.locals.conversation = conversation;
+    next();
+};
+
+// Step one of a photo message: the picture goes to the bucket and its URL
+// comes back, for POST /:id/messages with `image_url`.
+export const uploadChatPhoto = async (_req: Request, res: Response): Promise<void> => {
+    const images: string[] = res.locals.uploadedImages ?? [];
+    if (images.length === 0) {
+        res.status(400).json({ success: false, message: 'Add a JPG, PNG, or WebP photo' });
+        return;
+    }
+    res.status(201).json({ success: true, data: { images } });
+};
+
+// What the inbox preview and the notification say for a photo or video.
+export const PHOTO_MESSAGE_TEXT = 'Sent a photo';
+export const VIDEO_MESSAGE_TEXT = 'Sent a video';
+
 export const sendMessage = async (req: Request, res: Response): Promise<void> => {
     const conversation = await loadOwnConversation(req, res);
     if (!conversation) return;
+    if (req.body.image_url !== undefined) {
+        const [image] = (await readStoredImages([req.body.image_url], 'chats')) ?? [];
+        if (!image) {
+            res.status(400).json({ success: false, message: 'Upload the photo again, then send it' });
+            return;
+        }
+        const video = isVideoUrl(image);
+        const message = await sendChatMessage({
+            conversation_id: conversation.conversation_id,
+            sender_id: authUserId(res),
+            content: video ? VIDEO_MESSAGE_TEXT : PHOTO_MESSAGE_TEXT,
+            message_type: video ? 'video' : 'photo',
+            image_url: image,
+        });
+        res.status(201).json({ success: true, data: message });
+        return;
+    }
     const content = typeof req.body.content === 'string' ? req.body.content.trim() : '';
     if (!content) {
         res.status(400).json({ success: false, message: 'content cannot be empty' });

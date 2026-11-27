@@ -206,7 +206,7 @@ class _SearchPageState extends State<SearchPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               KuboSectionHeader(
-                title: 'Recent searches',
+                title: 'Recent Searches',
                 actionLabel: _controller.shouldShowRecentSearchToggle
                     ? _controller.recentSearchToggleLabel
                     : null,
@@ -246,7 +246,7 @@ class _SearchPageState extends State<SearchPage> {
                   ],
                 ),
               const SizedBox(height: 10),
-              const KuboSectionHeader(title: 'Search suggestions'),
+              const KuboSectionHeader(title: 'Search Suggestions'),
               const SizedBox(height: 12),
             ],
           ),
@@ -278,11 +278,10 @@ class _SearchPageState extends State<SearchPage> {
                 style: const TextStyle(color: AppColors.gray, fontSize: 14, height: 1.45),
               ),
               if (_controller.popularFailed)
-                TextButton.icon(
+                TextButton(
                   onPressed: _controller.loadPopular,
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Try again'),
                   style: TextButton.styleFrom(foregroundColor: AppColors.green),
+                  child: const Text('Try Again'),
                 ),
             ],
           ),

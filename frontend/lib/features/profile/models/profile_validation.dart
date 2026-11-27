@@ -1,14 +1,24 @@
+/// Names of the fields [ProfileValidationResult.fieldErrors] can point at.
+enum ProfileField { firstName, lastName, contactNumber, bio, location, businessName, businessType }
+
 class ProfileValidationResult {
   const ProfileValidationResult({
     required this.isValid,
     required this.errors,
+    this.fieldErrors = const <ProfileField, String>{},
   });
 
   final bool isValid;
   final List<String> errors;
+
+  /// The first problem with each field, for showing under that field.
+  final Map<ProfileField, String> fieldErrors;
 }
 
 class ProfileValidation {
+  /// Characters a phone number may be typed with.
+  static final contactNumberCharacters = RegExp(r'[0-9+\-\s()]');
+
   static ProfileValidationResult validate({
     required String firstName,
     required String lastName,
@@ -18,36 +28,47 @@ class ProfileValidation {
     required String businessName,
     required String businessType,
   }) {
+    final fieldErrors = <ProfileField, String>{};
     final errors = <String>[];
+    void add(ProfileField field, String message) {
+      errors.add(message);
+      fieldErrors.putIfAbsent(field, () => message);
+    }
 
     if (firstName.trim().isEmpty) {
-      errors.add('First name is required.');
+      add(ProfileField.firstName, 'First name is required.');
     }
     if (lastName.trim().isEmpty) {
-      errors.add('Last name is required.');
+      add(ProfileField.lastName, 'Last name is required.');
     }
+    final digits = contactNumber.replaceAll(RegExp(r'\D'), '').length;
     if (contactNumber.trim().isEmpty) {
-      errors.add('Contact number is required.');
+      add(ProfileField.contactNumber, 'Contact number is required.');
+    } else if (contactNumber.split('').any((c) => !contactNumberCharacters.hasMatch(c))) {
+      add(ProfileField.contactNumber, 'Use numbers only, e.g. 0917 123 4567.');
+    } else if (digits < 7) {
+      add(ProfileField.contactNumber, 'This number looks too short.');
     }
     if (contactNumber.length > 15) {
-      errors.add('Contact number must be 15 characters or fewer.');
+      add(ProfileField.contactNumber, 'Contact number must be 15 characters or fewer.');
     }
     if (bio.length > 500) {
-      errors.add('Bio must be 500 characters or fewer.');
+      add(ProfileField.bio, 'Bio must be 500 characters or fewer.');
     }
     if (location.length > 80) {
-      errors.add('Location must be 80 characters or fewer.');
+      add(ProfileField.location, 'Location must be 80 characters or fewer.');
     }
     if (businessName.length > 80) {
-      errors.add('Business name must be 80 characters or fewer.');
+      add(ProfileField.businessName, 'Business name must be 80 characters or fewer.');
     }
     if (businessType.length > 40) {
-      errors.add('Business type must be 40 characters or fewer.');
+      add(ProfileField.businessType, 'Business type must be 40 characters or fewer.');
     }
 
     return ProfileValidationResult(
       isValid: errors.isEmpty,
       errors: errors,
+      fieldErrors: fieldErrors,
     );
   }
 }

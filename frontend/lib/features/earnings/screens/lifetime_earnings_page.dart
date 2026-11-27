@@ -105,7 +105,7 @@ class _LifetimeEarningsPageState extends State<LifetimeEarningsPage> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(
-          'Lifetime earnings',
+          'Lifetime Earnings',
           style: TextStyle(color: AppColors.black, fontSize: 20, fontWeight: FontWeight.w800),
         ),
         actions: [
@@ -126,13 +126,22 @@ class _LifetimeEarningsPageState extends State<LifetimeEarningsPage> {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
           child: SizedBox(
             height: 52,
-            child: FilledButton(
-              onPressed: _createListing,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.green,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: const Text('Create a listing', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            // Greyed out (but still tappable, to say why) until the profile
+            // has a contact number and address.
+            child: ValueListenableBuilder<Map<String, dynamic>?>(
+              valueListenable: AuthService.currentUserListenable,
+              builder: (context, _, __) {
+                final blocked = AuthService.missingProfileDetails.isNotEmpty;
+                return FilledButton(
+                  onPressed: _createListing,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: blocked ? const Color(0xFFD5D8D6) : AppColors.green,
+                    foregroundColor: blocked ? const Color(0xFF6F7672) : AppColors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Create a Listing', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                );
+              },
             ),
           ),
         ),
@@ -203,7 +212,7 @@ class _LifetimeEarningsPageState extends State<LifetimeEarningsPage> {
           ],
           const SizedBox(height: 28),
           const Text(
-            'Your top earning listings',
+            'Your Top Earning Listings',
             style: TextStyle(color: AppColors.black, fontSize: 20, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 12),

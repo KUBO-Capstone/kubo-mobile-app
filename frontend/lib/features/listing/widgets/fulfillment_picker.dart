@@ -79,7 +79,7 @@ class FulfillmentPicker extends StatelessWidget {
               Expanded(
                 child: _MethodChoice(
                   icon: Icons.local_shipping_outlined,
-                  label: 'Courier delivery',
+                  label: 'Courier Delivery',
                   selected: method == DeliveryMethod.courier,
                   onTap: enabled ? () => _chooseMethod(DeliveryMethod.courier) : null,
                 ),
@@ -219,7 +219,7 @@ class _MethodChoice extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
-        child: Container(
+        child: Ink(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
           decoration: BoxDecoration(
             color: selected ? AppColors.green.withValues(alpha: 0.08) : AppColors.white,
@@ -278,10 +278,13 @@ class _OptionTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: Opacity(
         opacity: available ? 1 : 0.55,
-        child: InkWell(
+        // Its own Material, so the Ink fill below is faded with the rest.
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(10),
-          child: Container(
+          child: Ink(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               color: available ? AppColors.white : AppColors.softBackground,
@@ -318,6 +321,7 @@ class _OptionTile extends StatelessWidget {
                 ),
               ],
             ),
+          ),
           ),
         ),
       ),

@@ -133,7 +133,7 @@ class _HandOverPageState extends State<HandOverPage> {
       appBar: AppBar(
         backgroundColor: AppColors.white,
         surfaceTintColor: Colors.transparent,
-        title: Text(meetup ? 'Drop off at the center' : 'Hand over to courier'),
+        title: Text(meetup ? 'Drop Off at the Center' : 'Hand Over to Courier'),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -167,7 +167,7 @@ class _HandOverPageState extends State<HandOverPage> {
               ),
               child: _submitting
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white))
-                  : Text(meetup ? 'Mark as dropped off' : 'Mark as shipped', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  : Text(meetup ? 'Mark as Dropped Off' : 'Mark as Shipped', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
             ),
           ),
         ),
@@ -236,7 +236,7 @@ class _HandOverPageState extends State<HandOverPage> {
         maxLength: 100,
         textInputAction: TextInputAction.done,
         decoration: InputDecoration(
-          labelText: 'Tracking number',
+          labelText: 'Tracking Number',
           helperText: '${order.buyerName} can copy it from the order.',
           border: const OutlineInputBorder(),
           counterText: '',

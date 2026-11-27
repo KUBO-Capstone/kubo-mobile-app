@@ -178,9 +178,9 @@ class OrderRecord {
   String get statusLabel {
     switch (status) {
       case OrderStatus.pending:
-        return 'In progress';
+        return 'In Progress';
       case OrderStatus.inTransit:
-        return isMeetup ? 'Ready for pickup' : 'Out for delivery';
+        return isMeetup ? 'Ready for Pickup' : 'Out for Delivery';
       case OrderStatus.delivered:
         return 'Received';
       case OrderStatus.cancelled:

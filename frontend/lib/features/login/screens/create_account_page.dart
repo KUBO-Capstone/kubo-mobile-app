@@ -71,7 +71,7 @@ class CreateAccountPage extends StatelessWidget {
                                 );
                               },
                               child: const Text(
-                                'Create account',
+                                'Create Account',
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w700,
@@ -93,7 +93,7 @@ class CreateAccountPage extends StatelessWidget {
                               Navigator.of(context).pop();
                             },
                             child: const Text(
-                              'Back to login',
+                              'Back to Login',
                               style: TextStyle(
                                 color: AppColors.green,
                                 fontSize: 14,

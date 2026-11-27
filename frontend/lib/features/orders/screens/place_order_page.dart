@@ -133,7 +133,7 @@ class _PlaceOrderPageState extends State<PlaceOrderPage> {
             _MethodTile(
               selected: _method == DeliveryMethod.courier,
               icon: Icons.local_shipping_outlined,
-              title: 'Courier delivery',
+              title: 'Courier Delivery',
               subtitle: 'The farmer books a courier and shares the tracking number.',
               onTap: () => setState(() => _method = DeliveryMethod.courier),
             ),
@@ -250,7 +250,7 @@ class _SummaryCard extends StatelessWidget {
             style: const TextStyle(color: AppColors.gray, fontSize: 12),
           ),
           const SizedBox(height: 10),
-          _Line('Agreed price', 'PHP ${formatAmount(offer.offeredPrice)} / ${offer.unit}'),
+          _Line('Agreed Price', 'PHP ${formatAmount(offer.offeredPrice)} / ${offer.unit}'),
           _Line('Quantity', '${formatAmount(offer.offeredQuantity)} ${offer.unit}'),
           const Divider(height: 16, color: AppColors.border),
           _Line('Total', 'PHP ${formatAmount(offer.total)}', bold: true),
@@ -320,7 +320,7 @@ class _MethodTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
-      child: Container(
+      child: Ink(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: AppColors.white,
@@ -365,7 +365,7 @@ class _CenterTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
-      child: Container(
+      child: Ink(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: AppColors.white,

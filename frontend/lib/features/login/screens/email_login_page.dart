@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../shared/widgets/kubo_password_field.dart';
 import '../../shell/screens/app_shell.dart';
 import '../services/auth_service.dart';
 
@@ -86,12 +87,18 @@ class _EmailLoginPageState extends State<EmailLoginPage> {
           TextField(
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.email],
             decoration: _decoration('Email'),
           ),
           const SizedBox(height: 16),
-          TextField(
+          KuboPasswordField(
             controller: _passwordController,
-            obscureText: true,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.password],
+            onSubmitted: (_) {
+              if (!_isSubmitting) _login();
+            },
             decoration: _decoration('Password'),
           ),
           const SizedBox(height: 24),

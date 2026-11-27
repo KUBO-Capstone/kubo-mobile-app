@@ -1,5 +1,6 @@
 import { pool } from "#database/pg";
 import { fromMediaColumn } from "#controllers/upload.controller";
+import { emitToUsers } from "#services/socket.service";
 
 export interface Notification {
     notification_id: number;
@@ -26,7 +27,9 @@ const mapNotification = (row: Record<string, unknown>): Notification => ({
     sender: row.sender_id === null ? null : {
         id: Number(row.sender_id),
         name: String(row.sender_name),
-        email: String(row.sender_email),
+        // Someone else's email is never handed out (see publicUser in
+        // user.controller.ts); the field stays for the app's model.
+        email: '',
     },
     recipient: {
         id: Number(row.recipient_id),
@@ -55,7 +58,6 @@ export const NotificationModel = {
                 SELECT n.notification_id, n.sender_id, n.recipient_id, n.product_id,
                    n.title, n.message, n.is_read, n.created_at,
                    s.first_name || ' ' || s.last_name AS sender_name,
-                   s.email AS sender_email,
                    r.first_name || ' ' || r.last_name AS recipient_name,
                    r.email AS recipient_email,
                    p.crop_name AS product_name,
@@ -88,5 +90,34 @@ export const NotificationModel = {
             INSERT INTO notifications (recipient_id, sender_id, product_id, title, message)
             VALUES ($1, $2, $3, $4, $5)
         `, [input.recipientId, input.senderId, input.productId, input.title, input.message]);
+        // Lets the app bump the bell's unread badge without polling.
+        emitToUsers([input.recipientId], 'notification:new', { title: input.title });
+    },
+
+    /** How many of the recipient's notifications are unread, for the bell badge. */
+    async countUnread(recipientId: number): Promise<number> {
+        const { rows } = await pool.query(
+            'SELECT COUNT(*)::int AS unread FROM notifications WHERE recipient_id = $1 AND NOT is_read',
+            [recipientId],
+        );
+        return Number(rows[0]?.unread ?? 0);
+    },
+
+    /** Marks one of the recipient's notifications read. False when it is not theirs. */
+    async markRead(recipientId: number, notificationId: number): Promise<boolean> {
+        const { rowCount } = await pool.query(`
+            UPDATE notifications SET is_read = TRUE
+            WHERE notification_id = $1 AND recipient_id = $2
+        `, [notificationId, recipientId]);
+        return (rowCount ?? 0) > 0;
+    },
+
+    /** Marks every unread notification of the recipient read; returns how many. */
+    async markAllRead(recipientId: number): Promise<number> {
+        const { rowCount } = await pool.query(`
+            UPDATE notifications SET is_read = TRUE
+            WHERE recipient_id = $1 AND NOT is_read
+        `, [recipientId]);
+        return rowCount ?? 0;
     },
 };

@@ -3,8 +3,30 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/api_config.dart';
 import '../../../shared/data/api_request.dart';
 
+/// What the notifications page can narrow the list to.
+enum NotificationFilter {
+  all('All'),
+  unread('Unread'),
+  messages('Messages'),
+  offers('Offers'),
+  orders('Orders'),
+  reviews('Reviews');
+
+  const NotificationFilter(this.label);
+
+  final String label;
+
+  bool matches(NotificationRecord notification) => switch (this) {
+        NotificationFilter.all => true,
+        NotificationFilter.unread => !notification.isRead,
+        _ => notification.category == this,
+      };
+}
+
 class NotificationRecord {
   const NotificationRecord({
+    this.id,
+    this.isRead = true,
     required this.title,
     required this.message,
     required this.createdAt,
@@ -18,6 +40,8 @@ class NotificationRecord {
     final hasTimeZone = RegExp(r'(?:[zZ]|[+-]\d{2}:?\d{2})$').hasMatch(createdAtText);
     final createdAt = DateTime.tryParse(hasTimeZone ? createdAtText : '${createdAtText}Z');
     return NotificationRecord(
+      id: (json['notification_id'] as num?)?.toInt(),
+      isRead: json['is_read'] != false,
       title: json['title']?.toString() ?? 'Notification',
       message: json['message']?.toString() ?? '',
       createdAt: createdAt?.toLocal(),
@@ -33,9 +57,36 @@ class NotificationRecord {
     );
   }
 
+  final int? id;
+
+  /// False until the person opens it or taps Mark All as Read.
+  final bool isRead;
   final String title;
   final String message;
   final DateTime? createdAt;
+
+  /// Which filter this belongs under, from the title the server gives it
+  /// (see notificationTitle in backend/src/services/chat.service.ts).
+  NotificationFilter get category => switch (title) {
+        'New Offer' || 'Offer Update' => NotificationFilter.offers,
+        'Order Update' || 'Delivered' => NotificationFilter.orders,
+        'New Review' => NotificationFilter.reviews,
+        // Order events from before they had their own title.
+        _ when RegExp(r'^(Order #|Placed order|Received order|Picked up order|Shipped order)').hasMatch(message) =>
+          NotificationFilter.orders,
+        _ => NotificationFilter.messages,
+      };
+
+  NotificationRecord asRead() => NotificationRecord(
+        id: id,
+        isRead: true,
+        title: title,
+        message: message,
+        createdAt: createdAt,
+        sender: sender,
+        recipient: recipient,
+        product: product,
+      );
   final PersonDetails? sender;
   final PersonDetails recipient;
   final ProductDetails? product;
@@ -119,6 +170,28 @@ class NotificationProvider {
         .whereType<Map<String, dynamic>>()
         .map(NotificationRecord.fromJson)
         .toList(growable: false);
+  }
+
+  Future<int> fetchUnreadCount() async {
+    final response = await sendRequest(
+      () => _client.get(Uri.parse('${ApiConfig.baseUrl}/notifications/unread-count')),
+    );
+    final data = readData(response) as Map<String, dynamic>;
+    return (data['unread'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<void> markRead(int notificationId) async {
+    final response = await sendRequest(
+      () => _client.patch(Uri.parse('${ApiConfig.baseUrl}/notifications/$notificationId/read')),
+    );
+    checkResponse(response);
+  }
+
+  Future<void> markAllRead() async {
+    final response = await sendRequest(
+      () => _client.patch(Uri.parse('${ApiConfig.baseUrl}/notifications/read')),
+    );
+    checkResponse(response);
   }
 
   void dispose() => _client.close();

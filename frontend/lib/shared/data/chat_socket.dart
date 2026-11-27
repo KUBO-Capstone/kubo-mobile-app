@@ -17,9 +17,14 @@ abstract final class ChatSocket {
 
   static final _messages = StreamController<MessageRecord>.broadcast();
   static final _connects = StreamController<void>.broadcast();
+  static final _notifications = StreamController<void>.broadcast();
 
   /// Every message saved on any of the signed-in user's threads.
   static Stream<MessageRecord> get messages => _messages.stream;
+
+  /// A new notification was created for the signed-in user (the bell badge
+  /// recounts).
+  static Stream<void> get notifications => _notifications.stream;
 
   /// Fires on every (re)connect, including the first one.
   static Stream<void> get connects => _connects.stream;
@@ -41,6 +46,7 @@ abstract final class ChatSocket {
     socket.on('message:new', (data) {
       if (data is Map) _messages.add(MessageRecord.fromJson(Map<String, dynamic>.from(data)));
     });
+    socket.on('notification:new', (_) => _notifications.add(null));
     socket.connect();
     _socket = socket;
   }

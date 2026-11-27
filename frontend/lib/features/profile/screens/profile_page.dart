@@ -7,13 +7,15 @@ import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/kubo_bottom_navigation_bar.dart';
 import '../../../shared/widgets/kubo_listing_card.dart';
+import '../../../shared/widgets/kubo_more_menu.dart';
+import '../../report/screens/report_target_page.dart';
 import '../../../shared/data/message_service.dart';
 import '../../chat/screens/chat_page.dart';
 import '../../shell/providers/app_shell_controller.dart';
 import '../../../shared/data/synthetic_records.dart';
 import '../widgets/message_listing_picker.dart';
 import '../../listing/widgets/manage_listing_sheet.dart';
-import '../../login/screens/login_page.dart';
+import '../../login/widgets/log_out_flow.dart';
 import '../../login/services/auth_service.dart';
 import '../../orders/providers/orders_controller.dart';
 import '../../orders/screens/order_page.dart';
@@ -229,9 +231,12 @@ class _ProfilePageState extends State<ProfilePage> {
     if (updated != null && mounted) await _controller.setProfile(updated);
   }
 
+  /// The account this page shows: yours, or the seller's.
+  int? get _profileUserId => widget.isOwnProfile ? AuthService.currentUserId : widget.subject?.userId;
+
   Future<void> _openShare() async {
     final profile = _controller.profile;
-    final userId = AuthService.currentUserId;
+    final userId = _profileUserId;
     if (userId == null) return;
     final shareText = [
       '${profile.displayName} on Kubo',
@@ -239,6 +244,26 @@ class _ProfilePageState extends State<ProfilePage> {
       'View this profile: https://kubo.app/profile/$userId',
     ].join('\n\n');
     await Share.share(shareText, subject: '${profile.displayName} on Kubo');
+  }
+
+  /// The kebab menu at the top right: Share, and Report on anyone else's
+  /// profile.
+  List<KuboMenuAction> get _menuActions {
+    final userId = _profileUserId;
+    if (userId == null) return const [];
+    return [
+      KuboMenuAction(icon: Icons.share_outlined, label: 'Share', onSelected: _openShare),
+      if (!widget.isOwnProfile)
+        KuboMenuAction(
+          icon: Icons.flag_outlined,
+          label: 'Report This Profile',
+          isWarning: true,
+          onSelected: () => ReportTargetPage.open(
+            context,
+            ReportTargetPage.profile(userId: userId, profile: _controller.profile),
+          ),
+        ),
+    ];
   }
 
   Future<void> _openSettings() async {
@@ -344,6 +369,12 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ),
                         ),
+                      if (_menuActions.isNotEmpty)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: KuboMoreMenu(actions: _menuActions),
+                        ),
                       Padding(
                         padding: const EdgeInsets.only(top: 90),
                         child: ProfileHeaderCard(
@@ -377,6 +408,29 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ),
                   ),
+                // Your own private profile: a reminder of what others see.
+                if (widget.isOwnProfile && _controller.profile.isPrivate)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: _PrivateNote(
+                        text: 'Your profile is private. Others see only your name and photo. '
+                            'Change it in Account settings.',
+                      ),
+                    ),
+                  ),
+                // Someone else's private profile: nothing past the header.
+                if (!widget.isOwnProfile && _controller.profile.isPrivate)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: _PrivateNote(
+                        text: 'This profile is private. Their listings still show in search and on the map.',
+                        large: true,
+                      ),
+                    ),
+                  )
+                else ...[
                 SliverToBoxAdapter(
                   child: ProfileSectionTabBar(
                     selectedSection: _controller.selectedSection,
@@ -398,6 +452,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: _buildSectionContent(),
                   ),
                 ),
+                ],
                 const SliverToBoxAdapter(child: SizedBox(height: 28)),
               ],
             );
@@ -447,7 +502,7 @@ class _ProfilePageState extends State<ProfilePage> {
       return ProfileEmptyState(
         title: 'No orders yet',
         message: 'When an offer is accepted, arrange pickup or delivery from the chat and it shows up here.',
-        actionLabel: 'Browse listings',
+        actionLabel: 'Browse Listings',
         onActionPressed: _navigateHomeToExplore,
       );
     }
@@ -477,7 +532,7 @@ class _ProfilePageState extends State<ProfilePage> {
         message: widget.isOwnProfile
             ? 'Your listings will appear here once you add them.'
             : 'This profile has not posted any listings yet.',
-        actionLabel: widget.isOwnProfile ? 'Create listing' : null,
+        actionLabel: widget.isOwnProfile ? 'Create Listing' : null,
         onActionPressed: widget.isOwnProfile ? _openCreateListing : null,
       );
     }
@@ -522,7 +577,7 @@ class _ProfilePageState extends State<ProfilePage> {
         message: widget.isOwnProfile
             ? 'After a completed order, buyers and sellers you deal with can rate you here.'
             : 'This profile has no reviews yet.',
-        actionLabel: widget.isOwnProfile ? 'Share profile' : null,
+        actionLabel: widget.isOwnProfile ? 'Share Profile' : null,
         onActionPressed: widget.isOwnProfile ? _openShare : null,
       );
     }
@@ -546,8 +601,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 _FilterChoice(
                   label: switch (filter) {
                     ReviewerFilter.all => 'All',
-                    ReviewerFilter.buyers => 'From buyers',
-                    ReviewerFilter.sellers => 'From sellers',
+                    ReviewerFilter.buyers => 'From Buyers',
+                    ReviewerFilter.sellers => 'From Sellers',
                   },
                   selected: _controller.reviewerFilter == filter,
                   onTap: () => _controller.setReviewFilters(reviewer: filter),
@@ -559,7 +614,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 initialValue: stars ?? 0,
                 onSelected: (value) => _controller.setReviewFilters(stars: () => value == 0 ? null : value),
                 itemBuilder: (_) => [
-                  const PopupMenuItem<int>(value: 0, child: Text('All stars')),
+                  const PopupMenuItem<int>(value: 0, child: Text('All Stars')),
                   for (var star = 5; star >= 1; star--)
                     PopupMenuItem<int>(value: star, child: Text('$star star${star == 1 ? '' : 's'}')),
                 ],
@@ -572,8 +627,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 onSelected: (sort) => _controller.setReviewFilters(sort: sort),
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: ReviewSort.newest, child: Text('Newest')),
-                  PopupMenuItem(value: ReviewSort.highest, child: Text('Highest rated')),
-                  PopupMenuItem(value: ReviewSort.lowest, child: Text('Lowest rated')),
+                  PopupMenuItem(value: ReviewSort.highest, child: Text('Highest Rated')),
+                  PopupMenuItem(value: ReviewSort.lowest, child: Text('Lowest Rated')),
                 ],
                 child: _PillButton(
                   label: 'Sort: ${switch (_controller.reviewSort) {
@@ -604,13 +659,17 @@ class _ProfilePageState extends State<ProfilePage> {
     // Only what the account has filled in gets a row.
     final details = <Widget>[
       if (profile.joinedLabel.isNotEmpty)
-        _DetailRow(icon: Icons.calendar_today_outlined, label: 'Date joined', value: profile.joinedLabel),
+        _DetailRow(icon: Icons.calendar_today_outlined, label: 'Date Joined', value: profile.joinedLabel),
       if (profile.businessName.isNotEmpty)
         _DetailRow(icon: Icons.storefront_outlined, label: 'Business', value: profile.businessName),
       if (profile.businessType.isNotEmpty)
         _DetailRow(icon: Icons.category_outlined, label: 'Type', value: profile.businessType),
       if (profile.locationLabel.isNotEmpty)
         _DetailRow(icon: Icons.location_on_outlined, value: profile.locationLabel),
+      // Only there when the account shows it (the server leaves it out
+      // otherwise); on your own profile, whatever you saved.
+      if (profile.contactNumber.isNotEmpty)
+        _DetailRow(icon: Icons.phone_outlined, label: 'Contact', value: profile.contactNumber),
       if (profile.username.isNotEmpty)
         _DetailRow(icon: Icons.person_outline, value: profile.username),
     ];
@@ -650,21 +709,20 @@ class _ProfilePageState extends State<ProfilePage> {
             if (widget.isOwnProfile && AuthService.currentUser != null)
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton.icon(
+                child: TextButton(
                   onPressed: _openEditProfile,
-                  icon: const Icon(Icons.edit_outlined, size: 16),
-                  label: const Text('Add a bio', style: TextStyle(fontWeight: FontWeight.w700)),
                   style: TextButton.styleFrom(
                     foregroundColor: AppColors.green,
                     padding: EdgeInsets.zero,
                   ),
+                  child: const Text('Add a Bio', style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ),
           ],
           if (details.isNotEmpty) ...[
             const SizedBox(height: 24),
             const Text(
-              'Account details',
+              'Account Details',
               style: TextStyle(
                 color: AppColors.black,
                 fontSize: 18,
@@ -679,7 +737,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ],
           const SizedBox(height: 24),
           const Text(
-            'Profile analytics',
+            'Profile Analytics',
             style: TextStyle(
               color: AppColors.black,
               fontSize: 18,
@@ -734,7 +792,7 @@ class _ProfilePageState extends State<ProfilePage> {
             children: [
               Expanded(
                 child: _AnalyticsCard(
-                  label: 'Completed orders',
+                  label: 'Completed Orders',
                   value: _controller.profile.completedOrders.toString(),
                   accent: AppColors.green,
                 ),
@@ -742,7 +800,7 @@ class _ProfilePageState extends State<ProfilePage> {
               const SizedBox(width: 12),
               Expanded(
                 child: _AnalyticsCard(
-                  label: 'Member since',
+                  label: 'Member Since',
                   value: _controller.profile.joinedLabel.isEmpty ? '—' : _controller.profile.joinedLabel,
                   accent: AppColors.black,
                 ),
@@ -757,29 +815,7 @@ class _ProfilePageState extends State<ProfilePage> {
   // Reached from Account settings (the gear in the header). Ends the session
   // and drops the whole navigator stack so no screen from the old account
   // stays mounted behind the login page.
-  Future<void> _logout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Log out?'),
-        content: const Text('You will need to sign in again to make offers or message sellers.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Log out'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    AuthService.logout();
-    SavedListingsController.instance.clear();
-    Navigator.of(context).pushNamedAndRemoveUntil(LoginPage.routeName, (_) => false);
-  }
+  Future<void> _logout() => confirmAndLogOut(context);
 
   Widget _buildSavedSection() {
     final savedListings = _controller.savedListings;
@@ -787,7 +823,7 @@ class _ProfilePageState extends State<ProfilePage> {
       return ProfileEmptyState(
         title: 'No saved listings yet',
         message: 'Saved items will appear here when you favorite a listing.',
-        actionLabel: 'Browse listings',
+        actionLabel: 'Browse Listings',
         onActionPressed: _navigateHomeToExplore,
       );
     }
@@ -813,6 +849,39 @@ class _ProfilePageState extends State<ProfilePage> {
 
   void _navigateHomeToExplore() {
     AppShellController.instance.goTo(AppTab.home);
+  }
+}
+
+/// A lock and a line of text in a soft box: "This profile is private".
+class _PrivateNote extends StatelessWidget {
+  const _PrivateNote({required this.text, this.large = false});
+
+  final String text;
+  final bool large;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(large ? 20 : 12),
+      decoration: BoxDecoration(
+        color: AppColors.softBackground,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.lock_outline, size: large ? 26 : 18, color: AppColors.gray),
+          SizedBox(width: large ? 14 : 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: AppColors.black, fontSize: large ? 14 : 12, height: 1.35),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -936,7 +1005,7 @@ class _EarningsBanner extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Lifetime earnings', style: TextStyle(color: AppColors.gray, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const Text('Lifetime Earnings', style: TextStyle(color: AppColors.gray, fontSize: 12, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
                     Text(
                       formatPeso(total),
@@ -946,7 +1015,7 @@ class _EarningsBanner extends StatelessWidget {
                 ),
               ),
               Text(
-                completedOrders == 0 ? 'See details' : '$completedOrders sold',
+                completedOrders == 0 ? 'See Details' : '$completedOrders sold',
                 style: const TextStyle(color: AppColors.green, fontSize: 12, fontWeight: FontWeight.w700),
               ),
               const Icon(Icons.chevron_right, color: AppColors.green),

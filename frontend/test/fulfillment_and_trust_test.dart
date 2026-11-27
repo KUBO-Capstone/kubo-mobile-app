@@ -190,7 +190,7 @@ void main() {
       expect(find.text('Any courier'), findsOneWidget);
       expect(find.textContaining('Account settings → Pickup & delivery'), findsOneWidget);
 
-      await tester.tap(find.text('Use my profile settings'));
+      await tester.tap(find.text('Use My Profile Settings'));
       await tester.pumpAndSettle();
       // Starts from the profile's choices.
       final boxes = tester.widgetList<CheckboxListTile>(find.byType(CheckboxListTile)).toList();
@@ -223,7 +223,7 @@ void main() {
       expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse);
       expect(tester.widgetList<CheckboxListTile>(find.byType(CheckboxListTile)).map((box) => box.value), [false, true, false, false]);
 
-      await tester.tap(find.text('Use my profile settings'));
+      await tester.tap(find.text('Use My Profile Settings'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
@@ -280,7 +280,7 @@ void main() {
         await tester.pumpWidget(const MaterialApp(home: ProfilePage()));
         await tester.pumpAndSettle();
       });
-      expect(find.text('Lifetime earnings'), findsOneWidget);
+      expect(find.text('Lifetime Earnings'), findsOneWidget);
     });
 
     testWidgets('a visitor sees public trust figures only, and earnings are never fetched', (tester) async {
@@ -302,12 +302,12 @@ void main() {
         await tester.tap(find.text('About'));
         await tester.pumpAndSettle();
       });
-      expect(find.text('Lifetime earnings'), findsNothing);
+      expect(find.text('Lifetime Earnings'), findsNothing);
       expect(api.requests.where((r) => r.url.path.endsWith('/earnings')), isEmpty);
-      await tester.scrollUntilVisible(find.text('Completed orders'), 200, scrollable: find.byType(Scrollable).first);
-      final card = find.ancestor(of: find.text('Completed orders'), matching: find.byType(Column)).first;
+      await tester.scrollUntilVisible(find.text('Completed Orders'), 200, scrollable: find.byType(Scrollable).first);
+      final card = find.ancestor(of: find.text('Completed Orders'), matching: find.byType(Column)).first;
       expect(find.descendant(of: card, matching: find.text('6')), findsOneWidget);
-      expect(find.text('Member since'), findsOneWidget);
+      expect(find.text('Member Since'), findsOneWidget);
     });
   });
 
@@ -327,7 +327,9 @@ void main() {
     await tester.pump();
 
     expect(find.byTooltip('Back'), findsOneWidget);
-    expect(find.byTooltip('Share listing'), findsOneWidget);
+    // Share is inside the kebab menu now, not a button of its own.
+    expect(find.byTooltip('More options'), findsOneWidget);
+    expect(find.byTooltip('Share listing'), findsNothing);
     // Over the photos: only the page heading carries the title.
     expect(find.text('Calamansi'), findsOneWidget);
 
@@ -365,7 +367,7 @@ void main() {
 
     testWidgets('the live counter shows its terms and handover', (tester) async {
       await pumpBubble(tester, message(MessageType.counter, details: 'Pickup at Calamba Bagsakan'));
-      expect(find.text('Counter offer'), findsOneWidget);
+      expect(find.text('Counter Offer'), findsOneWidget);
       expect(find.text('PHP 80 × 10'), findsOneWidget);
       expect(find.text('Pickup at Calamba Bagsakan'), findsOneWidget);
       expect(find.text('Replaced'), findsNothing);
@@ -380,7 +382,7 @@ void main() {
 
     testWidgets('a decline tells the buyer why', (tester) async {
       await pumpBubble(tester, message(MessageType.declined, reason: DeclineReason.bagsakanTooFar));
-      expect(find.text('Offer declined'), findsOneWidget);
+      expect(find.text('Offer Declined'), findsOneWidget);
       expect(find.text('Reason: Selected bagsakan is too far'), findsOneWidget);
     });
   });

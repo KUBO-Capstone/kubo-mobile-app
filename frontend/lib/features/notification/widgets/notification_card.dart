@@ -10,15 +10,19 @@ Widget buildNotificationCard({
   required String time,
   required String image,
   VoidCallback? onTap,
+  // Unread cards get a green edge, a dot and a bolder title.
+  bool unread = false,
 }) {
-  return InkWell(
+  return Material(
+    color: AppColors.white,
+    borderRadius: BorderRadius.circular(8),
+    child: InkWell(
     onTap: onTap,
     borderRadius: BorderRadius.circular(8),
     child: Container(
       height: 90,
       decoration: BoxDecoration(
-        color: AppColors.white,
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: unread ? AppColors.green : AppColors.border, width: unread ? 1.4 : 1),
         borderRadius: BorderRadius.circular(8),
       ),
       padding: const EdgeInsets.fromLTRB(10, 9, 8, 9),
@@ -29,16 +33,33 @@ Widget buildNotificationCard({
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.black,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  height: 1.2,
-                ),
+              Row(
+                children: [
+                  if (unread) ...[
+                    Semantics(
+                      label: 'Unread',
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(color: AppColors.green, shape: BoxShape.circle),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.black,
+                        fontSize: 16,
+                        fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
+                        height: 1.2,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 4),
               Text(
@@ -89,6 +110,7 @@ Widget buildNotificationCard({
         ),
       ],
       ),
+    ),
     ),
   );
 }

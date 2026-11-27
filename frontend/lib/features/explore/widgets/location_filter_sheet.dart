@@ -198,7 +198,7 @@ class _LocationFilterSheetState extends State<LocationFilterSheet> {
       setState(() {
         _locating = false;
         _selected = LocationResult(
-          label: 'My location',
+          label: 'My Location',
           latitude: position!.latitude,
           longitude: position.longitude,
         );
@@ -241,7 +241,7 @@ class _LocationFilterSheetState extends State<LocationFilterSheet> {
                   children: [
                     const Expanded(
                       child: Text(
-                        'Search location',
+                        'Search Location',
                         style: TextStyle(
                           color: AppColors.black,
                           fontSize: 18,
@@ -329,7 +329,7 @@ class _LocationFilterSheetState extends State<LocationFilterSheet> {
                                 Icons.my_location,
                                 color: AppColors.green,
                               ),
-                      title: const Text('Use my current location'),
+                      title: const Text('Use My Current Location'),
                       onTap: _locating ? null : _useCurrentLocation,
                     ),
                     if (_results.isNotEmpty) ...[
@@ -343,7 +343,7 @@ class _LocationFilterSheetState extends State<LocationFilterSheet> {
                         ),
                     ],
                     if (widget.recentLocations.isNotEmpty) ...[
-                      const _SheetSectionLabel('Recent locations'),
+                      const _SheetSectionLabel('Recent Locations'),
                       for (final recent in widget.recentLocations)
                         _LocationTile(
                           icon: Icons.history,
@@ -376,7 +376,7 @@ class _LocationFilterSheetState extends State<LocationFilterSheet> {
                       ),
                       child: Text(
                         selected == null
-                            ? 'Pick a location to apply'
+                            ? 'Pick a Location to Apply'
                             : 'Apply - ${_radiusKm.toStringAsFixed(0)} km of '
                                 '${selected.label}',
                         maxLines: 1,

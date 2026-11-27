@@ -206,13 +206,10 @@ void main() {
       AuthService.updateCurrentUser({'contact_number': '09171234567', 'bio': 'new bio'});
 
       // The list only builds what is on screen.
-      final toggle = find.text('Show contact number');
+      final toggle = find.text('Show Contact Number');
       await tester.scrollUntilVisible(toggle, 200);
+      // The switch saves as soon as it is flipped.
       await tester.tap(toggle);
-      await tester.pump();
-      final save = find.text('Save privacy');
-      await tester.scrollUntilVisible(save, 200);
-      await tester.tap(save);
       await tester.pumpAndSettle();
 
       expect((AuthService.currentUser?['profile_privacy'] as Map)['show_contact_number'], isFalse);

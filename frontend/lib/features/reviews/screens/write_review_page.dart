@@ -92,7 +92,7 @@ class _WriteReviewPageState extends State<WriteReviewPage> {
       if (photos == null && _photos.isNotEmpty) {
         photos = await _service.uploadPhotos(orderId: widget.order.id, files: List<File>.of(_photos));
         if (photos.length != _photos.length) {
-          throw Exception('Some photos could not be uploaded. Please use JPG, PNG, or WebP photos.');
+          throw Exception('Some photos or videos could not be uploaded. Please use JPG, PNG, or WebP photos, or MP4, MOV, or WebM videos.');
         }
         _uploadedPhotos = photos;
       }

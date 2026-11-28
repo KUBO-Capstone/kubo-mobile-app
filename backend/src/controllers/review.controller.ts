@@ -118,7 +118,7 @@ export const createReview = async (req: Request, res: Response): Promise<void> =
 export const uploadReviewPhotos = async (req: Request, res: Response): Promise<void> => {
     const images: string[] = res.locals.uploadedImages ?? [];
     if (images.length === 0) {
-        res.status(400).json({ success: false, message: 'Add a JPG, PNG, or WebP photo' });
+        res.status(400).json({ success: false, message: 'Add a JPG, PNG, or WebP photo, or an MP4, MOV, or WebM video' });
         return;
     }
     res.status(201).json({ success: true, data: { images } });

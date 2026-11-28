@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { authUserId } from "#middleware/auth.middleware";
-import { ReportCategory, ReportModel } from "#models/report.model";
+import { moderationReportStore, ReportCategory, ReportModel } from "#models/report.model";
+import { fileReport, ReportError, ReportTarget } from "#services/moderation-report.service";
 
 const categories = new Set<ReportCategory>(['feedback', 'bug', 'other']);
 
@@ -28,3 +29,24 @@ export const createReport = async (req: Request, res: Response): Promise<void> =
     });
     res.status(201).json({ success: true, data: { report_id: reportId } });
 };
+
+async function reportTarget(req: Request<{ id: string }>, res: Response, target: ReportTarget): Promise<void> {
+    try {
+        const reportId = await fileReport(authUserId(res), target, req.body?.reason, moderationReportStore);
+        res.status(201).json({ success: true, data: { report_id: reportId } });
+    } catch (error) {
+        if (error instanceof ReportError) {
+            res.status(error.status).json({ success: false, message: error.message });
+            return;
+        }
+        throw error;
+    }
+}
+
+/** POST /reports/listings/:id { reason } */
+export const reportListing = (req: Request<{ id: string }>, res: Response): Promise<void> =>
+    reportTarget(req, res, { kind: 'listing', productId: Number(req.params.id) });
+
+/** POST /reports/users/:id { reason } */
+export const reportUser = (req: Request<{ id: string }>, res: Response): Promise<void> =>
+    reportTarget(req, res, { kind: 'user', userId: Number(req.params.id) });

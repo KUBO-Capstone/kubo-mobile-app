@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/kubo_pressable.dart';
+import '../../../shared/widgets/kubo_video.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/formatters.dart';
@@ -151,13 +153,16 @@ class _ReviewPhotosState extends State<_ReviewPhotos> {
   // in the stack (profile and order page).
   final Object _gallery = Object();
 
+  // The viewer pages through the photos only; videos open their own player.
   void _open(int index, int? decodeWidth) {
-    final photos = widget.review.photos;
+    final all = widget.review.photos;
+    final photoIndexes = [for (var i = 0; i < all.length; i++) if (!isVideoSource(all[i])) i];
+    final photos = [for (final i in photoIndexes) all[i]];
     KuboPhotoViewer.open(
       context,
       photos: photos,
-      initialIndex: index,
-      heroTagFor: (i) => KuboPhotoHeroTag(_gallery, i),
+      initialIndex: photoIndexes.indexOf(index),
+      heroTagFor: (i) => KuboPhotoHeroTag(_gallery, photoIndexes[i]),
       placeholderFor: (i) => kuboImageProvider(photos[i], decodeWidth: decodeWidth),
     );
   }
@@ -172,12 +177,14 @@ class _ReviewPhotosState extends State<_ReviewPhotos> {
         scrollDirection: Axis.horizontal,
         itemCount: photos.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) => Semantics(
+        itemBuilder: (context, index) => isVideoSource(photos[index])
+            ? KuboVideoTile(source: photos[index], width: _size, height: _size)
+            : Semantics(
           button: true,
           label: 'Review photo ${index + 1} of ${photos.length}',
           onTapHint: 'view full screen',
           excludeSemantics: true,
-          child: GestureDetector(
+          child: KuboPressable(
             onTap: () => _open(index, decodeWidth),
             child: Hero(
               tag: KuboPhotoHeroTag(_gallery, index),

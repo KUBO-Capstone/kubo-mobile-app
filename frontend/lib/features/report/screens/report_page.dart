@@ -107,7 +107,7 @@ class _ReportPageState extends State<ReportPage> {
                 ),
                 items: const [
                   DropdownMenuItem(value: 'feedback', child: Text('Feedback')),
-                  DropdownMenuItem(value: 'bug', child: Text('Bug report')),
+                  DropdownMenuItem(value: 'bug', child: Text('Bug Report')),
                   DropdownMenuItem(value: 'other', child: Text('Other')),
                 ],
                 onChanged: _isSubmitting ? null : (value) => setState(() => _category = value ?? 'feedback'),
@@ -139,7 +139,7 @@ class _ReportPageState extends State<ReportPage> {
                   ),
                   child: _isSubmitting
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white))
-                      : const Text('Submit report', style: TextStyle(fontWeight: FontWeight.w700)),
+                      : const Text('Submit Report', style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ),
             ],

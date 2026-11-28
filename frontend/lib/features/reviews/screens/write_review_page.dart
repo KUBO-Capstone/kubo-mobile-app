@@ -68,7 +68,7 @@ class _WriteReviewPageState extends State<WriteReviewPage> {
   }
 
   Future<void> _addPhoto() async {
-    final picked = await pickPhotos(context, _picker, remaining: maxReviewPhotos - _photos.length, max: maxReviewPhotos);
+    final picked = await pickPhotos(context, _picker, remaining: maxReviewPhotos - _photos.length, max: maxReviewPhotos, allowVideo: true);
     if (picked == null || picked.isEmpty || !mounted) return;
     setState(() {
       _photos.addAll(picked);
@@ -200,8 +200,9 @@ class _WriteReviewPageState extends State<WriteReviewPage> {
             onAdd: _submitting ? null : _addPhoto,
             onRemove: _submitting ? null : _removePhoto,
             helper: _reviewingSeller
-                ? 'Optional: Share photos of the produce quality or packaging'
-                : 'Optional: Add photos of the handover',
+                ? 'Optional: Photos or short videos (up to 10 MB) of the produce or packaging'
+                : 'Optional: Photos or short videos (up to 10 MB) of the handover',
+            title: 'Add Photos or Videos',
           ),
           const SizedBox(height: 16),
           Row(
@@ -231,7 +232,7 @@ class _WriteReviewPageState extends State<WriteReviewPage> {
               ),
               child: _submitting
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white))
-                  : const Text('Submit review', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  : const Text('Submit Review', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
             ),
           ),
         ),

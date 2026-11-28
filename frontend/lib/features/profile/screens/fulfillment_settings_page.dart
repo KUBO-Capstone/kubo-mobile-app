@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/fulfillment_service.dart';
+import '../../../shared/widgets/kubo_page_app_bar.dart';
 
 /// Where a seller ships from and how they can hand produce over: the
 /// bagsakan centers they drop off at and the couriers they can book. Buyers'
@@ -121,7 +122,7 @@ class _FulfillmentSettingsPageState extends State<FulfillmentSettingsPage> {
     final loaded = _loaded;
     return Scaffold(
       backgroundColor: AppColors.white,
-      appBar: AppBar(title: Text(_isListing ? 'Listing Pickup & Delivery' : 'Pickup & Delivery')),
+      appBar: KuboPageAppBar(title: _isListing ? 'Listing Pickup & Delivery' : 'Pickup & Delivery'),
       body: loaded == null
           ? Center(
               child: _error == null

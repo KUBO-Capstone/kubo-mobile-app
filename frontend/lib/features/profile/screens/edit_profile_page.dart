@@ -9,6 +9,7 @@ import 'package:philippines_rpcmb/philippines_rpcmb.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/ph_addresses.dart';
 import '../../../shared/data/profile_service.dart';
+import '../../../shared/widgets/kubo_page_app_bar.dart';
 import '../../../shared/widgets/kubo_picker_field.dart';
 import '../models/profile_validation.dart';
 import 'profile_photo_editor_page.dart';
@@ -401,7 +402,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         if (!didPop) _onBack();
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Edit Profile')),
+        appBar: const KuboPageAppBar(title: 'Edit Profile'),
         body: ListView(
           padding: const EdgeInsets.all(20),
           children: [

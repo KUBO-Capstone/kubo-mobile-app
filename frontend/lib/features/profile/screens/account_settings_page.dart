@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/profile_service.dart';
+import '../../../shared/widgets/kubo_page_app_bar.dart';
 import '../../login/services/auth_service.dart';
 import 'edit_profile_page.dart';
 import 'change_password_page.dart';
@@ -154,7 +155,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         Navigator.of(context).pop(_latestUser());
       },
       child: Scaffold(
-      appBar: AppBar(title: const Text('Account Settings')),
+      appBar: const KuboPageAppBar(title: 'Account Settings'),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [

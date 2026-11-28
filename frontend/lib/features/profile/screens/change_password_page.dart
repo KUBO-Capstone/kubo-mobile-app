@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../shared/data/profile_service.dart';
 import '../../../shared/widgets/kubo_discard_changes.dart';
+import '../../../shared/widgets/kubo_page_app_bar.dart';
 import '../../../shared/widgets/kubo_password_field.dart';
 
 class ChangePasswordPage extends StatefulWidget {
@@ -93,7 +94,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       hasUnsavedChanges: _hasUnsavedChanges,
       message: 'The passwords you typed will be cleared.',
       child: Scaffold(
-        appBar: AppBar(title: const Text('Change Password')),
+        appBar: const KuboPageAppBar(title: 'Change Password'),
         body: AutofillGroup(
           child: ListView(
             padding: const EdgeInsets.all(20),

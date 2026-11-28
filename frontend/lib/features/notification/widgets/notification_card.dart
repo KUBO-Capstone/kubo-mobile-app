@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../shared/widgets/kubo_image.dart';
 
 /// Builds the compact notification card used in the notification feed.
 Widget buildNotificationCard({
@@ -8,7 +9,8 @@ Widget buildNotificationCard({
   required String message,
   required String date,
   required String time,
-  required String image,
+  /// The listing's first photo; null when the notification has none.
+  String? imageUrl,
   VoidCallback? onTap,
   // Unread cards get a green edge, a dot and a bolder title.
   bool unread = false,
@@ -88,24 +90,9 @@ Widget buildNotificationCard({
         Center(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(5),
-            child: Image.asset(
-              image,
-              width: 70,
-              height: 66,
-              fit: BoxFit.cover,
-              errorBuilder:
-                  (_, __, ___) => Container(
-                    width: 70,
-                    height: 66,
-                    color: AppColors.softBackground,
-                    alignment: Alignment.center,
-                    child: const Icon(
-                      Icons.shopping_cart_outlined,
-                      color: AppColors.gray,
-                      size: 30,
-                    ),
-                  ),
-            ),
+            child: imageUrl == null
+                ? const _NoImage()
+                : KuboImage(imageUrl, width: 70, height: 66, errorIcon: Icons.shopping_cart_outlined),
           ),
         ),
       ],
@@ -113,4 +100,20 @@ Widget buildNotificationCard({
     ),
     ),
   );
+}
+
+/// Stands in for the photo when the notification is not about a listing.
+class _NoImage extends StatelessWidget {
+  const _NoImage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 70,
+      height: 66,
+      color: AppColors.softBackground,
+      alignment: Alignment.center,
+      child: const Icon(Icons.shopping_cart_outlined, color: AppColors.gray, size: 30),
+    );
+  }
 }

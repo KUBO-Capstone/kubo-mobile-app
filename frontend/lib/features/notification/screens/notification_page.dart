@@ -133,52 +133,59 @@ class _NotificationPageState extends State<NotificationPage> {
             letterSpacing: 1.2,
           ),
         ),
-        actions: [
-          PopupMenuButton<NotificationFilter>(
-            tooltip: 'Filter',
-            initialValue: _filter,
-            onSelected: (filter) => setState(() => _filter = filter),
-            itemBuilder: (_) => [
-              for (final filter in NotificationFilter.values)
-                CheckedPopupMenuItem<NotificationFilter>(
-                  value: filter,
-                  checked: filter == _filter,
-                  child: Text(filter.label),
-                ),
-            ],
-            // A green dot while a filter is on, so a short list is not
-            // mistaken for everything there is.
-            icon: Badge(
-              isLabelVisible: filtering,
-              smallSize: 8,
-              backgroundColor: AppColors.green,
-              child: Icon(Icons.filter_list, color: filtering ? AppColors.green : AppColors.black),
-            ),
-          ),
-          // Greyed out when there is nothing unread.
-          TextButton(
-            onPressed: _hasUnread && !_markingAll ? _markAllRead : null,
-            style: TextButton.styleFrom(foregroundColor: AppColors.green),
-            child: const Text('Mark All as Read', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-          ),
-        ],
       ),
       body: Column(
         children: [
-          if (filtering)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(22, 0, 22, 6),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: InputChip(
-                  label: Text('Showing: ${_filter.label}'),
-                  onDeleted: () => setState(() => _filter = NotificationFilter.all),
-                  deleteButtonTooltipMessage: 'Show All',
-                  backgroundColor: AppColors.white,
-                  side: const BorderSide(color: AppColors.green),
+          // Under the header: what the list is narrowed to on the left, the
+          // filter and Mark All as Read on the right.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 0, 12, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: filtering
+                      ? Align(
+                          alignment: Alignment.centerLeft,
+                          child: InputChip(
+                            label: Text('Showing: ${_filter.label}'),
+                            onDeleted: () => setState(() => _filter = NotificationFilter.all),
+                            deleteButtonTooltipMessage: 'Show All',
+                            backgroundColor: AppColors.white,
+                            side: const BorderSide(color: AppColors.green),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
                 ),
-              ),
+                PopupMenuButton<NotificationFilter>(
+                  tooltip: 'Filter',
+                  initialValue: _filter,
+                  onSelected: (filter) => setState(() => _filter = filter),
+                  itemBuilder: (_) => [
+                    for (final filter in NotificationFilter.values)
+                      CheckedPopupMenuItem<NotificationFilter>(
+                        value: filter,
+                        checked: filter == _filter,
+                        child: Text(filter.label),
+                      ),
+                  ],
+                  // A green dot while a filter is on, so a short list is not
+                  // mistaken for everything there is.
+                  icon: Badge(
+                    isLabelVisible: filtering,
+                    smallSize: 8,
+                    backgroundColor: AppColors.green,
+                    child: Icon(Icons.filter_list, color: filtering ? AppColors.green : AppColors.black),
+                  ),
+                ),
+                // Greyed out when there is nothing unread.
+                TextButton(
+                  onPressed: _hasUnread && !_markingAll ? _markAllRead : null,
+                  style: TextButton.styleFrom(foregroundColor: AppColors.green),
+                  child: const Text('Mark All as Read', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                ),
+              ],
             ),
+          ),
           Expanded(
             child: RefreshIndicator(
               color: AppColors.green,
@@ -236,7 +243,7 @@ class _NotificationPageState extends State<NotificationPage> {
           message: notification.displayMessage,
           date: notification.date,
           time: notification.time,
-          image: 'assets/images/Placeholder_img.png',
+          imageUrl: notification.product?.image,
           unread: !notification.isRead,
           onTap: () => _open(notification),
         );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/kubo_pressable.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/message_service.dart';
@@ -107,7 +108,7 @@ class ChatProductHeader extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               // The thumbnail opens the listing too, not just the title.
-              GestureDetector(
+              KuboPressable(
                 onTap: onOpenListing,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
@@ -202,7 +203,7 @@ class _OfferControl extends StatelessWidget {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.green),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Accept offer'),
+            child: const Text('Accept Offer'),
           ),
         ],
       ),
@@ -236,12 +237,12 @@ class _OfferControl extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Keep deal'),
+            child: const Text('Keep Deal'),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-            child: const Text('Cancel deal'),
+            child: const Text('Cancel Deal'),
           ),
         ],
       ),
@@ -332,7 +333,7 @@ class _OfferControl extends StatelessWidget {
             const SizedBox(width: 8),
           ],
           _SmallButton(
-            label: 'View order',
+            label: 'View Order',
             filled: orderStatus.isOpen && !canRate,
             onTap: () => onOpenOrder(orderId),
           ),
@@ -357,10 +358,10 @@ class _OfferControl extends StatelessWidget {
           Row(
             children: [
               if (canOrder) ...[
-                _SmallButton(label: 'Arrange pickup', filled: true, onTap: busy ? null : onPlaceOrder),
+                _SmallButton(label: 'Arrange Pickup', filled: true, onTap: busy ? null : onPlaceOrder),
                 const SizedBox(width: 8),
               ],
-              _SmallButton(label: 'Cancel deal', onTap: busy ? null : () => _cancelDeal(context)),
+              _SmallButton(label: 'Cancel Deal', onTap: busy ? null : () => _cancelDeal(context)),
             ],
           ),
         ],
@@ -373,9 +374,9 @@ class _OfferControl extends StatelessWidget {
     final String? closedLabel = switch (status) {
       NegotiationStatus.accepted => 'Offer accepted · $termsLabel',
       NegotiationStatus.declined => thread.isDealCancelled
-          ? 'Last deal cancelled'
+          ? 'Last Deal Cancelled'
           : reason == null
-              ? 'Last offer declined'
+              ? 'Last Offer Declined'
               : 'Last offer declined: ${reason.label}',
       _ => null,
     };
@@ -392,7 +393,7 @@ class _OfferControl extends StatelessWidget {
           else
             const Spacer(),
           _SmallButton(
-            label: status == NegotiationStatus.declined ? 'Make new offer' : 'Make offer',
+            label: status == NegotiationStatus.declined ? 'Make New Offer' : 'Make Offer',
             filled: true,
             onTap: busy ? null : onMakeOffer,
           ),

@@ -123,7 +123,7 @@ class _LoginPageState extends State<LoginPage> {
                               );
                             },
                             child: const Text(
-                              'Create account',
+                              'Create Account',
                               style: TextStyle(
                                 color: AppColors.green,
                                 fontSize: 14,

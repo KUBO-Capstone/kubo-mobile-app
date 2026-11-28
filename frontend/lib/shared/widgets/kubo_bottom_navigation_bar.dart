@@ -228,20 +228,31 @@ class _CenterAction extends StatelessWidget {
     return Expanded(
       child: Align(
         alignment: Alignment.topCenter,
-        child: Semantics(
-          button: true,
-          label: 'Create a listing',
-          onTap: onTap,
-          excludeSemantics: true,
-          child: InkResponse(
-            onTap: onTap,
-            radius: 30,
-            child: const AppSvgIcon(
-              assetPath: AppIcons.squarePlus,
-              size: 28,
-              color: AppColors.green,
-            ),
-          ),
+        // Greyed out until the profile has a contact number and address.
+        // Still tappable: the tap says what is missing.
+        child: ValueListenableBuilder<Map<String, dynamic>?>(
+          valueListenable: AuthService.currentUserListenable,
+          builder: (context, _, __) {
+            final blocked = AuthService.missingProfileDetails.isNotEmpty;
+            return Semantics(
+              button: true,
+              label: blocked ? 'Create a listing, needs a complete profile' : 'Create a listing',
+              onTap: onTap,
+              excludeSemantics: true,
+              child: InkResponse(
+                onTap: onTap,
+                radius: 30,
+                child: Opacity(
+                  opacity: blocked ? 0.45 : 1,
+                  child: AppSvgIcon(
+                    assetPath: AppIcons.squarePlus,
+                    size: 28,
+                    color: blocked ? AppColors.gray : AppColors.green,
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );

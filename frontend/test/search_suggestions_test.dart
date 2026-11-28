@@ -247,7 +247,7 @@ void main() {
         expect(find.textContaining('Could not load suggestions'), findsOneWidget);
 
         online = true;
-        await tester.tap(find.text('Try again'));
+        await tester.tap(find.text('Try Again'));
         await tester.pumpAndSettle();
       });
 
@@ -265,7 +265,7 @@ void main() {
         await tester.pump();
         // At once: the row for exactly what was typed, and no browse sections.
         expect(find.text('Search for "ka"'), findsOneWidget);
-        expect(find.text('Recent searches'), findsNothing);
+        expect(find.text('Recent Searches'), findsNothing);
         expect(find.byType(SearchSuggestionCard), findsNothing);
 
         await tester.pump(_afterTypingPause);
@@ -296,7 +296,7 @@ void main() {
       });
 
       expect(find.byType(SearchSuggestionTile), findsNothing);
-      expect(find.text('Recent searches'), findsOneWidget);
+      expect(find.text('Recent Searches'), findsOneWidget);
       expect(find.byType(SearchSuggestionCard), findsNWidgets(3));
     });
 

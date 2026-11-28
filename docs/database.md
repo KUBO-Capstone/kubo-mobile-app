@@ -128,6 +128,22 @@ Only the town and province names are sent. The lookup runs in the background
 on server start and whenever a listing or an address may have added a town;
 `GEOCODING_ENABLED=false` in `backend/.env` turns it off.
 
+## Reports
+
+Two tables, for two different things:
+
+- `reports`: app feedback and bug reports from the drawer's Report page
+  (`POST /reports`).
+- `moderation_reports` (migration 010): a listing or an account reported
+  from the kebab menu on the listing page or a profile
+  (`POST /reports/listings/:id` and `POST /reports/users/:id`, body
+  `{ "reason": "..." }`). `product_id` is set for a listing report and NULL
+  for a profile report. `reported_user_id` is always set: for a listing it is
+  the seller. `status` starts as `open`. Nobody can report themselves or
+  their own listing, and a user can have only one open report per listing
+  and per profile (a second one answers 409). Nothing in the app reads these
+  yet: review them in the Supabase table editor.
+
 ## Legacy SQLite files
 
 `backend/src/config/database.ts` and `backend/src/database/db.sqlite` are the

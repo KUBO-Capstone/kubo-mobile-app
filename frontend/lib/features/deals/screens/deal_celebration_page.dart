@@ -117,7 +117,7 @@ class _DealCelebrationPageState extends State<DealCelebrationPage> {
                                   child: Column(
                                     children: [
                                       Text(
-                                        seller ? 'Deal amount' : 'Your total',
+                                        seller ? 'Deal Amount' : 'Your Total',
                                         style: const TextStyle(color: AppColors.gray, fontSize: 13, fontWeight: FontWeight.w600),
                                       ),
                                       const SizedBox(height: 4),
@@ -164,15 +164,14 @@ class _DealCelebrationPageState extends State<DealCelebrationPage> {
                       SizedBox(
                         width: double.infinity,
                         height: 52,
-                        child: FilledButton.icon(
+                        child: FilledButton(
                           onPressed: () => Navigator.of(context).pop(widget.canReview ? DealCelebrationAction.writeReview : null),
-                          icon: widget.canReview ? const Icon(Icons.rate_review_outlined) : const SizedBox.shrink(),
                           style: FilledButton.styleFrom(
                             backgroundColor: AppColors.green,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                          label: Text(
-                            widget.canReview ? 'Write a review' : 'Done',
+                          child: Text(
+                            widget.canReview ? 'Write a Review' : 'Done',
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                           ),
                         ),
@@ -184,13 +183,13 @@ class _DealCelebrationPageState extends State<DealCelebrationPage> {
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(DealCelebrationAction.viewEarnings),
                           style: TextButton.styleFrom(foregroundColor: AppColors.green),
-                          child: const Text('See lifetime earnings', style: TextStyle(fontWeight: FontWeight.w700)),
+                          child: const Text('See Lifetime Earnings', style: TextStyle(fontWeight: FontWeight.w700)),
                         ),
                       if (widget.canReview)
                         TextButton(
                           onPressed: () => Navigator.of(context).pop(),
                           style: TextButton.styleFrom(foregroundColor: AppColors.gray),
-                          child: const Text('Maybe later', style: TextStyle(fontWeight: FontWeight.w700)),
+                          child: const Text('Maybe Later', style: TextStyle(fontWeight: FontWeight.w700)),
                         ),
                     ],
                   ),

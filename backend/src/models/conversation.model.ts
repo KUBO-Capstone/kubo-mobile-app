@@ -14,6 +14,9 @@ export interface ConversationSummary {
     seller_id: number;
     buyer_name: string;
     seller_name: string;
+    // Profile photos, for the chat's avatars; null when there is none.
+    buyer_photo: string | null;
+    seller_photo: string | null;
     product_id: number;
     crop_name: string;
     base_price: number;
@@ -67,6 +70,7 @@ const conversationQuery = `
     SELECT c.*,
            b.first_name || ' ' || b.last_name AS buyer_name,
            s.first_name || ' ' || s.last_name AS seller_name,
+           b.profile_photo_key AS buyer_photo, s.profile_photo_key AS seller_photo,
            p.crop_name, p.base_price, p.unit_measurement, p.status AS product_status,
            p.allows_meetup, p.allows_delivery,
            (SELECT pi.image_key FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.display_order LIMIT 1) AS product_image,
@@ -113,6 +117,8 @@ function mapConversation(row: Record<string, unknown>): ConversationSummary {
         seller_id: Number(row.seller_id),
         buyer_name: String(row.buyer_name),
         seller_name: String(row.seller_name),
+        buyer_photo: typeof row.buyer_photo === 'string' && row.buyer_photo ? fromMediaColumn(row.buyer_photo) : null,
+        seller_photo: typeof row.seller_photo === 'string' && row.seller_photo ? fromMediaColumn(row.seller_photo) : null,
         product_id: Number(row.product_id),
         crop_name: String(row.crop_name),
         base_price: Number(row.base_price),

@@ -121,7 +121,7 @@ class _FulfillmentSettingsPageState extends State<FulfillmentSettingsPage> {
     final loaded = _loaded;
     return Scaffold(
       backgroundColor: AppColors.white,
-      appBar: AppBar(title: Text(_isListing ? 'Listing pickup & delivery' : 'Pickup & delivery')),
+      appBar: AppBar(title: Text(_isListing ? 'Listing Pickup & Delivery' : 'Pickup & Delivery')),
       body: loaded == null
           ? Center(
               child: _error == null
@@ -132,7 +132,7 @@ class _FulfillmentSettingsPageState extends State<FulfillmentSettingsPage> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.gray)),
-                          TextButton(onPressed: _load, child: const Text('Try again')),
+                          TextButton(onPressed: _load, child: const Text('Try Again')),
                         ],
                       ),
                     ),
@@ -206,7 +206,7 @@ class _FulfillmentSettingsPageState extends State<FulfillmentSettingsPage> {
         child: SwitchListTile(
           value: !_custom,
           activeThumbColor: AppColors.green,
-          title: const Text('Use my profile settings', style: TextStyle(fontWeight: FontWeight.w700)),
+          title: const Text('Use My Profile Settings', style: TextStyle(fontWeight: FontWeight.w700)),
           subtitle: Text(_custom
               ? 'This listing has its own centers and couriers. Your profile settings are not changed.'
               : 'This listing offers the centers and couriers set on your profile.'),
@@ -230,7 +230,7 @@ class _FulfillmentSettingsPageState extends State<FulfillmentSettingsPage> {
     final centers = loaded.centers.where((c) => c.supported).map((c) => c.center.name).toList();
     final couriers = loaded.couriers.where((c) => c.supported).map((c) => c.name).toList();
     return [
-      const _Heading('Bagsakan centers'),
+      const _Heading('Bagsakan Centers'),
       const SizedBox(height: 4),
       _Hint(loaded.configuredCenters ? centers.join(' · ') : 'Any center'),
       const SizedBox(height: 16),
@@ -277,7 +277,7 @@ class _FulfillmentSettingsPageState extends State<FulfillmentSettingsPage> {
           controlAffinity: ListTileControlAffinity.leading,
         ),
       const SizedBox(height: 16),
-      const _Heading('Couriers you can book'),
+      const _Heading('Couriers You Can Book'),
       const SizedBox(height: 2),
       _Hint(_couriers.isEmpty ? 'None ticked: buyers can pick any courier.' : 'Buyers can only pick the ${_couriers.length} ticked.'),
       for (final entry in loaded.couriers)

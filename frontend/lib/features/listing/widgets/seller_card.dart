@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/synthetic_records.dart';
+import '../../../shared/widgets/kubo_avatar.dart';
 import '../../../shared/widgets/kubo_star_rating.dart';
 import '../../profile/screens/profile_page.dart';
 
@@ -48,19 +49,13 @@ class SellerCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Container(
-                width: 52,
-                height: 52,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.person_outline,
-                  size: 28,
-                  color: AppColors.green,
-                ),
+              // The seller's photo, or the person icon when they have none.
+              KuboAvatar(
+                photoUrl: listing.sellerPhotoUrl,
+                size: 52,
+                background: AppColors.white,
+                iconColor: AppColors.green,
+                borderRadius: BorderRadius.circular(16),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -80,7 +75,7 @@ class SellerCard extends StatelessWidget {
                       KuboRatingLine(average: listing.sellerRating, count: listing.sellerReviewCount)
                     else
                       const Text(
-                        'Verified local grower',
+                        'Verified Local Grower',
                         style: TextStyle(
                           color: AppColors.gray,
                           fontSize: 13,

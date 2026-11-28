@@ -22,8 +22,10 @@ class OrderCard extends StatelessWidget {
 
     return Material(
       color: AppColors.white,
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(

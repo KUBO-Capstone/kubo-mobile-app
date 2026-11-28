@@ -17,9 +17,11 @@ import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/listing_options.dart';
 import '../../../shared/data/synthetic_records.dart';
 import '../../../shared/data/message_service.dart';
+import '../../../shared/widgets/kubo_more_menu.dart';
 import '../../../shared/widgets/kubo_save_button.dart';
 import '../../chat/screens/chat_page.dart';
 import '../../login/services/auth_service.dart';
+import '../../report/screens/report_target_page.dart';
 import '../../saved/providers/saved_listings_controller.dart';
 import '../../shell/providers/app_shell_controller.dart';
 
@@ -153,6 +155,34 @@ class _ListingPageState extends State<ListingPage> {
     }
   }
 
+  /// Share, and Report for anyone but the seller. Empty for a mock row,
+  /// which has nothing to link to or report.
+  List<KuboMenuAction> _menuActions(
+    BuildContext context,
+    SyntheticListingRecord listing, {
+    required bool isOwner,
+  }) {
+    if (listing.productId == null) return const [];
+    return [
+      KuboMenuAction(
+        icon: Icons.share_outlined,
+        label: 'Share',
+        onSelected: () => _share(listing),
+      ),
+      if (!isOwner)
+        KuboMenuAction(
+          icon: Icons.flag_outlined,
+          label: 'Report This Listing',
+          isWarning: true,
+          onSelected:
+              () => ReportTargetPage.open(
+                context,
+                ReportTargetPage.listing(listing: listing),
+              ),
+        ),
+    ];
+  }
+
   Future<void> _share(SyntheticListingRecord listing) async {
     final where =
         listing.locationLabel.isEmpty ? '' : ' in ${listing.locationLabel}';
@@ -196,8 +226,8 @@ class _ListingPageState extends State<ListingPage> {
             backgroundColor: AppColors.white,
             body: SafeArea(
               // The top bar sits over the scrolling page and stays put, so
-              // Back and Share are always one tap away however far down the
-              // details the user has read.
+              // Back and the menu are always one tap away however far down
+              // the details the user has read.
               child: Stack(
                 children: [
                   SingleChildScrollView(
@@ -220,10 +250,6 @@ class _ListingPageState extends State<ListingPage> {
                                   ? () =>
                                       KuboSaveButton.toggle(context, listing)
                                   : null,
-                          onShare:
-                              listing.productId == null
-                                  ? null
-                                  : () => _share(listing),
                           showControls: false,
                         ),
                         Padding(
@@ -273,7 +299,7 @@ class _ListingPageState extends State<ListingPage> {
                                           children: [
                                             if (listing.isSoldOut)
                                               const ListingTag(
-                                                label: 'Sold out',
+                                                label: 'Sold Out',
                                               ),
                                             if (listing.isPreorder)
                                               const ListingTag(
@@ -356,7 +382,7 @@ class _ListingPageState extends State<ListingPage> {
                               ),
                               const SizedBox(height: 24),
                               const Text(
-                                'About this listing',
+                                'About This Listing',
                                 style: TextStyle(
                                   color: AppColors.black,
                                   fontSize: 16,
@@ -375,7 +401,7 @@ class _ListingPageState extends State<ListingPage> {
                               if (listing.productId != null) ...[
                                 const SizedBox(height: 24),
                                 const Text(
-                                  'Deal method',
+                                  'Deal Method',
                                   style: TextStyle(
                                     color: AppColors.black,
                                     fontSize: 16,
@@ -419,10 +445,11 @@ class _ListingPageState extends State<ListingPage> {
                                 () => Navigator.of(
                                   context,
                                 ).pop(_controller.changed),
-                            onShare:
-                                listing.productId == null
-                                    ? null
-                                    : () => _share(listing),
+                            menuActions: _menuActions(
+                              context,
+                              listing,
+                              isOwner: isOwner,
+                            ),
                             isSaved: SavedListingsController.instance.isSaved(
                               listing.productId,
                             ),
@@ -448,31 +475,52 @@ class _ListingPageState extends State<ListingPage> {
                         // The seller has nothing to message or offer on; give
                         // them the manage actions instead.
                         ? ActionButton(
-                          label: 'Manage listing',
+                          label: 'Manage Listing',
                           color: AppColors.green,
                           textColor: AppColors.white,
                           onPressed: () => _manage(context, listing),
                         )
-                        : Row(
-                          children: [
-                            Expanded(
-                              child: ActionButton(
-                                label: 'Message',
-                                color: AppColors.softBackground,
-                                textColor: AppColors.black,
-                                onPressed: () => _message(context, listing),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ActionButton(
-                                label: 'Make Offer',
-                                color: AppColors.green,
-                                textColor: AppColors.white,
-                                onPressed: () => _makeOffer(context, listing),
-                              ),
-                            ),
-                          ],
+                        : listing.isSoldOut
+                        // Nothing left to ask about or offer on.
+                        ? const SizedBox(
+                          width: double.infinity,
+                          child: ActionButton(
+                            label: 'Sold',
+                            color: AppColors.green,
+                            textColor: AppColors.white,
+                            onPressed: null,
+                          ),
+                        )
+                        : ValueListenableBuilder<Map<String, dynamic>?>(
+                          // Greys out the moment the profile is finished.
+                          valueListenable: AuthService.currentUserListenable,
+                          builder: (context, _, __) {
+                            // Still tappable: the tap says what is missing.
+                            final profileIncomplete =
+                                AuthService.missingProfileDetails.isNotEmpty;
+                            return Row(
+                              children: [
+                                Expanded(
+                                  child: ActionButton(
+                                    label: 'Message',
+                                    color: AppColors.softBackground,
+                                    textColor: AppColors.black,
+                                    onPressed: () => _message(context, listing),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ActionButton(
+                                    label: 'Make Offer',
+                                    color: AppColors.green,
+                                    textColor: AppColors.white,
+                                    dimmed: profileIncomplete,
+                                    onPressed: () => _makeOffer(context, listing),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
               ),
             ),
@@ -483,18 +531,18 @@ class _ListingPageState extends State<ListingPage> {
   }
 }
 
-/// Back, Share and Save, kept at the top of the listing page while it
-/// scrolls. Over the photos they float as round white buttons; once the
-/// photos have scrolled away the bar fills in behind them (frosted, with a
-/// hairline under it) and the listing's title fades in, so the buttons stay
-/// readable over text and cards.
+/// Back, Save and the kebab menu (Share, Report), kept at the top of the
+/// listing page while it scrolls. Over the photos they float as round white
+/// buttons; once the photos have scrolled away the bar fills in behind them
+/// (frosted, with a hairline under it) and the listing's title fades in, so
+/// the buttons stay readable over text and cards.
 class _ListingTopBar extends StatelessWidget {
   const _ListingTopBar({
     required this.solidity,
     required this.title,
     required this.onBack,
     required this.isSaved,
-    this.onShare,
+    this.menuActions = const [],
     this.onSave,
   });
 
@@ -504,21 +552,15 @@ class _ListingTopBar extends StatelessWidget {
   final double solidity;
   final String title;
   final VoidCallback onBack;
-  final VoidCallback? onShare;
+
+  /// What the kebab menu offers; no kebab when empty.
+  final List<KuboMenuAction> menuActions;
   final bool isSaved;
   final VoidCallback? onSave;
 
   @override
   Widget build(BuildContext context) {
     final buttons = <Widget>[
-      if (onShare != null)
-        _TopBarButton(
-          icon: Icons.share_outlined,
-          tooltip: 'Share listing',
-          solidity: solidity,
-          onPressed: onShare!,
-        ),
-      if (onShare != null && onSave != null) const SizedBox(width: 8),
       if (onSave != null)
         _TopBarButton(
           icon: isSaved ? Icons.favorite : Icons.favorite_border,
@@ -526,6 +568,14 @@ class _ListingTopBar extends StatelessWidget {
           tooltip: isSaved ? 'Remove from saved' : 'Save listing',
           solidity: solidity,
           onPressed: onSave!,
+        ),
+      if (onSave != null && menuActions.isNotEmpty) const SizedBox(width: 8),
+      if (menuActions.isNotEmpty)
+        KuboMoreMenu(
+          actions: menuActions,
+          // Fades with the other buttons as the bar turns solid.
+          background: AppColors.white.withValues(alpha: 0.9 * (1 - solidity)),
+          elevation: 2 * (1 - solidity),
         ),
     ];
     final bar = Container(

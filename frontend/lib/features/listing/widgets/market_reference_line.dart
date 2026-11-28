@@ -42,7 +42,7 @@ class MarketReferenceLine extends StatelessWidget {
       tag = '${(diff.abs() * 100).toStringAsFixed(0)}% below market';
       tagColor = AppColors.green;
     } else {
-      tag = 'At market price';
+      tag = 'At Market Price';
       tagColor = AppColors.gray;
     }
     final scope = ref.region != null && ref.regionAvg != null ? 'in ${ref.region}' : 'nationwide';

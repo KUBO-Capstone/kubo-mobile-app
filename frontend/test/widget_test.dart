@@ -42,15 +42,15 @@ void main() {
   testWidgets('navigates to create account and back', (WidgetTester tester) async {
     await tester.pumpWidget(const KuboApp());
 
-    final createAccountButton = find.widgetWithText(TextButton, 'Create account');
+    final createAccountButton = find.widgetWithText(TextButton, 'Create Account');
     await tester.ensureVisible(createAccountButton);
     await tester.tap(createAccountButton);
     await tester.pumpAndSettle();
 
     expect(find.textContaining('First time here?'), findsOneWidget);
-    expect(find.text('Back to login'), findsOneWidget);
+    expect(find.text('Back to Login'), findsOneWidget);
 
-    final backToLoginButton = find.text('Back to login');
+    final backToLoginButton = find.text('Back to Login');
     await tester.ensureVisible(backToLoginButton);
     await tester.tap(backToLoginButton);
     await tester.pumpAndSettle();
@@ -75,6 +75,6 @@ void main() {
     expect(find.text('PHP 120'), findsOneWidget);
     expect(find.text('Caloocan'), findsOneWidget);
     expect(find.text('Kubo Grower 1'), findsOneWidget);
-    expect(find.text('About this listing'), findsOneWidget);
+    expect(find.text('About This Listing'), findsOneWidget);
   });
 }

@@ -68,14 +68,14 @@ void main() {
   testWidgets('an order that is on its way is not celebrated yet', (tester) async {
     await openOrder(tester, 'in transit');
     expect(find.byType(DealCelebrationPage), findsNothing);
-    expect(find.text('Order received'), findsWidgets);
+    expect(find.text('Order Received'), findsWidgets);
   });
 
   testWidgets('Order received confirms, celebrates, then opens the review', (tester) async {
     final api = await openOrder(tester, 'in transit');
 
     await api.run(() async {
-      final button = find.widgetWithText(FilledButton, 'Order received');
+      final button = find.widgetWithText(FilledButton, 'Order Received');
       await tester.ensureVisible(button.first);
       await tester.tap(button.first);
       await tester.pumpAndSettle();
@@ -88,7 +88,7 @@ void main() {
 
       await tester.tap(button.first);
       await tester.pumpAndSettle();
-      await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Order received')));
+      await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Order Received')));
       // The celebration has looping animations; step time instead of settling.
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 200));
@@ -100,7 +100,7 @@ void main() {
     expect(api.requests.map((r) => '${r.method} ${r.url.path}'), contains('POST /api/negotiations/5/celebrated'));
 
     await api.run(() async {
-      await tester.tap(find.text('Write a review'));
+      await tester.tap(find.text('Write a Review'));
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 200));
       }

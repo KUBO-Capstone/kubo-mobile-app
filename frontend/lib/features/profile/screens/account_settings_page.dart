@@ -88,17 +88,33 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     if (mounted) setState(() => _user = updated);
   }
 
-  Future<void> _savePrivacy() async {
+  bool _savingPrivacy = false;
+
+  // Each switch saves as soon as it is flipped, and flips back if the save
+  // fails, so what the switches show is always what visitors get.
+  Future<void> _setPrivacy(String key, bool value) async {
+    final before = Map<String, bool>.of(_privacy);
+    setState(() => _privacy[key] = value);
+    final saved = await _savePrivacy();
+    if (!saved && mounted) setState(() => _privacy = before);
+  }
+
+  Future<bool> _savePrivacy() async {
+    setState(() => _savingPrivacy = true);
+    // The rest of the profile goes along as it is now, not as this page
+    // opened with it: a contact number saved from elsewhere meanwhile must
+    // not be put back to the old one.
+    final current = _latestUser();
     try {
       final updated = await _service.updateProfile(
-        userId: int.parse(_user['user_id'].toString()),
-        firstName: (_user['first_name'] ?? '').toString().trim(),
-        lastName: (_user['last_name'] ?? '').toString().trim(),
-        contactNumber: (_user['contact_number'] ?? '').toString().trim(),
-        bio: (_user['bio'] ?? '').toString().trim(),
-        location: (_user['location'] ?? '').toString().trim(),
-        businessName: (_user['business_name'] ?? '').toString().trim(),
-        businessType: (_user['business_type'] ?? '').toString().trim(),
+        userId: int.parse(current['user_id'].toString()),
+        firstName: (current['first_name'] ?? '').toString().trim(),
+        lastName: (current['last_name'] ?? '').toString().trim(),
+        contactNumber: (current['contact_number'] ?? '').toString().trim(),
+        bio: (current['bio'] ?? '').toString().trim(),
+        location: (current['location'] ?? '').toString().trim(),
+        businessName: (current['business_name'] ?? '').toString().trim(),
+        businessType: (current['business_type'] ?? '').toString().trim(),
         profilePrivacy: _privacy,
       );
       // Only the privacy goes onto the signed-in user, so _latestUser hands
@@ -108,17 +124,21 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       if (privacy != null && _isSignedInUser(AuthService.currentUser)) {
         AuthService.updateCurrentUser({'profile_privacy': privacy});
       }
-      if (!mounted) return;
+      if (!mounted) return true;
       setState(() => _user = updated);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile privacy updated.')),
-      );
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('Privacy saved.'), duration: Duration(seconds: 2)));
+      return true;
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
         );
       }
+      return false;
+    } finally {
+      if (mounted) setState(() => _savingPrivacy = false);
     }
   }
 
@@ -134,7 +154,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         Navigator.of(context).pop(_latestUser());
       },
       child: Scaffold(
-      appBar: AppBar(title: const Text('Account settings')),
+      appBar: AppBar(title: const Text('Account Settings')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
@@ -142,7 +162,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
           const SizedBox(height: 8),
           _SettingsTile(
             icon: Icons.person_outline,
-            title: name.isEmpty ? 'Edit profile' : name,
+            title: name.isEmpty ? 'Edit Profile' : name,
             subtitle: 'Update your name, contact number, bio, or photo',
             onTap: _editProfile,
           ),
@@ -154,46 +174,40 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
           const SizedBox(height: 24),
           const Text('Privacy', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.black)),
           const SizedBox(height: 8),
+          const Text(
+            'Changes save as soon as you flip a switch. Your listings stay visible in search either way.',
+            style: TextStyle(color: AppColors.gray, fontSize: 12),
+          ),
           SwitchListTile(
             value: _privacy['public_profile'] ?? true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-            title: const Text('Public profile'),
-            subtitle: const Text('Allow other growers and shoppers to view your profile.'),
-            onChanged: (value) => setState(() => _privacy['public_profile'] = value),
+            title: const Text('Public Profile'),
+            subtitle: const Text(
+              'Off: others see only your name and photo, with a note that your profile is private.',
+            ),
+            onChanged: _savingPrivacy ? null : (value) => _setPrivacy('public_profile', value),
           ),
-          SwitchListTile(
-            value: _privacy['show_bio'] ?? true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-            title: const Text('Show bio'),
-            subtitle: const Text('Display your bio on the About section.'),
-            onChanged: (value) => setState(() => _privacy['show_bio'] = value),
-          ),
-          SwitchListTile(
-            value: _privacy['show_contact_number'] ?? true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-            title: const Text('Show contact number'),
-            subtitle: const Text('Make direct contact details visible to profile viewers.'),
-            onChanged: (value) => setState(() => _privacy['show_contact_number'] = value),
-          ),
-          SwitchListTile(
-            value: _privacy['show_location'] ?? true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-            title: const Text('Show location'),
-            subtitle: const Text('Share your city and business location on your profile.'),
-            onChanged: (value) => setState(() => _privacy['show_location'] = value),
-          ),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: _savePrivacy,
-            icon: const Icon(Icons.save_outlined),
-            label: const Text('Save privacy'),
-          ),
+          // Only matter while the profile is public; greyed out otherwise.
+          for (final (key, title, subtitle) in const [
+            ('show_bio', 'Show Bio', 'Your bio in the About tab.'),
+            ('show_contact_number', 'Show Contact Number', 'Your number in the About tab, so buyers can call or text you.'),
+            ('show_location', 'Show Location', 'Your town and addresses on your profile.'),
+          ])
+            SwitchListTile(
+              value: _privacy[key] ?? true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+              title: Text(title),
+              subtitle: Text(subtitle),
+              onChanged: _savingPrivacy || _privacy['public_profile'] == false
+                  ? null
+                  : (value) => _setPrivacy(key, value),
+            ),
           const SizedBox(height: 24),
           const Text('Selling', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.black)),
           const SizedBox(height: 8),
           _SettingsTile(
             icon: Icons.local_shipping_outlined,
-            title: 'Pickup & delivery',
+            title: 'Pickup & Delivery',
             subtitle: 'Bagsakan centers and couriers buyers can choose',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
@@ -206,7 +220,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
           const SizedBox(height: 8),
           _SettingsTile(
             icon: Icons.lock_outline,
-            title: 'Change password',
+            title: 'Change Password',
             subtitle: 'Update your sign-in password',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
@@ -219,7 +233,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
           const SizedBox(height: 8),
           _SettingsTile(
             icon: Icons.logout,
-            title: 'Log out',
+            title: 'Log Out',
             subtitle: 'End this session on this device',
             onTap: widget.onLogout,
             destructive: true,

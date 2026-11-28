@@ -240,7 +240,7 @@ class _ClassificationSection extends StatelessWidget {
             child: TextButton(
               onPressed: onToggle,
               child: Text(
-                expanded ? 'See less' : 'See more',
+                expanded ? 'See Less' : 'See More',
                 style: const TextStyle(color: AppColors.green, fontSize: 11, fontWeight: FontWeight.w600),
               ),
             ),

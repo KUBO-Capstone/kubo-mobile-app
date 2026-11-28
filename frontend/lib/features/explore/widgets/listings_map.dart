@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/kubo_pressable.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -508,7 +509,7 @@ class _ListingsMapState extends State<ListingsMap> {
                                         width: _MapPin.markerWidth,
                                         height: _MapPin.markerHeight,
                                         alignment: Alignment.topCenter,
-                                        child: GestureDetector(
+                                        child: KuboPressable(
                                           onTap:
                                               () => _showFarmListings(context, pin),
                                           child: _FarmMarker(
@@ -526,7 +527,7 @@ class _ListingsMapState extends State<ListingsMap> {
                                         width: _MapPin.markerWidth,
                                         height: _MapPin.markerHeight,
                                         alignment: Alignment.topCenter,
-                                        child: GestureDetector(
+                                        child: KuboPressable(
                                           onTap:
                                               () => _showCenterDetail(
                                                 context,

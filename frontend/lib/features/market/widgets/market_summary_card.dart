@@ -62,12 +62,12 @@ class MarketSummaryCard extends StatelessWidget {
           ],
           const SizedBox(height: 8),
           if (isSingleMarket)
-            _Line(label: 'Price at this market', value: _peso(area.avgPrice))
+            _Line(label: 'Price at This Market', value: _peso(area.avgPrice))
           else ...[
             _Line(label: 'Highest Price', value: _peso(highest)),
             _Line(label: 'Lowest Price', value: _peso(lowest)),
             if (area != null)
-              _Line(label: 'Markets covered', value: '${area.sampleSize}'),
+              _Line(label: 'Markets Covered', value: '${area.sampleSize}'),
           ],
           const SizedBox(height: 6),
           _Line(label: 'Nationwide Avg. Price', value: _peso(product.nationwideAvg)),

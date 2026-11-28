@@ -98,6 +98,49 @@ void main() {
     expect(find.text(_tooMuch), findsNothing);
   });
 
+  testWidgets('a typo like "3 5" or "1.2532" turns the field red as well', (tester) async {
+    await openSheet(tester);
+
+    for (final (typed, message) in [
+      ('3 5', 'Remove the space.'),
+      ('1.2532', 'Up to 3 decimal places.'),
+      ('2,5', 'Use a dot for decimals, e.g. 2.5.'),
+    ]) {
+      await tester.enterText(quantityField(), typed);
+      await tester.pump();
+      expect(quantityDecoration(tester).errorText, message, reason: typed);
+      expect(find.text(message), findsOneWidget, reason: typed);
+    }
+
+    await tester.enterText(quantityField(), '2');
+    await tester.pump();
+    expect(quantityDecoration(tester).errorText, isNull);
+  });
+
+  testWidgets('the price field is checked the same way', (tester) async {
+    await openSheet(tester);
+    final priceField = find.byType(TextField).at(0);
+
+    await tester.enterText(priceField, '80.555');
+    await tester.pump();
+    expect(tester.widget<TextField>(priceField).decoration!.errorText, 'Up to 2 decimal places.');
+  });
+
+  testWidgets('Make Offer on empty fields marks both in red and sends nothing', (tester) async {
+    final api = await openSheet(tester);
+    await tester.enterText(quantityField(), '');
+    await tester.pump();
+
+    await api.run(() async {
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Make Offer'));
+      await tester.pumpAndSettle();
+    });
+
+    expect(find.text('Enter your price per kg.'), findsOneWidget);
+    expect(find.text('Enter a quantity.'), findsOneWidget);
+    expect(api.requests.where((request) => request.method == 'POST'), isEmpty);
+  });
+
   testWidgets('Make Offer with too much sends nothing and does not repeat the message', (tester) async {
     final api = await openSheet(tester);
     await tester.enterText(find.byType(TextField).at(0), '75');

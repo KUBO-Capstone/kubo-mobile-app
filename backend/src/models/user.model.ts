@@ -134,10 +134,11 @@ export const UserModel = {
                 location = $6,
                 business_name = $7,
                 business_type = $8,
-                profile_privacy = $9
+                profile_privacy = COALESCE($9::jsonb, profile_privacy)
             WHERE user_id = $1
         `, [userId, input.first_name, input.last_name, input.contact_number, input.bio,
-            input.location, input.business_name, input.business_type, input.profile_privacy]);
+            input.location, input.business_name, input.business_type,
+            input.profile_privacy === undefined ? null : JSON.stringify(input.profile_privacy)]);
         return UserModel.findById(userId);
     },
 

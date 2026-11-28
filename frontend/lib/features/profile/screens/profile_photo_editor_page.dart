@@ -133,7 +133,7 @@ class _ProfilePhotoEditorPageState extends State<ProfilePhotoEditorPage> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('Adjust profile photo'),
+        title: const Text('Adjust Profile Photo'),
         actions: [
           IconButton(
             tooltip: 'Use this photo',

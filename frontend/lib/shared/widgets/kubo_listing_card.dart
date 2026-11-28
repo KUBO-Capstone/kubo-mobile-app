@@ -79,7 +79,7 @@ class KuboListingCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Text(
-                          'Sold out',
+                          'Sold Out',
                           style: TextStyle(
                             color: AppColors.white,
                             fontSize: 10,

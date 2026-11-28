@@ -24,6 +24,7 @@ class SyntheticProfileRecord {
     required this.reviewCount,
     this.completedOrders = 0,
     this.photoUrl = '',
+    this.contactNumber = '',
   });
 
   /// Name shown in the profile header.
@@ -71,4 +72,10 @@ class SyntheticProfileRecord {
   final int completedOrders;
 
   final String photoUrl;
+
+  /// Shown in About when the account allows it; empty otherwise.
+  final String contactNumber;
+
+  /// The account hides everything but its name and photo from others.
+  bool get isPrivate => profilePrivacy['public_profile'] == false;
 }

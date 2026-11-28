@@ -52,6 +52,8 @@ export interface ProductListing extends ProductDetails {
     // The seller's average rating across every review they received.
     seller_rating: number | null;
     seller_review_count: number;
+    // The seller's profile photo, for the seller card; null when they have none.
+    seller_photo: string | null;
 }
 
 // Where a seller's produce is. `u` is the seller's users row; `a` comes out as
@@ -73,7 +75,7 @@ const hasFarmPoint = `fp.farmer_id IS NOT NULL AND a.latitude IS NOT NULL AND a.
 // Exported so other models (saved listings) can list products in exactly the
 // shape the explore grid gets; keep the two in step.
 export const listingQuery = `
-    SELECT p.*, u.first_name || ' ' || u.last_name AS seller_name,
+    SELECT p.*, u.first_name || ' ' || u.last_name AS seller_name, u.profile_photo_key AS seller_photo,
            COALESCE(a.city_municipality, 'Philippines') AS location_label,
            COALESCE(a.region, 'NCR') AS region_label,
            CASE WHEN ${hasFarmPoint} THEN a.latitude ELSE pc.latitude END AS latitude,
@@ -130,6 +132,7 @@ export function mapListing(row: Record<string, unknown>): ProductListing {
         images: ((row.images ?? []) as string[]).map(fromMediaColumn),
         seller_rating: row.seller_rating === null || row.seller_rating === undefined ? null : Number(row.seller_rating),
         seller_review_count: Number(row.seller_review_count ?? 0),
+        seller_photo: typeof row.seller_photo === 'string' && row.seller_photo ? fromMediaColumn(row.seller_photo) : null,
     };
 }
 
@@ -153,8 +156,8 @@ const insertImages = async (q: Queryable, productId: number, images: string[]): 
 };
 
 export const ProductModel = {
-    // includeUnavailable adds 'out of stock' rows for a seller's own tab;
-    // delisted rows never come back from a list query.
+    // includeUnavailable adds 'out of stock' rows, listed after the ones still
+    // for sale; delisted rows never come back from a list query.
     async findAll(query = '', sellerId?: number, includeUnavailable = false): Promise<ProductListing[]> {
         const normalizedQuery = query.trim().toLowerCase();
         const conditions = [includeUnavailable ? `p.status IN ('available', 'out of stock')` : `p.status = 'available'`];
@@ -170,7 +173,7 @@ export const ProductModel = {
             conditions.push(`p.seller_id = $${params.length}`);
         }
         const where = `WHERE ${conditions.join(' AND ')}`;
-        const { rows } = await pool.query(`${listingQuery} ${where} ORDER BY p.created_at DESC`, params);
+        const { rows } = await pool.query(`${listingQuery} ${where} ORDER BY (p.status = 'available') DESC, p.created_at DESC`, params);
         return rows.map(mapListing);
     },
 

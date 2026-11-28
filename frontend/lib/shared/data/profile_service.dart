@@ -70,12 +70,10 @@ class ProfileService {
           'location': location,
           'business_name': businessName,
           'business_type': businessType,
-          'profile_privacy': profilePrivacy ?? const {
-            'public_profile': true,
-            'show_bio': true,
-            'show_contact_number': true,
-            'show_location': true,
-          },
+          // Only when changing it: left out, the saved settings stay. (Sending
+          // a default here is what used to turn every switch back on whenever
+          // Edit Profile saved.)
+          if (profilePrivacy != null) 'profile_privacy': profilePrivacy,
           if (addressId != null) 'address_id': addressId,
           if (address != null) ...address,
         }),

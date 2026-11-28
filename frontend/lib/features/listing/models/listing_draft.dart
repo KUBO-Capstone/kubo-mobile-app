@@ -42,8 +42,8 @@ class ListingPhoto {
 enum DescriptionTemplate {
   casual('Casual'),
   simple('Simple'),
-  bulletPoints('Bullet points'),
-  writeMyOwn('Write my own');
+  bulletPoints('Bullet Points'),
+  writeMyOwn('Write My Own');
 
   const DescriptionTemplate(this.label);
 

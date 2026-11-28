@@ -29,8 +29,8 @@ class OrderStatusSteps extends StatelessWidget {
     }
 
     final labels = [
-      'In progress',
-      order.isMeetup ? 'Ready for pickup' : 'Out for delivery',
+      'In Progress',
+      order.isMeetup ? 'Ready for Pickup' : 'Out for Delivery',
       'Received',
     ];
     final reached = switch (order.status) {

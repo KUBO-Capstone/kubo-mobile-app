@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/kubo_pressable.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/widgets/kubo_image.dart';
@@ -90,7 +91,7 @@ class _PhotoTile extends StatelessWidget {
             errorIcon: Icons.broken_image_outlined,
           );
 
-    return GestureDetector(
+    return KuboPressable(
       onTap: onTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
@@ -166,7 +167,7 @@ class _AddPhotoTile extends StatelessWidget {
               if (showLabel) ...[
                 const SizedBox(height: 6),
                 Text(
-                  'Add photos',
+                  'Add Photos',
                   style: TextStyle(color: hasError ? listingErrorColor : AppColors.gray, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ],

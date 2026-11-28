@@ -14,12 +14,17 @@ import { requireEnv, s3 } from "#config/aws";
 // and requests that send one of those back are mapped to the stored form
 // with toStoredMediaUrl. See docs/media_storage.md for the bucket setup.
 
-export type MediaFolder = 'products' | 'profiles' | 'reviews' | 'handovers';
+export type MediaFolder = 'products' | 'profiles' | 'reviews' | 'handovers' | 'chats';
 
-type ImageType = { extension: string; contentType: string };
+type ImageType = { extension: string; contentType: string; isVideo?: boolean };
 
-// .jpeg only appears on photos copied over from the old disk storage.
-const keyPattern = /^(products|profiles|reviews|handovers)\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp)$/;
+// .jpeg only appears on photos copied over from the old disk storage. Videos
+// (.mp4, .mov, .webm) are only accepted where a route allows them: chat and
+// reviews.
+const keyPattern = /^(products|profiles|reviews|handovers|chats)\/[0-9a-f-]{36}\.(jpg|jpeg|png|webp|mp4|mov|webm)$/;
+
+/** Whether a stored or viewable media URL is a video, from its extension. */
+export const isVideoUrl = (url: string): boolean => /\.(mp4|mov|webm)$/i.test(url.split(/[?#]/)[0]);
 const cacheControl = 'public, max-age=86400, immutable';
 const presignedLifetimeSeconds = 7 * 24 * 60 * 60; // the longest SigV4 allows
 const dayMs = 24 * 60 * 60 * 1000;
@@ -139,6 +144,27 @@ export const detectImageType = (data: Buffer): ImageType | undefined => {
     }
     if (data.toString('latin1', 0, 4) === 'RIFF' && data.toString('latin1', 8, 12) === 'WEBP') {
         return isStillWebp(data) ? { extension: '.webp', contentType: 'image/webp' } : undefined;
+    }
+    return undefined;
+};
+
+// HEIC/AVIF photos are ISO media files too; these brands are pictures, not video.
+const stillImageBrands = new Set(['heic', 'heix', 'hevc', 'heim', 'heis', 'mif1', 'msf1', 'avif', 'avis']);
+
+/**
+ * What a video really is, from its bytes: MP4 or QuickTime (an ISO media
+ * file, `ftyp` box first) or WebM (EBML header). Anything else is undefined.
+ */
+export const detectVideoType = (data: Buffer): ImageType | undefined => {
+    if (data.length >= 12 && data.toString('latin1', 4, 8) === 'ftyp') {
+        const brand = data.toString('latin1', 8, 12).trim().toLowerCase();
+        if (stillImageBrands.has(brand)) return undefined;
+        return brand === 'qt'
+            ? { extension: '.mov', contentType: 'video/quicktime', isVideo: true }
+            : { extension: '.mp4', contentType: 'video/mp4', isVideo: true };
+    }
+    if (data.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) {
+        return { extension: '.webm', contentType: 'video/webm', isVideo: true };
     }
     return undefined;
 };
@@ -265,9 +291,16 @@ type ReceiveImagesOptions = {
     folder: MediaFolder;
     maxFiles: number;
     maxBytes: number;
+    /**
+     * Also takes MP4, MOV and WebM videos, each up to this many bytes. Left
+     * out, only photos are accepted.
+     */
+    maxVideoBytes?: number;
     /** Replies for multer's limit errors, shown to the user as is. */
     messages: Partial<Record<multer.ErrorCode, string>>;
 };
+
+const megabytes = (bytes: number): string => `${Math.round(bytes / (1024 * 1024))} MB`;
 
 /**
  * Reads up to `maxFiles` photos into memory (nothing touches the disk),
@@ -277,13 +310,16 @@ type ReceiveImagesOptions = {
  * file, so the URLs always line up one-to-one with the photos sent. Waits
  * its turn while other uploads hold the memory budget.
  */
-export const receiveImages = ({ field, folder, maxFiles, maxBytes, messages }: ReceiveImagesOptions): RequestHandler => {
+export const receiveImages = ({ field, folder, maxFiles, maxBytes, maxVideoBytes, messages }: ReceiveImagesOptions): RequestHandler => {
+    // Multer stops at the larger of the two; each kind's own cap is checked
+    // once the bytes say what the file is.
+    const fileLimit = Math.max(maxBytes, maxVideoBytes ?? 0);
     const upload = multer({
         storage: multer.memoryStorage(),
         // The app sends files only; text fields would be held in memory too.
-        limits: { fileSize: maxBytes, files: maxFiles, fields: 0 },
+        limits: { fileSize: fileLimit, files: maxFiles, fields: 0 },
     }).array(field, maxFiles);
-    const reservation = Math.min(maxFiles * maxBytes, uploadMemoryBudget);
+    const reservation = Math.min(maxFiles * fileLimit, uploadMemoryBudget);
 
     return async (req, res, next) => {
         if (!(await reserveUploadMemory(reservation))) {
@@ -313,9 +349,25 @@ export const receiveImages = ({ field, folder, maxFiles, maxBytes, messages }: R
                 return;
             }
             const files = Array.isArray(req.files) ? req.files : [];
-            const types = files.map((file) => detectImageType(file.buffer));
+            const types = files.map((file) =>
+                detectImageType(file.buffer) ?? (maxVideoBytes ? detectVideoType(file.buffer) : undefined));
             if (!types.every((type): type is ImageType => type !== undefined)) {
-                res.status(400).json({ success: false, message: 'Photos must be JPG, PNG, or WebP' });
+                res.status(400).json({
+                    success: false,
+                    message: maxVideoBytes
+                        ? 'Photos must be JPG, PNG, or WebP, and videos MP4, MOV, or WebM'
+                        : 'Photos must be JPG, PNG, or WebP',
+                });
+                return;
+            }
+            const oversized = files.findIndex((file, i) => file.size > (types[i].isVideo ? maxVideoBytes! : maxBytes));
+            if (oversized >= 0) {
+                res.status(400).json({
+                    success: false,
+                    message: types[oversized].isVideo
+                        ? `Videos must be ${megabytes(maxVideoBytes!)} or smaller`
+                        : `Each photo must be ${megabytes(maxBytes)} or smaller`,
+                });
                 return;
             }
             const stored = await Promise.allSettled(files.map((file, i) => storeImage(folder, file.buffer, types[i])));

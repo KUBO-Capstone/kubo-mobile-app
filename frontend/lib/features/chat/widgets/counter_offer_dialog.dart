@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/amount_input.dart';
 import '../../../shared/data/fulfillment_service.dart';
 import '../../../shared/data/negotiation_service.dart';
 import '../../listing/widgets/fulfillment_picker.dart';
@@ -85,17 +86,20 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
     return value!.isPickup ? !reach.supportsCenter('${value.centerId}') : !reach.supportsCourier(value.courierName!);
   }
 
+  /// Set by Send Counter: from then on an empty field is marked too.
+  bool _submitted = false;
+
+  // Shown under each field as it is typed.
+  String? get _priceError => amountInputError(_priceController.text,
+      what: 'a price per ${offer.unit}', maxDecimals: 2, required: _submitted);
+  String? get _quantityError => amountInputError(_quantityController.text,
+      what: 'a quantity', maxDecimals: 3, required: _submitted);
+
   void _submit() {
-    final price = double.tryParse(_priceController.text.trim());
-    final quantity = double.tryParse(_quantityController.text.trim());
-    if (price == null || price <= 0) {
-      setState(() => _error = 'Enter a valid price.');
-      return;
-    }
-    if (quantity == null || quantity <= 0) {
-      setState(() => _error = 'Enter a valid quantity.');
-      return;
-    }
+    setState(() => _submitted = true);
+    if (_priceError != null || _quantityError != null) return;
+    final price = double.parse(_priceController.text.trim());
+    final quantity = double.parse(_quantityController.text.trim());
     final fulfillment = _fulfillment;
     if (fulfillment != null && !isCompleteFulfillment(fulfillment)) {
       setState(() => _error = fulfillment.isPickup ? 'Pick a bagsakan center.' : 'Pick a courier.');
@@ -156,13 +160,23 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
                     controller: _priceController,
                     autofocus: true,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(labelText: 'Price per ${offer.unit}', prefixText: 'PHP '),
+                    onChanged: (_) => setState(() => _error = null),
+                    decoration: InputDecoration(
+                      labelText: 'Price per ${offer.unit}',
+                      prefixText: 'PHP ',
+                      errorText: _priceError,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _quantityController,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(labelText: 'Quantity', suffixText: offer.unit),
+                    onChanged: (_) => setState(() => _error = null),
+                    decoration: InputDecoration(
+                      labelText: 'Quantity',
+                      suffixText: offer.unit,
+                      errorText: _quantityError,
+                    ),
                   ),
                   const SizedBox(height: 20),
                   FulfillmentPicker(
@@ -230,7 +244,7 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
                           backgroundColor: AppColors.green,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
-                        child: const Text('Send counter', style: TextStyle(fontWeight: FontWeight.w700)),
+                        child: const Text('Send Counter', style: TextStyle(fontWeight: FontWeight.w700)),
                       ),
                     ),
                   ],
@@ -314,7 +328,7 @@ class _DeclineReasonSheetState extends State<_DeclineReasonSheet> {
                       side: const BorderSide(color: AppColors.border),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text('Keep offer'),
+                    child: const Text('Keep Offer'),
                   ),
                 ),
                 const SizedBox(width: 12),

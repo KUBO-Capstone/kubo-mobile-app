@@ -121,7 +121,7 @@ void main() {
     await openOrder(tester, api);
 
     await api.run(() async {
-      await tester.tap(find.text('Hand over to courier'));
+      await tester.tap(find.text('Hand Over to Courier'));
       await tester.pumpAndSettle();
       expect(find.byType(HandOverPage), findsOneWidget);
       expect(find.text('Order #12 · Calamansi'), findsOneWidget);
@@ -136,11 +136,11 @@ void main() {
 
       await tester.tap(find.text('+ Add Photo'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Take a photo'));
+      await tester.tap(find.text('Take a Photo'));
       await tester.pumpAndSettle();
       expect(find.text('1/5'), findsOneWidget);
 
-      await submit(tester, 'Mark as shipped');
+      await submit(tester, 'Mark as Shipped');
       await tester.pumpAndSettle();
     });
 
@@ -157,7 +157,7 @@ void main() {
     // Back on the order, with the details.
     expect(find.byType(HandOverPage), findsNothing);
     expect(find.text('JT-PASTED-77'), findsOneWidget);
-    expect(find.text('Photos at handover'), findsOneWidget);
+    expect(find.text('Photos at Handover'), findsOneWidget);
     expect(find.bySemanticsLabel('Handover photo 1 of 1'), findsOneWidget);
     expect(find.text('Shipped'), findsOneWidget);
   });
@@ -177,21 +177,21 @@ void main() {
     await openOrder(tester, api);
 
     await api.run(() async {
-      await tester.tap(find.text('Hand over to courier'));
+      await tester.tap(find.text('Hand Over to Courier'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('+ Add Photo'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Take a photo'));
+      await tester.tap(find.text('Take a Photo'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.widgetWithText(TextField, 'Tracking number'), 'LBC123');
+      await tester.enterText(find.widgetWithText(TextField, 'Tracking Number'), 'LBC123');
 
-      await submit(tester, 'Mark as shipped');
+      await submit(tester, 'Mark as Shipped');
       await tester.pumpAndSettle();
       expect(find.byType(HandOverPage), findsOneWidget);
       expect(find.text('Something went wrong'), findsOneWidget);
       expect(find.text('1/5'), findsOneWidget, reason: 'the photo is still there');
 
-      await submit(tester, 'Mark as shipped');
+      await submit(tester, 'Mark as Shipped');
       await tester.pumpAndSettle();
     });
     expect(find.byType(HandOverPage), findsNothing);
@@ -207,19 +207,19 @@ void main() {
     await openOrder(tester, api);
 
     await api.run(() async {
-      await tester.tap(find.text('Mark as dropped off at center'));
+      await tester.tap(find.text('Mark as Dropped Off at Center'));
       await tester.pumpAndSettle();
-      expect(find.text('Drop off at the center'), findsOneWidget);
+      expect(find.text('Drop Off at the Center'), findsOneWidget);
       expect(find.text('Los Baños Bagsakan'), findsOneWidget);
-      expect(find.widgetWithText(TextField, 'Tracking number'), findsNothing);
+      expect(find.widgetWithText(TextField, 'Tracking Number'), findsNothing);
 
-      await tester.tap(find.text('Mark as dropped off'));
+      await tester.tap(find.text('Mark as Dropped Off'));
       await tester.pumpAndSettle();
     });
     // No photos picked: nothing uploaded, an empty list sent.
     expect(api.requests.where((r) => r.url.path.endsWith('/handover/photos')), isEmpty);
     expect((jsonDecode(api.requests.lastWhere((r) => r.method == 'PATCH').body) as Map)['photos'], isEmpty);
-    expect(find.text('Dropped off'), findsOneWidget);
+    expect(find.text('Dropped Off'), findsOneWidget);
   });
 
   testWidgets('the buyer sees the shipped details and can copy the tracking number', (tester) async {
@@ -236,7 +236,7 @@ void main() {
 
     expect(find.text('Lalamove'), findsOneWidget);
     expect(find.text('JT0001234567'), findsOneWidget);
-    expect(find.text('Hand over to courier'), findsNothing);
+    expect(find.text('Hand Over to Courier'), findsNothing);
 
     await tester.tap(find.byTooltip('Copy tracking number'));
     await tester.pump();
@@ -257,6 +257,6 @@ void main() {
     await openOrder(tester, api);
     expect(find.byTooltip('Copy tracking number'), findsNothing);
     expect(find.text('See chat'), findsOneWidget);
-    expect(find.text('Photos at handover'), findsNothing);
+    expect(find.text('Photos at Handover'), findsNothing);
   });
 }

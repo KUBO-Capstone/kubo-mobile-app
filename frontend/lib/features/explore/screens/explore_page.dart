@@ -20,6 +20,8 @@ import '../../../shared/widgets/kubo_location_badge.dart';
 import '../../../shared/widgets/kubo_skeleton.dart';
 import '../../chat/providers/messages_controller.dart';
 import '../../chat/screens/messages_page.dart';
+import '../../login/widgets/log_out_flow.dart';
+import '../../notification/providers/notification_badge_controller.dart';
 import '../../notification/screens/notification_page.dart';
 import '../../report/screens/report_page.dart';
 import '../../saved/providers/saved_listings_controller.dart';
@@ -137,6 +139,7 @@ class _ExplorePageState extends State<ExplorePage> {
     // on every grid get their initial state (and re-key on a different user).
     SavedListingsController.instance.loadIds();
     _messages.load();
+    NotificationBadgeController.instance.refresh();
     // Tapping Home again scrolls back to the top, then refreshes.
     _reselected = AppShellController.instance.onReselect(
       AppTab.home,
@@ -178,7 +181,9 @@ class _ExplorePageState extends State<ExplorePage> {
   /// the user was already looking at.
   Future<bool> _loadListings() async {
     try {
-      final listings = await _listingService.fetchListings();
+      // Sold-out listings stay in the feed (after the rest, marked Sold out)
+      // so buyers can still see what a seller has had.
+      final listings = await _listingService.fetchListings(includeUnavailable: true);
       if (mounted) {
         setState(() {
           _allListings = listings;
@@ -206,6 +211,7 @@ class _ExplorePageState extends State<ExplorePage> {
       _loadListings(),
       _loadCenters(),
       _messages.load(silent: true),
+      NotificationBadgeController.instance.refresh(),
       SavedListingsController.instance.loadIds(),
     ]);
     if (!mounted) return;
@@ -278,6 +284,11 @@ class _ExplorePageState extends State<ExplorePage> {
         )
         .toList(growable: false);
   }
+
+  // The map and the cards under it show only what can still be bought; a pin
+  // for produce that is gone would send people out for nothing.
+  List<SyntheticListingRecord> get _mappableListings =>
+      _visibleListings.where((listing) => !listing.isSoldOut).toList(growable: false);
 
   // Bagsakan centers narrowed by the same two filters as the listings.
   List<BagsakanCenter> get _visibleCenters {
@@ -378,12 +389,18 @@ class _ExplorePageState extends State<ExplorePage> {
           },
         ),
         actions: [
-          KuboIconActionButton(
-            assetPath: AppIcons.bellNotification,
-            tooltip: 'Notifications',
-            onTap:
-                () =>
-                    Navigator.of(context).pushNamed(NotificationPage.routeName),
+          // Badged with the unread count, like the chat icon.
+          AnimatedBuilder(
+            animation: NotificationBadgeController.instance,
+            builder: (context, _) => KuboIconActionButton(
+              assetPath: AppIcons.bellNotification,
+              tooltip: 'Notifications',
+              badgeCount: NotificationBadgeController.instance.unreadCount,
+              onTap: () async {
+                await Navigator.of(context).pushNamed(NotificationPage.routeName);
+                NotificationBadgeController.instance.refresh();
+              },
+            ),
           ),
           const SizedBox(width: 8),
           KuboIconActionButton(
@@ -585,7 +602,7 @@ class _ExplorePageState extends State<ExplorePage> {
         icon: Icons.cloud_off_outlined,
         title: 'Could not load listings',
         message: error,
-        actionLabel: 'Try again',
+        actionLabel: 'Try Again',
         onAction: () => _refreshKey.currentState?.show(),
       );
     }
@@ -595,7 +612,7 @@ class _ExplorePageState extends State<ExplorePage> {
         message: _focusLocation != null && _selectedRegionFilter == 'All'
             ? 'No listings within ${_radiusKm.toStringAsFixed(0)} km of ${_focusLocation!.label}.'
             : 'No listings available for this region yet.',
-        actionLabel: 'Show all listings',
+        actionLabel: 'Show All Listings',
         onAction: _clearFilters,
       );
     }
@@ -603,7 +620,7 @@ class _ExplorePageState extends State<ExplorePage> {
       icon: Icons.storefront_outlined,
       title: 'No listings yet',
       message: 'Fresh harvests from local growers will show up here.',
-      actionLabel: 'Create a listing',
+      actionLabel: 'Create a Listing',
       onAction: () => AppShellController.instance.createListing(context),
     );
   }
@@ -613,7 +630,7 @@ class _ExplorePageState extends State<ExplorePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ListingsMap(
-          listings: _visibleListings,
+          listings: _mappableListings,
           centers: _visibleCenters,
           pinMode: _pinMode,
           minimized: _mapMinimized,
@@ -631,7 +648,7 @@ class _ExplorePageState extends State<ExplorePage> {
         // swaps produce cards for bagsakan center cards.
         if (_pinMode == MapPinMode.products)
           MapListingCards(
-            listings: _visibleListings,
+            listings: _mappableListings,
             loadError: _loadError,
           )
         else
@@ -751,13 +768,17 @@ class ExploreDrawer extends StatelessWidget {
                   Navigator.of(context).pushNamed(SavedListingsPage.routeName);
                 },
               ),
-              DrawerListTile(
-                title: 'Notification',
-                iconPath: AppIcons.bellNotification,
-                onTap: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushNamed(NotificationPage.routeName);
-                },
+              AnimatedBuilder(
+                animation: NotificationBadgeController.instance,
+                builder: (context, _) => DrawerListTile(
+                  title: 'Notifications',
+                  iconPath: AppIcons.bellNotification,
+                  badgeCount: NotificationBadgeController.instance.unreadCount,
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pushNamed(NotificationPage.routeName);
+                  },
+                ),
               ),
               const DrawerListTile(
                 title: 'Help and Guide',
@@ -770,6 +791,17 @@ class ExploreDrawer extends StatelessWidget {
                   Navigator.of(context).pop();
                   Navigator.of(context).pushNamed(ReportPage.routeName);
                 },
+              ),
+              // Pinned to the bottom of the menu, away from everyday entries.
+              const Spacer(),
+              const Divider(color: AppColors.border),
+              DrawerListTile(
+                title: 'Log Out',
+                icon: Icons.logout,
+                destructive: true,
+                // Asks over the open menu; logging out clears every screen,
+                // and Cancel leaves the menu as it was.
+                onTap: () => confirmAndLogOut(context),
               ),
             ],
           ),

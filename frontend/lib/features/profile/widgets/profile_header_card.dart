@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/kubo_pressable.dart';
 
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
@@ -82,7 +83,7 @@ class ProfileHeaderCard extends StatelessWidget {
             children: [
               if (isOwnProfile)
                 _HeaderActionButton(
-                  label: 'Edit profile',
+                  label: 'Edit Profile',
                   icon: Icons.edit_outlined,
                   onTap: onEditProfile,
                 )
@@ -200,12 +201,12 @@ class _ProfileAvatar extends StatelessWidget {
           children: [
             ListTile(
               leading: const Icon(Icons.account_circle_outlined),
-              title: const Text('View profile photo'),
+              title: const Text('View Profile Photo'),
               onTap: () => Navigator.of(sheetContext).pop(true),
             ),
             ListTile(
               leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Change profile photo'),
+              title: const Text('Change Profile Photo'),
               onTap: () => Navigator.of(sheetContext).pop(false),
             ),
             const SizedBox(height: 8),
@@ -262,7 +263,7 @@ class _ProfileAvatar extends StatelessWidget {
       label: isOwnProfile ? 'Your profile photo' : 'Profile photo of $name',
       onTap: onTap,
       excludeSemantics: true,
-      child: GestureDetector(onTap: onTap, child: avatar),
+      child: KuboPressable(onTap: onTap, child: avatar),
     );
   }
 }

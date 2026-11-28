@@ -1,15 +1,17 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import '../../core/utils/media_files.dart' show uploadContentType;
 
 import '../../core/constants/api_config.dart';
 import 'api_request.dart';
 import 'negotiation_service.dart';
 import 'order_service.dart';
 
-/// Kind of chat line. Mirrors the `messages.message_type` CHECK constraint.
+/// Kind of chat line, as the server sends it in `message_type`.
 ///
-/// [text] is a typed message; the rest are events the server writes so the
+/// [text] is a typed message, [photo] and [video] media sent in the chat; the rest are events the server writes so the
 /// thread is also the deal's history: offer events when an offer is made,
 /// countered, accepted or declined, [cancelled] when an accepted offer is
 /// called off before it is ordered, and [order] when the order behind an
@@ -21,14 +23,23 @@ enum MessageType {
   accepted,
   declined,
   cancelled,
-  order;
+  order,
+  photo,
+  video;
 
   static MessageType parse(String? raw) => MessageType.values.firstWhere(
         (type) => type.name == raw,
         orElse: () => MessageType.text,
       );
 
-  bool get isOfferEvent => this != text && this != order;
+  bool get isOfferEvent => this != text && this != order && !isMedia;
+
+  /// A photo or video sent in the chat.
+  bool get isMedia => this == photo || this == video;
+
+  /// Sent by a person (a line of text or a photo), as opposed to the offer
+  /// and order events the server writes.
+  bool get isChat => this == text || isMedia;
 }
 
 /// One line in a conversation, as returned by
@@ -48,6 +59,7 @@ class MessageRecord {
     this.offerQuantity,
     this.offerDetails,
     this.declineReason,
+    this.imageUrl,
   });
 
   factory MessageRecord.fromJson(Map<String, dynamic> json) {
@@ -65,6 +77,7 @@ class MessageRecord {
       offerQuantity: (json['offer_quantity'] as num?)?.toDouble(),
       offerDetails: json['offer_details']?.toString(),
       declineReason: DeclineReason.parse(json['decline_reason']?.toString()),
+      imageUrl: resolveMediaUrl(json['image_url']?.toString()),
     );
   }
 
@@ -90,6 +103,9 @@ class MessageRecord {
 
   /// On a declined offer: why the seller turned it down, when they said.
   final DeclineReason? declineReason;
+
+  /// On a [MessageType.photo] or [MessageType.video]: where it loads from.
+  final String? imageUrl;
 
   bool isMine(int userId) => senderId == userId;
 }
@@ -130,12 +146,16 @@ class ConversationRecord {
     this.buyerReviewCount = 0,
     this.sellerRating,
     this.sellerReviewCount = 0,
+    this.buyerPhoto,
+    this.sellerPhoto,
   });
 
   factory ConversationRecord.fromJson(Map<String, dynamic> json) {
     final rawStatus = json['negotiation_status']?.toString();
     final rawOrderStatus = json['order_status']?.toString();
     return ConversationRecord(
+      buyerPhoto: resolveMediaUrl(json['buyer_photo']?.toString()),
+      sellerPhoto: resolveMediaUrl(json['seller_photo']?.toString()),
       id: (json['conversation_id'] as num).toInt(),
       buyerId: (json['buyer_id'] as num).toInt(),
       sellerId: (json['seller_id'] as num).toInt(),
@@ -238,6 +258,16 @@ class ConversationRecord {
 
   /// The other party's name from [userId]'s side.
   String counterpartyName(int userId) => isBuyer(userId) ? sellerName : buyerName;
+
+  /// Profile photos of the two parties; null when they have none.
+  final String? buyerPhoto;
+  final String? sellerPhoto;
+
+  /// The photo of whoever sent a message, by their id.
+  String? photoOf(int senderId) => senderId == buyerId ? buyerPhoto : senderId == sellerId ? sellerPhoto : null;
+
+  /// The other party's photo from [userId]'s side.
+  String? counterpartyPhoto(int userId) => isBuyer(userId) ? sellerPhoto : buyerPhoto;
 
   bool get hasOpenOffer => negotiationStatus?.isOpen ?? false;
 
@@ -363,6 +393,27 @@ class MessageService {
         Uri.parse('$_baseUrl/conversations/$conversationId/messages'),
         headers: _json,
         body: jsonEncode({'content': content}),
+      ),
+    );
+    return MessageRecord.fromJson(readData(response) as Map<String, dynamic>);
+  }
+
+  /// Uploads [file] (a photo or a video of up to 10 MB) and sends it as a
+  /// message: the file goes up first, then the message that points at it.
+  Future<MessageRecord> sendPhoto({required int conversationId, required File file}) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/conversations/$conversationId/photos'));
+    request.files.add(await http.MultipartFile.fromPath('photos', file.path, contentType: uploadContentType(file.path)));
+    // Photos take longer than the usual JSON round trip on rural data.
+    final uploaded = await sendRequest(
+      () async => http.Response.fromStream(await _client.send(request)),
+      timeout: const Duration(seconds: 90),
+    );
+    final images = (readData(uploaded) as Map<String, dynamic>)['images'] as List<dynamic>;
+    final response = await sendRequest(
+      () => _client.post(
+        Uri.parse('$_baseUrl/conversations/$conversationId/messages'),
+        headers: _json,
+        body: jsonEncode({'image_url': images.first}),
       ),
     );
     return MessageRecord.fromJson(readData(response) as Map<String, dynamic>);

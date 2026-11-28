@@ -75,32 +75,41 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
     res.status(201).json({ success: true, data: { ...safeUser, token: signToken(user.user_id, user.role) } });
 };
 
-const publicUser = (user: User | undefined, viewerId?: number) => {
+const fullPrivacy: ProfilePrivacy = { public_profile: true, show_bio: true, show_contact_number: true, show_location: true };
+
+// What someone other than the owner sees of a profile. An allowlist, so a
+// column added to users later (or email, google_sub) never leaks by default.
+// The privacy settings themselves go along, so the app can say "This
+// profile is private" rather than show an empty page.
+const publicUser = (user: (User & { addresses?: unknown }) | undefined, viewerId?: number) => {
     if (!user) return undefined;
     const { password_hash: _passwordHash, ...safeUser } = user;
-    if (viewerId !== user.user_id) {
-        const visibleUser: Record<string, unknown> = { ...safeUser };
-        const privacy: Partial<ProfilePrivacy> = user.profile_privacy ?? {};
-        if (privacy.public_profile === false) {
-            return {
-                user_id: user.user_id,
-                first_name: user.first_name,
-                last_name: user.last_name,
-                role: user.role,
-                is_verified: user.is_verified,
-            };
-        }
-        if (privacy.show_bio === false) delete visibleUser.bio;
-        if (privacy.show_contact_number === false) delete visibleUser.contact_number;
-        if (privacy.show_location === false) {
-            // The addresses say where they are just as the typed location does.
-            delete visibleUser.location;
-            delete visibleUser.addresses;
-            delete visibleUser.preferred_address_id;
-        }
-        return visibleUser;
+    if (viewerId === user.user_id) return safeUser;
+
+    const privacy: ProfilePrivacy = { ...fullPrivacy, ...(user.profile_privacy ?? {}) };
+    const visible: Record<string, unknown> = {
+        user_id: user.user_id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        role: user.role,
+        is_verified: user.is_verified,
+        profile_photo_url: user.profile_photo_url,
+        profile_privacy: privacy,
+    };
+    if (!privacy.public_profile) return visible;
+
+    visible.created_at = user.created_at;
+    visible.business_name = user.business_name;
+    visible.business_type = user.business_type;
+    if (privacy.show_bio) visible.bio = user.bio;
+    if (privacy.show_contact_number) visible.contact_number = user.contact_number;
+    if (privacy.show_location) {
+        // The addresses say where they are just as the typed location does.
+        visible.location = user.location;
+        visible.addresses = user.addresses;
+        visible.preferred_address_id = user.preferred_address_id;
     }
-    return safeUser;
+    return visible;
 };
 
 export const getProfile = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
@@ -162,14 +171,16 @@ export const updateProfile = async (req: Request<{ id: string }>, res: Response)
     const location = typeof req.body.location === 'string' ? req.body.location.trim() : '';
     const businessName = typeof req.body.business_name === 'string' ? req.body.business_name.trim() : '';
     const businessType = typeof req.body.business_type === 'string' ? req.body.business_type.trim() : '';
-    const profilePrivacy: ProfilePrivacy = typeof req.body.profile_privacy === 'object' && req.body.profile_privacy !== null
+    // Left out (Edit Profile sends no privacy), the saved settings stay as
+    // they are; it used to reset them all to visible.
+    const profilePrivacy: ProfilePrivacy | undefined = typeof req.body.profile_privacy === 'object' && req.body.profile_privacy !== null
         ? {
             public_profile: req.body.profile_privacy.public_profile !== false,
             show_bio: req.body.profile_privacy.show_bio !== false,
             show_contact_number: req.body.profile_privacy.show_contact_number !== false,
             show_location: req.body.profile_privacy.show_location !== false,
         }
-        : { public_profile: true, show_bio: true, show_contact_number: true, show_location: true };
+        : undefined;
     if (!Number.isInteger(userId) || userId <= 0 || !firstName || !lastName || !contactNumber) {
         res.status(400).json({ success: false, message: 'Name and contact number are required' });
         return;

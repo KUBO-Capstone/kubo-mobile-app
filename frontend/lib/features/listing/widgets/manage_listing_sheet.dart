@@ -135,7 +135,7 @@ class _ManageListingSheetState extends State<_ManageListingSheet> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Keep it'),
+                  child: const Text('Keep It'),
                 ),
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(true),
@@ -180,13 +180,13 @@ class _ManageListingSheetState extends State<_ManageListingSheet> {
             ListTile(
               enabled: !_busy,
               leading: const Icon(Icons.edit_outlined, color: AppColors.black),
-              title: const Text('Edit listing'),
+              title: const Text('Edit Listing'),
               onTap: _edit,
             ),
             ListTile(
               enabled: !_busy,
               leading: const Icon(Icons.local_shipping_outlined, color: AppColors.black),
-              title: const Text('Pickup & delivery'),
+              title: const Text('Pickup & Delivery'),
               subtitle: const Text('Optional: centers and couriers for this listing only'),
               onTap: _editFulfillment,
             ),
@@ -196,7 +196,7 @@ class _ManageListingSheetState extends State<_ManageListingSheet> {
                 soldOut ? Icons.restore_outlined : Icons.inventory_2_outlined,
                 color: AppColors.black,
               ),
-              title: Text(soldOut ? 'Mark as available' : 'Mark as sold out'),
+              title: Text(soldOut ? 'Mark as Available' : 'Mark as Sold Out'),
               subtitle: Text(
                 soldOut
                     ? 'Buyers can find it and make offers again.'
@@ -208,7 +208,7 @@ class _ManageListingSheetState extends State<_ManageListingSheet> {
               enabled: !_busy,
               leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
               title: const Text(
-                'Remove listing',
+                'Remove Listing',
                 style: TextStyle(color: Colors.redAccent),
               ),
               onTap: _remove,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:philippines_rpcmb/philippines_rpcmb.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../shared/widgets/kubo_password_field.dart';
 import '../../explore/screens/explore_page.dart';
 import '../../shell/screens/app_shell.dart';
 import '../providers/get_started_form_controller.dart';
@@ -209,7 +210,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
                         ),
                         const SizedBox(height: 20),
                         LoginFieldSection(
-                          label: 'First name',
+                          label: 'First Name',
                           child: TextFormField(
                             controller: _usernameController,
                             onChanged: _controller.setUsername,
@@ -220,7 +221,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
                         ),
                         const SizedBox(height: 22),
                         LoginFieldSection(
-                          label: 'Last name',
+                          label: 'Last Name',
                           child: TextFormField(
                             controller: _lastNameController,
                             decoration: _underlineDecoration(
@@ -242,9 +243,10 @@ class _GetStartedPageState extends State<GetStartedPage> {
                         const SizedBox(height: 22),
                         LoginFieldSection(
                           label: 'Password',
-                          child: TextFormField(
+                          child: KuboPasswordField(
                             controller: _passwordController,
-                            obscureText: true,
+                            textInputAction: TextInputAction.next,
+                            autofillHints: const [AutofillHints.newPassword],
                             decoration: _underlineDecoration(
                               hintText: 'Choose a password',
                             ),
@@ -252,7 +254,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
                         ),
                         const SizedBox(height: 22),
                         LoginFieldSection(
-                          label: 'Contact number',
+                          label: 'Contact Number',
                           child: TextFormField(
                             controller: _contactNumberController,
                             keyboardType: TextInputType.phone,
@@ -355,7 +357,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
                         ),
                         const SizedBox(height: 18),
                         LoginFieldSection(
-                          label: 'ZIP code',
+                          label: 'ZIP Code',
                           child: TextFormField(
                             controller: _zipCodeController,
                             keyboardType: TextInputType.number,
@@ -380,7 +382,7 @@ class _GetStartedPageState extends State<GetStartedPage> {
                             ),
                             onPressed: _isSubmitting ? null : _createAccount,
                             child: const Text(
-                              'Create account',
+                              'Create Account',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,

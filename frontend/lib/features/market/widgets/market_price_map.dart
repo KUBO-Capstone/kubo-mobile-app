@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/kubo_pressable.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -156,7 +157,7 @@ class _MarketPriceMapState extends State<MarketPriceMap> {
                                       width: 90,
                                       height: 52,
                                       alignment: Alignment.topCenter,
-                                      child: GestureDetector(
+                                      child: KuboPressable(
                                         onTap: () => widget.onAreaSelected(area),
                                         child: _PricePin(
                                           area: area,
@@ -251,11 +252,11 @@ class _RegionDropdown extends StatelessWidget {
           icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.gray),
           style: const TextStyle(color: AppColors.black, fontSize: 13, fontWeight: FontWeight.w600),
           items: [
-            const DropdownMenuItem<String?>(value: null, child: Text('All regions')),
+            const DropdownMenuItem<String?>(value: null, child: Text('All Regions')),
             for (final name in regionNames) DropdownMenuItem<String?>(value: name, child: Text(name)),
           ],
           selectedItemBuilder: (context) => [
-            for (final label in ['All regions', ...regionNames])
+            for (final label in ['All Regions', ...regionNames])
               Row(
                 children: [
                   const Icon(Icons.location_on_outlined, size: 16, color: AppColors.black),

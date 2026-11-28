@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../shared/data/message_service.dart';
+import '../../../shared/widgets/kubo_avatar.dart';
+import '../../../shared/widgets/kubo_image.dart';
+import '../../../shared/widgets/kubo_photo_viewer.dart';
+import '../../../shared/widgets/kubo_video.dart';
 import 'counter_offer_dialog.dart';
 
 /// One line of the thread. Text lines are grey bubbles with the sender's
@@ -16,10 +20,14 @@ class ChatMessageBubble extends StatelessWidget {
     required this.isMine,
     this.onOpenOrder,
     this.superseded = false,
+    this.senderPhoto,
   });
 
   final MessageRecord message;
   final bool isMine;
+
+  /// The sender's profile photo for the avatar; null shows the person icon.
+  final String? senderPhoto;
 
   /// An offer or counter whose terms a later counter replaced, or that was
   /// closed since. Drawn faded and labelled, so the only live offer is the
@@ -37,16 +45,16 @@ class ChatMessageBubble extends StatelessWidget {
             message: message,
             onTap: orderId == null || onOpenOrder == null ? null : () => onOpenOrder!(orderId),
           )
-        : message.type.isOfferEvent
-            ? _OfferBubble(message: message, superseded: superseded)
-            : _TextBubble(message: message);
+        : message.type == MessageType.video && message.imageUrl != null
+            ? KuboVideoTile(source: message.imageUrl!, width: 200, height: 240)
+            : message.type == MessageType.photo && message.imageUrl != null
+                ? _PhotoBubble(message: message)
+                : message.type.isOfferEvent
+                    ? _OfferBubble(message: message, superseded: superseded)
+                    : _TextBubble(message: message);
     final avatar = Padding(
       padding: const EdgeInsets.only(bottom: 2),
-      child: CircleAvatar(
-        radius: 12,
-        backgroundColor: AppColors.black,
-        child: const Icon(Icons.person, size: 14, color: AppColors.white),
-      ),
+      child: KuboAvatar(photoUrl: senderPhoto, size: 24),
     );
 
     return Padding(
@@ -98,6 +106,45 @@ class _TextBubble extends StatelessWidget {
   }
 }
 
+/// A photo sent in the chat; a tap opens it full screen.
+class _PhotoBubble extends StatelessWidget {
+  const _PhotoBubble({required this.message});
+
+  final MessageRecord message;
+
+  static const double _width = 200;
+  static const double _height = 240;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = message.imageUrl!;
+    final tag = KuboPhotoHeroTag(message.id, 0);
+    return Semantics(
+      button: true,
+      label: 'Photo from ${message.senderName}',
+      onTapHint: 'view full screen',
+      excludeSemantics: true,
+      child: Material(
+        color: AppColors.softBackground,
+        borderRadius: BorderRadius.circular(10),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => KuboPhotoViewer.open(
+            context,
+            photos: [url],
+            heroTagFor: (_) => tag,
+            placeholderFor: (_) => kuboImageProvider(url),
+          ),
+          child: Hero(
+            tag: tag,
+            child: KuboImage(url, width: _width, height: _height),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _OfferBubble extends StatelessWidget {
   const _OfferBubble({required this.message, required this.superseded});
 
@@ -113,11 +160,11 @@ class _OfferBubble extends StatelessWidget {
     final accent = superseded ? AppColors.gray : AppColors.green;
     final headline = switch (message.type) {
       MessageType.offer => 'Offer',
-      MessageType.counter => 'Counter offer',
-      MessageType.accepted => 'Offer accepted',
-      MessageType.declined => 'Offer declined',
-      MessageType.cancelled => 'Deal cancelled',
-      MessageType.text || MessageType.order => '',
+      MessageType.counter => 'Counter Offer',
+      MessageType.accepted => 'Offer Accepted',
+      MessageType.declined => 'Offer Declined',
+      MessageType.cancelled => 'Deal Cancelled',
+      MessageType.text || MessageType.order || MessageType.photo || MessageType.video => '',
     };
     final terms = price == null
         ? message.content
@@ -206,11 +253,15 @@ class _OrderBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    // Ink, not a Container, so the tap ripple shows over the white fill.
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 280),
+      child: Ink(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
           color: AppColors.white,
@@ -227,7 +278,7 @@ class _OrderBubble extends StatelessWidget {
                 Icon(Icons.local_shipping_outlined, size: 13, color: AppColors.green),
                 SizedBox(width: 4),
                 Text(
-                  'Order update',
+                  'Order Update',
                   style: TextStyle(color: AppColors.green, fontSize: 11, fontWeight: FontWeight.w700),
                 ),
               ],
@@ -240,9 +291,11 @@ class _OrderBubble extends StatelessWidget {
             if (onTap != null)
               const Padding(
                 padding: EdgeInsets.only(top: 4),
-                child: Text('View order', style: TextStyle(color: AppColors.gray, fontSize: 11)),
+                child: Text('View Order', style: TextStyle(color: AppColors.gray, fontSize: 11)),
               ),
           ],
+        ),
+      ),
         ),
       ),
     );
